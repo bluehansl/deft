@@ -1,0 +1,12 @@
+{
+  "name": "multi-check",
+  "description": "AI cross-verification: compare answers from Codex (GPT), Claude, and Gemini for synthesized analysis",
+  "version": "1.0.0",
+  "author": {
+    "name": "jeongsaehanseul",
+    "email": "bluehansl@naver.com"
+  },
+  "homepage": "https://github.com/jeongsaehanseul/jeongsaehanseul-plugins",
+  "repository": "https://github.com/jeongsaehanseul/jeongsaehanseul-plugins",
+  "license": "MIT"
+}

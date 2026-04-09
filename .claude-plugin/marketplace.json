@@ -1,0 +1,21 @@
+{
+  "name": "jeongsaehanseul-plugins",
+  "owner": {
+    "name": "jeongsaehanseul",
+    "email": "bluehansl@naver.com"
+  },
+  "metadata": {
+    "description": "Claude Code plugins by jeongsaehanseul"
+  },
+  "plugins": [
+    {
+      "name": "multi-check",
+      "source": "./plugins/multi-check",
+      "description": "AI cross-verification: compare answers from Codex (GPT), Claude, and Gemini for synthesized analysis",
+      "version": "1.0.0",
+      "author": {
+        "name": "jeongsaehanseul"
+      }
+    }
+  ]
+}
