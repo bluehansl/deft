@@ -13,11 +13,13 @@ Executes Claude CLI as an independent session and returns the analysis result fo
 
 **Correct command:**
 ```bash
-claude -p "prompt content" --output-format text
+claude -p "prompt content" --model claude-opus-4-6 --permission-mode dontAsk --output-format text
 ```
 
 **Required options:**
 - `-p` — print mode (non-interactive, single prompt)
+- `--model claude-opus-4-6` — Opus 4.6 (1M context)
+- `--permission-mode dontAsk` — no approval prompts
 - `--output-format text` — plain text output
 
 ## Execution Rules
@@ -31,7 +33,7 @@ claude -p "prompt content" --output-format text
 
 3. If installed, execute (Bash timeout: 120000):
    ```bash
-   claude -p "prompt content" --output-format text
+   claude -p "prompt content" --model claude-opus-4-6 --permission-mode dontAsk --output-format text
    ```
 
 4. Return the claude output as-is without modification.
@@ -40,7 +42,7 @@ claude -p "prompt content" --output-format text
 
 - Pass the prompt received from Lead directly to claude
 - Include context (code, diff, etc.) if provided
-- For long prompts, save to a temp file and use: `cat /tmp/claude_prompt.txt | claude -p - --output-format text`
+- For long prompts, save to a temp file and use: `cat /tmp/multi-check_claude_$$.txt | claude -p - --model claude-opus-4-6 --permission-mode dontAsk --output-format text`
 
 ## Notes
 

@@ -1,18 +1,11 @@
 ---
 name: multi-check
-description: AI cross-verification skill that compares answers from Codex, Claude, and Gemini. Activated by requests like "multi check", "cross verify", "cross check", "ask other AIs too", "multi AI comparison".
+description: AI multi-check skill that compares answers from Codex, Claude, and Gemini. Activated by requests like "multi check", "cross verify", "cross check", "ask other AIs too", "multi AI comparison", "교차 검증", "다른 AI한테도 물어봐", "멀티 체크".
 ---
 
-# AI Cross-Verification Skill
+# AI Multi-Check Skill
 
-Collects and cross-verifies answers from Codex CLI, Claude CLI, and Gemini CLI on a given question, then synthesizes a comprehensive analysis.
-
-## Prerequisites
-
-At least one of the following CLI tools must be installed:
-- **Codex CLI**: `npm install -g @openai/codex`
-- **Claude CLI**: Already installed (Claude Code CLI)
-- **Gemini CLI**: `npm install -g @google/gemini-cli`
+Collects and multi-checks answers from Codex CLI, Claude CLI, and Gemini CLI on a given question, then synthesizes a comprehensive analysis.
 
 ## Workflow
 
@@ -44,6 +37,8 @@ which gemini 2>/dev/null && echo "GEMINI_OK" || echo "GEMINI_NOT_FOUND"
 
 Note: Claude CLI is expected to always be available since this runs inside Claude Code.
 
+Important: The Claude CLI agent and Lead (Claude) are the same model but run in independent sessions, so they can provide different perspectives. Both must always be executed — do not skip the Claude CLI agent because the Lead is also Claude.
+
 ### Phase 3: Agent Spawn
 
 #### Preferred: Agent Teams (parallel execution)
@@ -51,7 +46,7 @@ Note: Claude CLI is expected to always be available since this runs inside Claud
 Try creating a team first:
 
 ```
-TeamCreate(team_name: "multi-check", description: "AI cross-verification")
+TeamCreate(team_name: "multi-check", description: "AI multi-check")
 ```
 
 If TeamCreate fails (Agent Teams not enabled):
@@ -60,10 +55,10 @@ If TeamCreate fails (Agent Teams not enabled):
 
 On success, spawn agents in **a single message** (parallel):
 
-Codex reviewer (only if codex is available):
+Codex reviewer (only if codex is available) — GPT-5.4, reasoning: xhigh:
 ```
 Agent(
-  description: "Run Codex CLI analysis",
+  description: "Run Codex CLI analysis (GPT-5.4, xhigh reasoning)",
   prompt: "<composed prompt with context>",
   name: "codex-reviewer",
   subagent_type: "codex-reviewer",
@@ -73,10 +68,10 @@ Agent(
 )
 ```
 
-Claude reviewer (only if claude CLI is available):
+Claude reviewer (only if claude CLI is available) — Independent Claude session:
 ```
 Agent(
-  description: "Run Claude CLI analysis",
+  description: "Run Claude CLI analysis (Claude Opus 4.6, independent session)",
   prompt: "<composed prompt with context>",
   name: "claude-reviewer",
   subagent_type: "claude-reviewer",
@@ -86,10 +81,10 @@ Agent(
 )
 ```
 
-Gemini reviewer (only if gemini is available):
+Gemini reviewer (only if gemini is available) — Gemini 3 Flash Preview:
 ```
 Agent(
-  description: "Run Gemini CLI analysis",
+  description: "Run Gemini CLI analysis (Gemini 3 Flash Preview)",
   prompt: "<composed prompt with context>",
   name: "gemini-reviewer",
   subagent_type: "gemini-reviewer",
@@ -103,12 +98,39 @@ Agent(
 
 If Teams is not available, spawn agents sequentially with `run_in_background: true`:
 
+Codex reviewer (only if codex is available):
 ```
 Agent(
-  description: "Run Codex CLI analysis",
+  description: "Run Codex CLI analysis (GPT-5.4, xhigh reasoning)",
   prompt: "<composed prompt>",
   name: "codex-reviewer",
   subagent_type: "codex-reviewer",
+  model: "haiku",
+  mode: "dontAsk",
+  run_in_background: true
+)
+```
+
+Claude reviewer (only if claude CLI is available):
+```
+Agent(
+  description: "Run Claude CLI analysis (Claude Opus 4.6, independent session)",
+  prompt: "<composed prompt>",
+  name: "claude-reviewer",
+  subagent_type: "claude-reviewer",
+  model: "haiku",
+  mode: "dontAsk",
+  run_in_background: true
+)
+```
+
+Gemini reviewer (only if gemini is available):
+```
+Agent(
+  description: "Run Gemini CLI analysis (Gemini 3 Flash Preview)",
+  prompt: "<composed prompt>",
+  name: "gemini-reviewer",
+  subagent_type: "gemini-reviewer",
   model: "haiku",
   mode: "dontAsk",
   run_in_background: true
@@ -124,7 +146,7 @@ While agents are working, the Lead performs its own analysis on the same questio
 After receiving all results, synthesize in this format:
 
 ```markdown
-## Cross-Verification Results
+## Multi-Check Results
 
 ### Consensus (all models agree)
 - High-confidence conclusions

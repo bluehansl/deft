@@ -13,13 +13,14 @@ Executes Google Gemini CLI and returns the analysis result for a given question.
 
 **Correct command:**
 ```bash
-gemini -p "prompt content" -m gemini-2.5-pro -o text 2>/dev/null
+GEMINI_POLICY_ALLOW_READONLY=true gemini -p "prompt content" -m gemini-3-flash-preview --approval-mode plan -o text 2>/dev/null
 ```
 
 **Required options:**
-- `-m gemini-2.5-pro` — must specify model (default model returns 404)
+- `-m gemini-3-flash-preview` — Gemini 3 Flash Preview model
+- `--approval-mode plan` — read-only mode (no modifications)
 - `-o text` — text output format
-- `2>/dev/null` — suppress stderr MCP warnings
+- `2>/dev/null` — suppress stderr warnings (retry logs, MCP warnings)
 
 ## Execution Rules
 
@@ -32,7 +33,7 @@ gemini -p "prompt content" -m gemini-2.5-pro -o text 2>/dev/null
 
 3. If installed, execute (Bash timeout: 120000):
    ```bash
-   gemini -p "prompt content" -m gemini-2.5-pro -o text 2>/dev/null
+   GEMINI_POLICY_ALLOW_READONLY=true gemini -p "prompt content" -m gemini-3-flash-preview --approval-mode plan -o text 2>/dev/null
    ```
 
 4. Return the gemini output as-is without modification.
@@ -41,10 +42,10 @@ gemini -p "prompt content" -m gemini-2.5-pro -o text 2>/dev/null
 
 - Pass the prompt received from Lead directly to gemini
 - Include context (code, diff, etc.) if provided
-- For long prompts, save to a temp file and use: `cat /tmp/gemini_prompt.txt | gemini -p - -m gemini-2.5-pro -o text 2>/dev/null`
+- For long prompts, save to a temp file and use: `cat /tmp/multi-check_gemini_$$.txt | gemini -p - -m gemini-3-flash-preview --approval-mode plan -o text 2>/dev/null`
 
 ## Notes
 
-- Always specify `-m gemini-2.5-pro` (default model causes 404)
+- Always specify `-m gemini-3-flash-preview` (default model may cause errors)
 - Return error messages as-is on failure
 - Do not summarize or modify the results
