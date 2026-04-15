@@ -13,7 +13,7 @@ Executes OpenAI Codex CLI and returns the analysis result for a given question.
 
 **Correct command:**
 ```bash
-codex exec -a never --sandbox read-only -m gpt-5.4 -c 'model_reasoning_effort="xhigh"' "prompt content"
+codex -a never exec --sandbox read-only -m gpt-5.4 -c 'model_reasoning_effort="xhigh"' "prompt content"
 ```
 
 **Required options:**
@@ -36,7 +36,7 @@ codex exec -a never --sandbox read-only -m gpt-5.4 -c 'model_reasoning_effort="x
 
 3. If installed, execute (Bash timeout: 120000):
    ```bash
-   codex exec -a never --sandbox read-only -m gpt-5.4 -c 'model_reasoning_effort="xhigh"' "prompt content"
+   codex -a never exec --sandbox read-only -m gpt-5.4 -c 'model_reasoning_effort="xhigh"' "prompt content"
    ```
 
 4. Return the codex output as-is without modification.
@@ -45,7 +45,7 @@ codex exec -a never --sandbox read-only -m gpt-5.4 -c 'model_reasoning_effort="x
 
 - Pass the prompt received from Lead directly to codex
 - Include context (code, diff, etc.) if provided
-- For long prompts, save to a temp file and use: `cat /tmp/multi-check_codex_$$.txt | codex exec -a never --sandbox read-only -m gpt-5.4 -c 'model_reasoning_effort="xhigh"' -`
+- For long prompts, save to a temp file and use: `cat /tmp/multi-check_codex_$$.txt | codex -a never exec --sandbox read-only -m gpt-5.4 -c 'model_reasoning_effort="xhigh"' -`
 
 ## Notes
 
