@@ -28,15 +28,26 @@ Claude Code 세션 로그(`~/.claude/projects/<encoded-pwd>/<session-id>.jsonl`)
 
 **사용자에게 보이는 출력은 다음만 허용한다**:
 
-1. **(인자 없음)** 최상단 한 줄 안내: `이동할 세션을 선택해 주세요.`
-2. 세션 리스트 (카드 + 요약 테이블)
-3. 선택/경로 입력 프롬프트: `번호를 입력하세요 (1~N):`, `이동할 target 절대경로를 입력하세요:`
+1. **(인자 없음)** 최상단 안내(고정 문구, 두 줄):
+   ```
+   최근 사용된 5개의 세션 리스트가 제공 됩니다. 이동하려는 세션의 no를 입력해주세요.
+   (오래된 세션을 이동하려면 해당 세션을 1회 이상 사용 후 시도해 주세요.)
+   ```
+2. 세션 리스트 (카드 5개)
+3. 경로 입력 프롬프트: `이동할 target 절대경로를 입력하세요:`
 4. 엣지 케이스 경고(⚠️ prefix, 필요 시)
 5. Phase 3 드라이런 계획
 6. Phase 4 컨펌 프롬프트 `진행할까요? (y/N)`
 7. Phase 6 최종 결과 (`✅ 세션 이동 완료` 블록)
 
-내부 Bash/Python 실행은 도구 호출로만 수행하며, 그 전후에 "~하겠습니다", "~을 실행합니다" 같은 진행 서술을 덧붙이지 않는다. 한 번에 필요한 Bash/Python을 실행하고, 결과가 나오면 위 허용 출력만 사용자에게 노출한다.
+**절대 출력하지 않는다**:
+- Phase/Step 번호, NONCE 값, encoded pwd
+- 진행 상황 서술("~하겠습니다", "~을 실행합니다", "~중입니다")
+- 리스트 하단 보조 안내(예: "번호를 입력하거나 /resume로 돌아가세요" 같은 부가 문구)
+- 사용자가 이미 카드에서 본 내용의 재요약
+- 불필요한 "10번 이상은 상세 확인 후 진행" 류의 안내 (항상 5개만 노출하므로 해당 없음)
+
+내부 Bash/Python 실행은 도구 호출로만 수행한다. 한 번에 필요한 Bash/Python을 실행하고, 결과가 나오면 위 허용 출력만 사용자에게 노출한다.
 
 ---
 
@@ -80,9 +91,9 @@ echo "SELF_SESSION=$SELF_SESSION"
 - 매칭 있음 → 자기 세션 id 확정
 - 매칭 없음 → `SELF_SESSION=""` 로 두고 진행(경고/컨펌 없이). 이후 단계에서 자기 제외가 불가능하면 상위 목록에 자기 세션이 포함될 수 있으나 사용자 선택 시 엣지 1로 차단된다.
 
-### 1-4. 상위 9개 세션 풀 파싱 (카드용)
+### 1-4. 상위 5개 세션 풀 파싱 (카드용)
 
-자기 세션을 제외한 mtime 최신 9개 jsonl에서 아래 항목을 추출한다. 큰 파일 처리를 위해 Python 스트리밍 파싱을 사용한다.
+자기 세션을 제외한 mtime 최신 **5개** jsonl에서 아래 항목을 추출한다. 큰 파일 처리를 위해 Python 스트리밍 파싱을 사용한다.
 
 추출 항목:
 - `customTitle`: `type=="custom-title"` 엔트리의 `customTitle` 최신값
@@ -171,9 +182,9 @@ files = sorted(
     key=lambda p: os.path.getmtime(p), reverse=True,
 )
 files = [f for f in files if os.path.basename(f) != f"{self_id}.jsonl"]
-top9 = files[:9]
+top5 = files[:5]
 
-for f in top9:
+for f in top5:
     sid = os.path.basename(f)[:-6]
     custom_title = None
     first_user_text = None
@@ -207,36 +218,9 @@ for f in top9:
 PY
 ```
 
-### 1-5. 10번 이후 세션 (경량)
+### 1-5. 출력 (마크다운)
 
-mtime 최신 10번째부터 전부 아래 경량 방식으로만 수집한다(풀파싱 X).
-
-- `session-id`: 파일명
-- `rename`: `grep '"type":"custom-title"' <file> | tail -1` 에서 `customTitle` 값만 추출. 없으면 `—`. 40자 절삭.
-- `최종 업데이트 시간`: `stat -f "%m" <file>` (mtime UTC epoch → KST 포맷)
-
-```bash
-# rename 추출 예시
-rename=$(grep '"type":"custom-title"' "$f" 2>/dev/null | tail -1 \
-  | python3 -c 'import sys,json
-try:
-  e=json.loads(sys.stdin.read())
-  t=e.get("customTitle") or ""
-  t=t.replace("\n"," ").strip()
-  print(t[:39]+"…" if len(t)>40 else (t or "—"))
-except: print("—")')
-
-# mtime → KST
-mtime=$(stat -f "%m" "$f")
-kst=$(python3 -c "
-from datetime import datetime, timedelta, timezone
-dt=datetime.fromtimestamp($mtime, tz=timezone.utc).astimezone(timezone(timedelta(hours=9)))
-print(dt.strftime('%Y년 %m월 %d일 %H:%M:%S'))")
-```
-
-### 1-6. 출력 (마크다운)
-
-상위 9개는 카드형(2컬럼 테이블), 10번부터는 요약 테이블로 출력한다.
+상위 5개 세션을 카드형(2컬럼 테이블)으로만 출력한다. 요약 테이블/10번 이후 로직은 사용하지 않는다.
 
 **카드 예시**:
 
@@ -252,21 +236,15 @@ print(dt.strftime('%Y년 %m월 %d일 %H:%M:%S'))")
 | 최종 업데이트 시간 | 2026년 04월 17일 13:41:08 |
 ```
 
-**요약 테이블** (10번+):
+카드 5개를 `### [1]` ~ `### [5]` 로 출력한 뒤, 추가 안내 문구 없이 사용자 입력을 기다린다.
 
-```markdown
-| no | rename | session-id | 최종 업데이트 시간 |
-|---:|---|---|---|
-| 10 | IT-14440 입고 진행현황 수정 | 1a2b3c4d... | 2026년 04월 10일 11:20:05 |
-| 11 | — | 9f8e7d6c... | 2026년 04월 09일 18:03:12 |
-```
+### 1-6. 사용자 선택
 
-(session-id는 앞 8자 + `...` 축약)
+사용자가 1~5 중 번호를 입력하면 해당 full session-id 확정 → Phase 2 (2-4 target 경로 입력 요청)로 진입.
 
-### 1-7. 사용자 선택
-
-- **1~9번 선택** → 해당 full session-id 확정 → Phase 2 (2-4 target 경로 입력 요청)로 진입
-- **10번 이상 선택** → 해당 파일에 대해 1-4의 Python 풀 파서를 1회 더 돌려 카드형 상세를 펼친 뒤, target 경로 입력 요청
+- 세션이 0개 → ⚠️ "현재 프로젝트 디렉토리에 이동 가능한 세션이 없습니다." 안내 후 종료
+- 세션이 1~4개 → 있는 만큼만 카드 출력 후 동일 처리
+- 숫자 외 입력 → ⚠️ "1~N 중 번호를 입력해주세요." 1회 재요청 후에도 실패 시 종료
 
 ---
 
@@ -654,7 +632,7 @@ Resume 방법:
 ## 빠른 실행 체크리스트
 
 - [ ] 인자 유무 판별
-- [ ] 인자 없음 → Phase 1 전체 수행 (NONCE, 자기 세션, 9+N 리스트, 사용자 선택)
+- [ ] 인자 없음 → Phase 1 전체 수행 (NONCE, 자기 세션, 상위 5개 카드, 사용자 선택)
 - [ ] 인자 있음 → Phase 1-1/1-3만 수행 후 바로 Phase 2
 - [ ] Phase 2 검증 14 단계 순차 실행, 엣지 발생 시 해당 번호의 메시지 출력
 - [ ] Phase 3 드라이런 출력
