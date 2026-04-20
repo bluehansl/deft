@@ -84,6 +84,21 @@ Claude Code 세션 로그(`~/.claude/projects/<encoded-pwd>/<session-id>.jsonl`)
 - 드라이런 계획 출력 → **바로** 컨펌 프롬프트 → 사용자 y/N 입력까지 **같은 assistant 메시지 한 번**에 노출
 - 이동 실행은 컨펌 받은 다음 턴의 도구 호출로 수행. 실행 중 진행 멘트 금지. 완료 후 Phase 6 결과 한 번에 출력.
 
+### 도구 호출 최소화 (속도 개선)
+
+사용자가 체감하는 지연의 가장 큰 원인은 **도구 호출 횟수**다. 아래 기본 원칙을 지킨다.
+
+1. **한 단계 = 한 호출이 기본**. Phase 1 백그라운드 수집은 NONCE 주입(1회) + 통합 스캔/파싱(1회) = **총 2회** 의 도구 호출로 끝낸다.
+2. **Phase 2 검증은 통합 Python 1회** 호출로 끝낸다. UUID/절대경로/`~` expansion/시스템 경로 prefix 같은 trivial 검사는 Claude가 텍스트로 선처리하고, 파일시스템이 필요한 검사(`realpath`·`stat`·`df`·`lsof`)만 Python 안에서 일괄 수행한다.
+3. **Phase 5 이동은 단일 Python** 으로 메인 + 사이드카 + 롤백 + 검증을 한 번에 처리한다.
+4. **공유 상태는 환경변수**(`SESSION_ID`, `TARGET`, `NONCE`, `SELF_SESSION`, `SRC`, `SRC_PROJECT_DIR`, `TARGET_PROJ`)로 전달하고, 중간 결과 덤프를 위한 별도 bash 호출을 만들지 않는다.
+5. **Claude 내부 처리로 대체 가능한 검증은 bash 호출 금지**:
+   - UUID v4 정규식 매칭 → Claude가 문자열 확인
+   - `~` expansion (`~`로 시작하면 `$HOME` 치환) → Claude가 텍스트로 수행
+   - 절대경로 여부 (`/` 로 시작 확인) → Claude가 확인
+   - 시스템 경로 prefix 매칭 (`/etc`, `/var`, `/usr`, `/bin`, `/sbin`, `/System`, `/Library/System`, `/private`, `/dev`, `/proc`, `/root`, `/`) → Claude가 확인
+6. **파일 파싱은 스트리밍 + 조기 종료**. 대용량 jsonl(수십 MB) 에서 마지막 user 엔트리는 파일 끝에서 역방향 chunk-seek 로 찾고, 첫 user / custom-title 은 헤드 스캔으로 조기 확보한다. 이 로직은 Phase 1-3 Python 스크립트에 반영되어 있다.
+
 ---
 
 ## Phase 1: 입력 수집 (인자 없을 때만)
@@ -102,79 +117,55 @@ Claude가 매 호출마다 **새로운 literal NONCE 문자열**(예: `SESSION_R
 
 이 단계에서 반환되는 stdout/stderr은 비어 있어야 하며, 내부적으로 "마커가 심어졌다"는 사실만 기억하면 된다.
 
-### 1-2. 현재 pwd 및 프로젝트 디렉토리 확인
+### 1-2. 세션 스캔 및 파싱 (통합 Python — 단일 호출)
 
-```bash
-CURRENT_PWD=$(pwd)
-ENCODED_PWD="${CURRENT_PWD//\//-}"   # / → -
-PROJECT_DIR="$HOME/.claude/projects/$ENCODED_PWD"
-ls -t "$PROJECT_DIR"/*.jsonl 2>/dev/null | head -20
-```
+프로젝트 디렉토리 확인, 자기 세션 판별(Phase 1-1 의 NONCE 매칭), 상위 5개 세션 파싱을 **하나의 Python 호출**로 처리한다. Phase 1-1 에서 쓴 NONCE literal을 환경변수 `NONCE` 로 전달한다.
 
-### 1-3. 자기 세션 확정
-
-Phase 1-1 에서 literal로 심은 NONCE 문자열을 최신 5개 jsonl에서 검색한다(보통 최신 1~2개 안에 존재). 이 단계는 1-2·1-4 와 **하나의 연속 도구 호출 흐름 안에서 수행**하며, 사용자 텍스트는 여전히 출력하지 않는다.
-
-```bash
-SELF_SESSION=""
-for f in $(ls -t "$PROJECT_DIR"/*.jsonl 2>/dev/null | head -5); do
-  if grep -q "SESSION_RELOCATE_MARKER_20260420a9f3e1b7" "$f"; then   # ← Phase 1-1 에서 Claude가 쓴 literal과 동일
-    SELF_SESSION=$(basename "$f" .jsonl)
-    break
-  fi
-done
-# stdout 없이 내부 변수로만 유지하거나, 다음 Python 파서 입력으로 전달
-```
-
-- 매칭 있음 → 자기 세션 id 확정
-- 매칭 없음 → `SELF_SESSION=""` 로 두고 진행(경고/컨펌 없이). 이후 단계에서 자기 제외가 불가능하면 상위 목록에 자기 세션이 포함될 수 있으나 사용자 선택 시 엣지 1로 차단된다.
-
-### 1-4. 상위 5개 세션 풀 파싱 (카드용)
-
-자기 세션을 제외한 mtime 최신 **5개** jsonl에서 아래 항목을 추출한다. 큰 파일 처리를 위해 Python 스트리밍 파싱을 사용한다.
-
-추출 항목:
+**추출 항목** (각 세션별):
 - `customTitle`: `type=="custom-title"` 엔트리의 `customTitle` 최신값
-- `first-user`: 첫 유효 `type=="user"` 엔트리의 사용자 입력 텍스트
-- `last-user`: 마지막 유효 `type=="user"` 엔트리의 사용자 입력 텍스트
-- `last-ts`: 마지막 유효 `type=="user"` 엔트리의 `timestamp`
+- `first-user`: 첫 유효 `type=="user"` 엔트리 텍스트
+- `last-user`: 마지막 유효 `type=="user"` 엔트리 텍스트
+- `last-ts`: 마지막 유효 user 엔트리의 `timestamp`
 
-**메타 컨텐츠 필터링 (구조적, "유효 user 엔트리" 판정)**
-
+**메타 컨텐츠 필터링 (구조적)**
 - `message.content`가 string이면 그대로 사용
-- `message.content`가 array면 `type=="text"` 블록만 추출 후 join
-- 다음 마커로 시작하는 경우 건너뛰고 다음 user 엔트리 사용:
-  - `<system-reminder>`, `<command-name>`, `<command-message>`, `<command-args>`, `<local-command-stdout>`, `<user-prompt-submit-hook>`, `<bash-input>`, `<bash-stdout>`, `<bash-stderr>`, `<file-hook>`
-- `isMeta==true` 플래그가 있으면 건너뛰기
-- `tool_result` 역할로 채워진 user 엔트리(`content` 내 `tool_use_id` 존재) 제외
+- array면 `type=="text"` 블록만 join. `tool_result` 또는 `tool_use_id` 포함 시 제외
+- 텍스트가 `<system-reminder>`, `<command-name>`, `<command-message>`, `<command-args>`, `<local-command-stdout>`, `<user-prompt-submit-hook>`, `<bash-input>`, `<bash-stdout>`, `<bash-stderr>`, `<file-hook>` 로 시작하면 제외
+- `isMeta==true` 엔트리 제외
 
 **포맷 규칙**
-- 대화 40자 절삭: 개행→공백 치환, 초과 시 앞 39자 + `…`
-- rename 40자 절삭: 없으면 `—`
-- 시간 포맷: UTC → KST(+9h), `YYYY년 MM월 DD일 HH:mm:ss`
+- 대화/이름 40자 절삭: 개행→공백, 초과 시 앞 39자 + `…`, 없으면 `—`
+- 시간: UTC → KST(+9h), `YYYY년 MM월 DD일 HH:mm:ss`
 
-Python 스트리밍 파서 예시:
+**속도 최적화**
+- 첫 user / customTitle: 앞에서부터 **스트리밍 스캔**, 둘 다 확보되면 head 조기 종료 가능 지점 기억
+- 마지막 user: 파일 끝에서 **역방향 chunk-seek (256 KB 단위)** 로 찾은 즉시 반환. 대용량 jsonl에서 결정적 이득.
+- 파일당 독립적으로 처리 → 파일 5개는 순차 처리해도 충분 (병렬화 불필요)
 
 ```bash
-python3 - "$PROJECT_DIR" "$SELF_SESSION" <<'PY'
-import sys, os, json, glob
+NONCE="SESSION_RELOCATE_MARKER_20260420a9f3e1b7" \
+python3 <<'PY'
+import os, sys, json, glob
 from datetime import datetime, timedelta, timezone
 
-proj_dir, self_id = sys.argv[1], sys.argv[2]
+NONCE = os.environ.get("NONCE", "")
+PROJECT_DIR = os.path.join(os.path.expanduser("~"), ".claude", "projects",
+                           os.getcwd().replace("/", "-"))
+
 META_MARKERS = (
     "<system-reminder>", "<command-name>", "<command-message>",
     "<command-args>", "<local-command-stdout>", "<user-prompt-submit-hook>",
     "<bash-input>", "<bash-stdout>", "<bash-stderr>", "<file-hook>",
 )
 
-def extract_text(entry):
-    msg = entry.get("message") or {}
-    content = msg.get("content")
-    if isinstance(content, str):
-        return content
-    if isinstance(content, list):
+def extract_text(e):
+    msg = e.get("message") or {}
+    c = msg.get("content")
+    if isinstance(c, str):
+        return c
+    if isinstance(c, list):
         parts = []
-        for b in content:
+        for b in c:
             if isinstance(b, dict):
                 if b.get("type") == "tool_result" or "tool_use_id" in b:
                     return None
@@ -183,19 +174,16 @@ def extract_text(entry):
         return "\n".join(parts) if parts else None
     return None
 
-def is_valid_user(entry):
-    if entry.get("type") != "user":
+def is_valid_user(e):
+    if e.get("type") != "user" or e.get("isMeta") is True:
         return False
-    if entry.get("isMeta") is True:
+    t = extract_text(e)
+    if t is None:
         return False
-    text = extract_text(entry)
-    if text is None:
+    s = t.lstrip()
+    if not s:
         return False
-    stripped = text.lstrip()
-    for m in META_MARKERS:
-        if stripped.startswith(m):
-            return False
-    return True if stripped else False
+    return not any(s.startswith(m) for m in META_MARKERS)
 
 def truncate40(s):
     if s is None:
@@ -203,62 +191,115 @@ def truncate40(s):
     s = s.replace("\n", " ").replace("\r", " ").strip()
     if not s:
         return "—"
-    if len(s) > 40:
-        return s[:39] + "…"
-    return s
+    return s[:39] + "…" if len(s) > 40 else s
 
 def kst(ts):
     try:
-        dt = datetime.fromisoformat(ts.replace("Z", "+00:00"))
+        dt = datetime.fromisoformat((ts or "").replace("Z", "+00:00"))
     except Exception:
         return "—"
-    dt = dt.astimezone(timezone(timedelta(hours=9)))
-    return dt.strftime("%Y년 %m월 %d일 %H:%M:%S")
+    return dt.astimezone(timezone(timedelta(hours=9))).strftime("%Y년 %m월 %d일 %H:%M:%S")
 
-files = sorted(
-    glob.glob(os.path.join(proj_dir, "*.jsonl")),
-    key=lambda p: os.path.getmtime(p), reverse=True,
+# 1) mtime 최신 순으로 모든 jsonl 목록 확보
+all_files = sorted(
+    glob.glob(os.path.join(PROJECT_DIR, "*.jsonl")),
+    key=os.path.getmtime, reverse=True,
 )
-files = [f for f in files if os.path.basename(f) != f"{self_id}.jsonl"]
-top5 = files[:5]
 
+# 2) 자기 세션 확정 (최신 5개 안에서 NONCE literal 검색)
+self_id = ""
+if NONCE:
+    for f in all_files[:5]:
+        try:
+            with open(f, "r", encoding="utf-8", errors="ignore") as fh:
+                if NONCE in fh.read():
+                    self_id = os.path.basename(f)[:-6]
+                    break
+        except Exception:
+            continue
+
+# 3) 자기 제외 후 상위 5개
+top5 = [f for f in all_files if os.path.basename(f)[:-6] != self_id][:5]
+
+def parse_fast(path):
+    custom_title = None
+    first_user = None
+    # Forward: custom_title(최신) + first_user(최초)
+    try:
+        with open(path, "r", encoding="utf-8", errors="ignore") as fh:
+            for line in fh:
+                line = line.strip()
+                if not line:
+                    continue
+                try:
+                    e = json.loads(line)
+                except Exception:
+                    continue
+                if e.get("type") == "custom-title":
+                    ct = e.get("customTitle")
+                    if ct:
+                        custom_title = ct
+                if first_user is None and is_valid_user(e):
+                    first_user = extract_text(e)
+    except Exception:
+        pass
+
+    # Reverse: last_user via 256KB chunk-seek from end (대용량 파일 최적화)
+    last_user = None
+    last_ts = None
+    CHUNK = 256 * 1024
+    try:
+        size = os.path.getsize(path)
+        with open(path, "rb") as fh:
+            pos = size
+            tail = b""
+            while pos > 0 and last_user is None:
+                read = min(CHUNK, pos)
+                pos -= read
+                fh.seek(pos)
+                tail = fh.read(read) + tail
+                parts = tail.split(b"\n")
+                if pos > 0:
+                    tail = parts[0]
+                    parts = parts[1:]
+                else:
+                    tail = b""
+                for lb in reversed(parts):
+                    if not lb.strip():
+                        continue
+                    try:
+                        e = json.loads(lb.decode("utf-8", errors="ignore"))
+                    except Exception:
+                        continue
+                    if is_valid_user(e):
+                        last_user = extract_text(e)
+                        last_ts = e.get("timestamp")
+                        break
+    except Exception:
+        pass
+
+    return custom_title, first_user, last_user, last_ts
+
+# 4) 각 세션 파싱 결과 출력 (Claude 내부 입력용, 사용자 노출 금지)
+print(f"SELF_SESSION={self_id}")
+print(f"SESSION_COUNT={len(top5)}")
 for f in top5:
     sid = os.path.basename(f)[:-6]
-    custom_title = None
-    first_user_text = None
-    last_user_text = None
-    last_user_ts = None
-    with open(f, "r", encoding="utf-8", errors="ignore") as fh:
-        for line in fh:
-            line = line.strip()
-            if not line:
-                continue
-            try:
-                e = json.loads(line)
-            except Exception:
-                continue
-            if e.get("type") == "custom-title":
-                ct = e.get("customTitle")
-                if ct:
-                    custom_title = ct
-            if is_valid_user(e):
-                txt = extract_text(e)
-                if first_user_text is None:
-                    first_user_text = txt
-                last_user_text = txt
-                last_user_ts = e.get("timestamp")
+    ct, fu, lu, lts = parse_fast(f)
     print("---CARD---")
     print(f"sid={sid}")
-    print(f"rename={truncate40(custom_title)}")
-    print(f"first={truncate40(first_user_text)}")
-    print(f"last={truncate40(last_user_text)}")
-    print(f"ts={kst(last_user_ts) if last_user_ts else '—'}")
+    print(f"rename={truncate40(ct)}")
+    print(f"first={truncate40(fu)}")
+    print(f"last={truncate40(lu)}")
+    print(f"ts={kst(lts)}")
 PY
 ```
 
-### 1-5. 출력 (마크다운)
+**도구 호출 횟수**: Phase 1-1 (`:` no-op) + Phase 1-2 (통합 Python) = **2회**. 이전 구조 대비 Phase 1 구간만 4~5회 → 2회로 감소.
 
-상위 5개 세션을 카드형(2컬럼 테이블)으로만 출력한다. 요약 테이블/10번 이후 로직은 사용하지 않는다.
+### 1-3. 출력 (마크다운)
+
+Phase 1-2 Python stdout에서 파싱한 카드 데이터를 assistant 텍스트로 렌더링한다. 상위 5개 세션을 카드형(2컬럼 테이블)으로만 출력한다.
 
 **카드 예시**:
 
@@ -276,7 +317,7 @@ PY
 
 카드 5개를 `### [1]` ~ `### [5]` 로 출력한 뒤, 추가 안내 문구 없이 사용자 입력을 기다린다.
 
-### 1-6. 사용자 선택
+### 1-4. 사용자 선택
 
 사용자가 1~5 중 번호를 입력하면 해당 full session-id 확정 → Phase 2 (2-4 target 경로 입력 요청)로 진입.
 
@@ -287,6 +328,171 @@ PY
 ---
 
 ## Phase 2: 경로 검증 및 정규화
+
+### 2-0. 통합 검증 (단일 Python — 권장 경로)
+
+아래 통합 Python 호출 하나로 Phase 2-4 ~ 2-14 에 해당하는 파일시스템 검증을 전부 처리한다. Claude는 2-1 ~ 2-3 의 **trivial 검사(UUID·자기 세션·`~` expansion·절대경로·시스템 경로 prefix)를 도구 호출 없이 텍스트 수준에서 먼저 수행**한 후, 이 스크립트를 실행하여 나머지 검증 결과를 한 번에 받는다.
+
+**Claude 내부 선처리 (도구 호출 없음)**
+- UUID 정규식 매칭: 불일치 시 **엣지 4** 즉시 안내
+- 자기 세션 id 비교 (Phase 1-2 에서 확보한 `SELF_SESSION` 값 사용): 같으면 **엣지 1**
+- `~` expansion: 입력 target이 `~` 로 시작하면 `$HOME` 로 치환
+- 절대경로 여부: `/` 로 시작하지 않으면 **엣지 6**
+- 시스템 경로 prefix 매칭: `/`, `/etc`, `/var`, `/usr`, `/bin`, `/sbin`, `/System`, `/Library/System`, `/private`, `/dev`, `/proc`, `/root` 중 해당 시 **엣지 8**
+
+**통합 검증 스크립트**
+
+```bash
+SESSION_ID="<선택된 or 인자 id>" TARGET="<~ expansion 후 절대경로>" \
+python3 <<'PY'
+import os, sys, json, glob, shutil, subprocess
+
+session_id = os.environ["SESSION_ID"]
+target_in = os.environ["TARGET"]
+home = os.path.expanduser("~")
+projects_dir = os.path.join(home, ".claude", "projects")
+
+# realpath 정규화 (macOS 기본 realpath가 없어도 파이썬이 직접 처리)
+target_real = os.path.realpath(target_in)
+# 혹시 realpath가 상대적으로 해석되는 경우 방어
+if not os.path.isabs(target_real):
+    target_real = os.path.abspath(target_real)
+
+# source 위치 찾기 (현재 pwd 기준 → 전체 스캔 fallback)
+current_encoded = os.getcwd().replace("/", "-")
+src = os.path.join(projects_dir, current_encoded, f"{session_id}.jsonl")
+src_project_dir = os.path.dirname(src)
+fallback = False
+
+if not os.path.isfile(src):
+    cands = glob.glob(os.path.join(projects_dir, "*", f"{session_id}.jsonl"))
+    if cands:
+        src = cands[0]
+        src_project_dir = os.path.dirname(src)
+        fallback = True
+    else:
+        print("RESULT=SOURCE_NOT_FOUND")
+        sys.exit(0)
+
+# source pwd 복원: jsonl 첫 cwd 엔트리 우선, 실패 시 디렉토리명 디코딩
+src_pwd = None
+try:
+    with open(src, "r", encoding="utf-8", errors="ignore") as f:
+        for _ in range(200):  # 앞 200줄 안에서 찾기
+            line = f.readline()
+            if not line:
+                break
+            try:
+                e = json.loads(line)
+            except Exception:
+                continue
+            if "cwd" in e and isinstance(e["cwd"], str):
+                src_pwd = e["cwd"]
+                break
+except Exception:
+    pass
+if not src_pwd:
+    src_pwd = os.path.basename(src_project_dir).replace("-", "/")
+
+# target 프로젝트 디렉토리
+target_encoded = target_real.replace("/", "-")
+target_proj = os.path.join(projects_dir, target_encoded)
+target_proj_exists = os.path.isdir(target_proj)
+target_file = os.path.join(target_proj, f"{session_id}.jsonl")
+
+# 순환 체크
+src_dir_real = os.path.realpath(src_project_dir)
+loop = (
+    (src_dir_real + "/").startswith(target_proj + "/") or
+    (target_proj + "/").startswith(src_dir_real + "/")
+)
+
+# 같은 fs 체크 (target이 없으면 부모 기준)
+try:
+    src_fs = os.stat(os.path.dirname(src)).st_dev
+    tgt_ref = target_proj if target_proj_exists else os.path.dirname(target_proj)
+    if not os.path.exists(tgt_ref):
+        tgt_ref = os.path.dirname(tgt_ref)
+    tgt_fs = os.stat(tgt_ref).st_dev
+    cross_fs = src_fs != tgt_fs
+except Exception:
+    cross_fs = False
+
+# disk 용량
+def dir_size(p):
+    total = 0
+    if os.path.isdir(p):
+        for root, _, files in os.walk(p):
+            for n in files:
+                try:
+                    total += os.path.getsize(os.path.join(root, n))
+                except Exception:
+                    pass
+    return total
+
+sidecar = os.path.join(src_project_dir, session_id)
+try:
+    need_kb = (os.path.getsize(src) + dir_size(sidecar)) // 1024 + 1
+    avail_kb = shutil.disk_usage(tgt_ref).free // 1024
+    disk_full = need_kb > avail_kb
+except Exception:
+    need_kb, avail_kb, disk_full = 0, 0, False
+
+# lsof (실패해도 무시)
+lock_pids = ""
+try:
+    r = subprocess.run(["lsof", src], capture_output=True, text=True, timeout=3)
+    if r.returncode == 0:
+        pids = set()
+        for line in r.stdout.splitlines()[1:]:
+            parts = line.split()
+            if len(parts) >= 2:
+                pids.add(parts[1])
+        lock_pids = ",".join(sorted(pids))
+except Exception:
+    pass
+
+# HOME 외부
+outside_home = not (target_real == home or target_real.startswith(home + "/"))
+
+# 결과 출력 (Claude 파싱용)
+print("RESULT=OK")
+print(f"SRC={src}")
+print(f"SRC_PROJECT_DIR={src_project_dir}")
+print(f"SRC_PWD={src_pwd}")
+print(f"TARGET_REAL={target_real}")
+print(f"TARGET_PROJ={target_proj}")
+print(f"TARGET_PROJ_EXISTS={1 if target_proj_exists else 0}")
+print(f"TARGET_CONFLICT={1 if os.path.exists(target_file) else 0}")
+print(f"SAME_PWD={1 if src_pwd == target_real else 0}")
+print(f"LOOP={1 if loop else 0}")
+print(f"CROSS_FS={1 if cross_fs else 0}")
+print(f"DISK_FULL={1 if disk_full else 0}")
+print(f"NEED_KB={need_kb}")
+print(f"AVAIL_KB={avail_kb}")
+print(f"LOCK_PIDS={lock_pids}")
+print(f"SIDECAR_EXISTS={1 if os.path.isdir(sidecar) else 0}")
+print(f"OUTSIDE_HOME={1 if outside_home else 0}")
+print(f"FALLBACK_USED={1 if fallback else 0}")
+PY
+```
+
+**출력 해석**
+- `RESULT=SOURCE_NOT_FOUND` → 어디에도 세션 파일 없음. 에러 종료.
+- `FALLBACK_USED=1` → **엣지 5**: 다른 경로에서 발견했음을 알리고 1회 컨펌.
+- `SAME_PWD=1` → **엣지 2**.
+- `TARGET_CONFLICT=1` → **엣지 3**.
+- `LOOP=1` → **엣지 10**.
+- `OUTSIDE_HOME=1` → **엣지 9**: 1회 컨펌.
+- `CROSS_FS=1` → **엣지 11**: 1회 컨펌.
+- `DISK_FULL=1` → **엣지 12**.
+- `LOCK_PIDS` 비어 있지 않으면 → **엣지 13**.
+- `TARGET_PROJ_EXISTS=0` → 생성 컨펌 1회 후 `mkdir -p` 는 Phase 5 통합 스크립트에서 일괄 수행.
+- `SIDECAR_EXISTS=0` → 메인 jsonl만 이동 (엣지 7, 정상 처리).
+
+**도구 호출 횟수**: Phase 2 전체 = **1회**. 이전 구조 2-2 ~ 2-14 별도 호출 대비 큰 단축.
+
+> 아래 2-1 ~ 2-14 개별 서술은 각 검증의 의미·엣지 매핑을 문서화하기 위해 남긴 **레퍼런스**이며, 실제 실행은 위 통합 스크립트로 일괄 처리한다.
 
 ### 2-1. 인자 파싱 (인자 호출인 경우)
 
@@ -534,7 +740,113 @@ fi
 
 ---
 
-## Phase 5: 이동 실행 (단계별 검증 + 롤백)
+## Phase 5: 이동 실행 (단일 Python — 권장 경로)
+
+메인 이동, 사이드카 이동, `.DS_Store` 정리, 실패 시 자동 롤백까지 **하나의 Python 호출**로 처리한다. 이전 3단계(bash Step 1 + Step 2 + Step 3) 개별 호출 대비 **1회 호출**로 단축.
+
+```bash
+SRC="<...>" SRC_PROJECT_DIR="<...>" TARGET_PROJ="<...>" SESSION_ID="<...>" \
+python3 <<'PY'
+import os, shutil
+
+src = os.environ["SRC"]
+src_project_dir = os.environ["SRC_PROJECT_DIR"]
+target_proj = os.environ["TARGET_PROJ"]
+session_id = os.environ["SESSION_ID"]
+
+target_file = os.path.join(target_proj, f"{session_id}.jsonl")
+sidecar_src = os.path.join(src_project_dir, session_id)
+sidecar_tgt = os.path.join(target_proj, session_id)
+
+moved_main = False
+moved_subs = []
+
+def rollback(err):
+    ok = True
+    # sub 역이동
+    for sub in reversed(moved_subs):
+        s = os.path.join(sidecar_tgt, sub)
+        t = os.path.join(sidecar_src, sub)
+        try:
+            if os.path.isdir(s):
+                os.makedirs(sidecar_src, exist_ok=True)
+                shutil.move(s, t)
+        except Exception:
+            ok = False
+    # 메인 역이동
+    if moved_main and os.path.exists(target_file):
+        try:
+            shutil.move(target_file, src)
+        except Exception:
+            ok = False
+    # 빈 target sidecar 정리
+    try:
+        os.rmdir(sidecar_tgt)
+    except Exception:
+        pass
+    print("RESULT=FAIL")
+    print(f"ERROR={err}")
+    print("ROLLBACK=" + ("OK" if ok else "FAIL"))
+    if not ok:
+        print("MANUAL_CHECK:")
+        print(f"  main: src={src} target={target_file}")
+        print(f"  sidecar: src={sidecar_src} target={sidecar_tgt}")
+
+try:
+    os.makedirs(target_proj, exist_ok=True)
+
+    # Step 1: 메인 이동
+    shutil.move(src, target_file)
+    if not (os.path.isfile(target_file) and not os.path.exists(src)):
+        raise RuntimeError("main move verification failed")
+    moved_main = True
+
+    # Step 2: 사이드카 이동 (있는 경우)
+    if os.path.isdir(sidecar_src):
+        os.makedirs(sidecar_tgt, exist_ok=True)
+        for sub in ("subagents", "tool-results"):
+            s = os.path.join(sidecar_src, sub)
+            t = os.path.join(sidecar_tgt, sub)
+            if os.path.isdir(s):
+                shutil.move(s, t)
+                moved_subs.append(sub)
+
+        # Step 3: 정리
+        ds = os.path.join(sidecar_src, ".DS_Store")
+        if os.path.isfile(ds):
+            try:
+                os.remove(ds)
+            except Exception:
+                pass
+        try:
+            os.rmdir(sidecar_src)
+        except Exception:
+            pass
+
+    # 성공
+    print("RESULT=OK")
+    print(f"MAIN_MOVED=1")
+    print(f"SIDECAR_SUBS={','.join(moved_subs) if moved_subs else '-'}")
+    # 이동된 파일 수 집계 (Phase 6 보고용)
+    cnt_sub = 0
+    cnt_tr = 0
+    sa = os.path.join(sidecar_tgt, "subagents")
+    tr = os.path.join(sidecar_tgt, "tool-results")
+    if os.path.isdir(sa):
+        cnt_sub = sum(1 for _ in os.listdir(sa))
+    if os.path.isdir(tr):
+        cnt_tr = sum(1 for _ in os.listdir(tr))
+    print(f"SUBAGENTS_COUNT={cnt_sub}")
+    print(f"TOOL_RESULTS_COUNT={cnt_tr}")
+
+except Exception as e:
+    rollback(str(e))
+PY
+```
+
+**도구 호출 횟수**: Phase 5 전체 = **1회**. 이전 구조 Step 1·2·3 별도 bash 호출 대비 1/3로 단축.
+
+> 아래 Step 1 ~ Step 3 개별 서술은 각 단계의 의미·검증 포인트·롤백 규칙을 문서화하기 위해 남긴 **레퍼런스**이며, 실제 실행은 위 통합 Python 스크립트로 일괄 처리한다.
 
 ### Step 1: 메인 jsonl 이동
 
@@ -667,13 +979,28 @@ Resume 방법:
 
 ---
 
-## 빠른 실행 체크리스트
+## 빠른 실행 체크리스트 (도구 호출 최소화 경로)
 
-- [ ] 인자 유무 판별
-- [ ] 인자 없음 → Phase 1 전체 수행 (NONCE, 자기 세션, 상위 5개 카드, 사용자 선택)
-- [ ] 인자 있음 → Phase 1-1/1-3만 수행 후 바로 Phase 2
-- [ ] Phase 2 검증 14 단계 순차 실행, 엣지 발생 시 해당 번호의 메시지 출력
-- [ ] Phase 3 드라이런 출력
-- [ ] Phase 4 사용자 `y` 컨펌 필수
-- [ ] Phase 5 단계별 이동 + 실패 시 롤백
-- [ ] Phase 6 결과 보고 및 `/resume` 안내
+**인자 없이 호출**
+- [ ] **[bash 1회]** Phase 1-1: `:` no-op 로 NONCE literal 주입 (stdout 없음)
+- [ ] **[python 1회]** Phase 1-2: 통합 스크립트로 자기 세션 확정 + 상위 5개 카드 파싱
+- [ ] **[assistant text 1회]** 안내 2줄 + 카드 5개 + `세션 no를 선택해주세요.` 를 **한 번에** 출력
+- [ ] 사용자가 번호 입력 후 → target 경로 입력 요청 (assistant text 1회)
+- [ ] Claude 내부: UUID·자기 세션·`~` expansion·절대경로·시스템 경로 prefix 사전 검증
+- [ ] **[python 1회]** Phase 2-0 통합 검증 스크립트 실행, 엣지 해석
+- [ ] **[assistant text 1회]** 드라이런 + 컨펌 프롬프트 묶음 출력
+- [ ] 사용자 `y` 입력 후 → **[python 1회]** Phase 5 통합 이동 스크립트 실행
+- [ ] **[assistant text 1회]** Phase 6 결과 보고
+
+**인자와 함께 호출** (`/session-relocate <id> <path>`)
+- [ ] Claude 내부: UUID·절대경로·`~` expansion·시스템 경로 prefix 사전 검증
+- [ ] **[bash 1회]** Phase 1-1 NONCE 주입
+- [ ] **[python 1회]** Phase 1-2 통합 (자기 세션 판별만 사용, 카드는 무시 가능)
+- [ ] **[python 1회]** Phase 2-0 통합 검증
+- [ ] **[assistant text 1회]** 드라이런 + 컨펌
+- [ ] **[python 1회]** Phase 5 통합 이동
+- [ ] **[assistant text 1회]** Phase 6 결과 보고
+
+**총 도구 호출 수 (목표)**
+- 인자 없음: 최대 5회 (NONCE / 스캔 / 검증 / 이동 / ✕ assistant text는 tool 아님)
+- 인자 있음: 최대 4회
