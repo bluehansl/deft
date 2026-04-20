@@ -4,6 +4,16 @@
 
 형식은 [Keep a Changelog](https://keepachangelog.com/ko/1.1.0/) 를 따르며, 버전 체계는 [Semantic Versioning](https://semver.org/lang/ko/) 을 사용합니다.
 
+## [1.0.4] - 2026-04-20
+
+### Fixed
+- `/session-relocate` 호출 시 카드 리스트가 바로 뜨지 않고 "스킬이 로드되었습니다. Session Relocate는 ...입니다" 류의 소개 메시지 + "세션을 이동하려고 하시나요?" 재질문이 나오던 문제.
+  - SKILL.md 최상단에 "⚡ 즉시 실행 규칙" 섹션 추가: 호출 즉시 도구부터 실행하고 소개/확인/사용법 안내 assistant 텍스트를 일체 금지.
+  - frontmatter `description`을 "즉시 이동 실행" 중심의 능동형 문구로 개정. FQN `/session-relocate:session-relocate` 를 트리거 예시에 명시.
+
+### Known Issues
+- 슬래시 커맨드 자동완성이 FQN `/session-relocate:session-relocate` 를 제안하는 문제는 Claude Code 플랫폼 동작이므로 플러그인에서 제어 불가. FQN 형태여도 즉시 실행 규칙에 의해 동일하게 카드 리스트부터 출력됨. 단축형 `/session-relocate` 는 `/sess` 까지 타이핑한 뒤 `Esc` 로 자동완성을 닫고 직접 입력하거나, FQN 그대로 전송해도 됨.
+
 ## [1.0.3] - 2026-04-20
 
 ### Performance

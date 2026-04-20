@@ -21,7 +21,7 @@
       "name": "session-relocate",
       "source": "./plugins/session-relocate",
       "description": "Claude Code 세션 로그 파일을 다른 pwd 프로젝트 디렉토리로 이동시켜 /resume 대상으로 만드는 플러그인",
-      "version": "1.0.3",
+      "version": "1.0.4",
       "author": {
         "name": "bluehansl"
       }

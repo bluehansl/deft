@@ -1,9 +1,31 @@
 ---
 name: session-relocate
-description: Claude Code 세션 파일을 다른 pwd 프로젝트 디렉토리로 이동. 트리거 예시 "세션 이동", "세션 경로 옮기기", "resume 리스트로 옮겨", "move session", "relocate session", "/session-relocate".
+description: Claude Code 세션 파일을 다른 pwd 프로젝트 디렉토리로 즉시 이동 실행. 호출과 동시에 리스트업 또는 경로 검증을 시작한다. 트리거 예시 "세션 이동", "세션 경로 옮기기", "resume 리스트로 옮겨", "move session", "relocate session", "/session-relocate", "/session-relocate:session-relocate".
 ---
 
 # Session Relocate Skill
+
+## ⚡ 즉시 실행 규칙 (최상위 우선)
+
+이 스킬이 로드/호출되는 즉시, Claude는 **소개·확인·재질문 없이** 곧바로 실행에 들어간다. 다음 행동은 **절대 금지**:
+
+- ❌ "스킬이 로드되었습니다" 류 로딩 알림
+- ❌ "Session Relocate는 ... 기능입니다" 류의 스킬 소개
+- ❌ "세션을 이동하려고 하시나요?" / "어떤 도움이 필요하세요?" 같은 의도 재확인
+- ❌ "인자 없이: ..." / "직접 지정: ..." 같은 사용법 안내 출력
+- ❌ 실행 전에 assistant 텍스트를 먼저 출력
+
+호출 시점에 따라 **즉시 다음 행동**을 수행한다:
+
+| 호출 형태 | 즉시 수행할 것 |
+|---|---|
+| `/session-relocate` 또는 `/session-relocate:session-relocate` (인자 없음) | Phase 1-1 NONCE literal 주입 Bash 호출 → Phase 1-2 통합 Python 호출 → 카드 + 안내 문구 + 프롬프트를 **한 번의 assistant 메시지**로 출력 |
+| `/session-relocate <session-id> <절대경로>` | Claude 내부 선처리(UUID·절대경로·시스템 경로 prefix 검증) → Phase 1-1 NONCE 주입 → Phase 1-2 (자기 세션 판별만 필요) → Phase 2-0 통합 검증 → 드라이런·컨펌 |
+| 자연어 트리거("세션 이동" 등) | 인자 없이 호출된 것과 동일 처리 |
+
+호출자의 의도는 이미 명확하다 (세션 이동). 사용자는 카드가 떠서 번호를 고를 수 있는 상태를 기대한다. **아무 assistant 텍스트도 먼저 출력하지 말고, 먼저 도구부터 호출한다**.
+
+---
 
 Claude Code 세션 로그(`~/.claude/projects/<encoded-pwd>/<session-id>.jsonl`)와 사이드카 디렉토리(`<session-id>/`)를 다른 pwd 기반 프로젝트 디렉토리로 이동시켜, 다른 경로에서 `claude` 실행 후 `/resume` 리스트에 해당 세션이 노출되도록 한다.
 
@@ -11,7 +33,7 @@ Claude Code 세션 로그(`~/.claude/projects/<encoded-pwd>/<session-id>.jsonl`)
 
 ## 호출 방식
 
-1. **인자 없음** (`/session-relocate`) — 리스트업 모드 → 사용자가 번호로 세션 선택 → target 경로 입력
+1. **인자 없음** (`/session-relocate` 또는 FQN `/session-relocate:session-relocate`) — 리스트업 모드 → 사용자가 번호로 세션 선택 → target 경로 입력
 2. **인자 있음** (`/session-relocate <session-id> <절대경로>`) — 리스트업 생략, Phase 2부터 바로 진입
 
 ---
