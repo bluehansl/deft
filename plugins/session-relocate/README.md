@@ -67,6 +67,10 @@ Claude Code는 세션 로그를 `~/.claude/projects/<pwd를 치환 인코딩한 
 - 실험적 기능: Claude Code의 세션 저장 경로 규칙에 의존하므로, 상위 버전에서 규칙이 바뀌면 동작이 변경될 수 있음
 - 다중 사용자 환경에서 동시에 같은 세션을 이동하는 케이스는 보장하지 않음
 
+## Changelog
+
+버전별 변경 이력은 [CHANGELOG.md](./CHANGELOG.md) 를 참고하세요.
+
 ## License
 
 Personal use only

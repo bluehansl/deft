@@ -47,22 +47,60 @@ Claude Code 세션 로그(`~/.claude/projects/<encoded-pwd>/<session-id>.jsonl`)
 - 사용자가 이미 카드에서 본 내용의 재요약
 - 불필요한 "10번 이상은 상세 확인 후 진행" 류의 안내 (항상 5개만 노출하므로 해당 없음)
 
-내부 Bash/Python 실행은 도구 호출로만 수행한다. 한 번에 필요한 Bash/Python을 실행하고, 결과가 나오면 위 허용 출력만 사용자에게 노출한다.
+---
+
+## 실행 순서 규칙 (강제)
+
+텍스트 응답과 도구 호출을 **섞지 않는다**. 사용자가 한 번의 응답 안에서 "안내 → 툴 실행 로그 → 결과" 순으로 UI를 분해해 확인하지 않도록, 다음 순서를 엄격히 지킨다.
+
+### 인자 없이 호출된 경우 (리스트업 모드)
+
+**1단계: 백그라운드 수집 (사용자 텍스트 출력 없음)**
+- 다음을 모두 **단일 응답 턴 안에서 연속 도구 호출**로만 수행하고, 이 과정에서 assistant 텍스트는 일체 출력하지 않는다:
+  - NONCE 주입 (Phase 1-1)
+  - PROJECT_DIR 확인 (Phase 1-2)
+  - 자기 세션 확정 (Phase 1-3)
+  - 상위 5개 세션 풀 파싱 (Phase 1-4)
+- 파서(Python)의 stdout은 **내부 데이터**로만 취급. 사용자에게 그대로 보이게 하지 않는다.
+
+**2단계: 한 번의 assistant 텍스트 응답 (모든 백그라운드 종료 후)**
+- 내부 데이터에서 카드 마크다운을 조립하여 아래 3요소를 **하나의 연속된 텍스트 블록**으로 출력:
+  1. 최상단 안내 2줄 (고정 문구)
+  2. 카드 5개 (`### [1]` ~ `### [5]`)
+  3. 한 줄 프롬프트: `세션 no를 선택해주세요.`
+- 이 블록 안에서 문구-카드-프롬프트 사이에 빈 줄 외 다른 요소(추가 안내, 도구 호출 등) 삽입 금지.
+
+**금지 사항**
+- ❌ 백그라운드 수집 **전에** 안내 문구를 먼저 출력
+- ❌ 백그라운드 수집 **중간**에 "~을 실행합니다" 같은 중계 문구
+- ❌ 카드 데이터를 Python stdout 그대로 보여주고 사용자가 툴 결과 펼쳐보게 하기
+- ❌ "번호를 입력하거나 ctrl+o..." 같은 UI 조작 안내
+
+### 인자와 함께 호출된 경우
+- Phase 1-1 / 1-3만 백그라운드로 수행 (자기 세션 비교용)
+- 이후 Phase 2 검증으로 진입. 검증 중 사용자 입력이 필요한 엣지 케이스(5·9·11 등)를 만나면 그 시점에만 assistant 텍스트 출력.
+
+### 사용자 입력 수신 이후 각 단계 공통 규칙
+- 드라이런 계획 출력 → **바로** 컨펌 프롬프트 → 사용자 y/N 입력까지 **같은 assistant 메시지 한 번**에 노출
+- 이동 실행은 컨펌 받은 다음 턴의 도구 호출로 수행. 실행 중 진행 멘트 금지. 완료 후 Phase 6 결과 한 번에 출력.
 
 ---
 
 ## Phase 1: 입력 수집 (인자 없을 때만)
 
-### 1-1. 자기 세션 판별용 마커 주입
+### 1-1. 자기 세션 판별용 마커 주입 (무출력)
 
-현재 세션 jsonl에 Bash 호출을 기록하여 고유 NONCE를 심는다. Claude는 생성된 NONCE를 기억해 다음 단계에서 재사용한다.
+Claude가 매 호출마다 **새로운 literal NONCE 문자열**(예: `SESSION_RELOCATE_MARKER_<16자 hex>`)을 생성하고, 해당 literal을 Bash 명령 본문에 그대로 포함시켜 실행한다. 명령은 `:` no-op으로 stdout을 남기지 않으며, jsonl에는 `tool_use.command` 문자열 자체가 기록되어 추후 grep으로 자기 세션을 식별할 수 있다.
+
+규칙:
+- NONCE 값은 `$(date ...)`, `$RANDOM` 같은 shell 확장을 **쓰지 않는다**. Claude가 대화 맥락에서 충분히 유일한 문자열을 직접 생성해 literal로 박는다.
+- stdout은 비워 둔다 (UI 노이즈 최소화).
 
 ```bash
-NONCE="SESSION_RELOCATE_MARKER_$(date -u +%s%N)_$RANDOM$RANDOM"
-echo "MARKER_NONCE=$NONCE"
+: "SESSION_RELOCATE_MARKER_20260420a9f3e1b7"   # Claude가 매번 새로 literal 생성
 ```
 
-이 Bash 호출의 `command` 문자열과 `stdout`이 현재 세션 jsonl에 `tool_use` + `tool_result` 엔트리로 기록되므로, 그 파일을 자기 세션으로 식별할 수 있다.
+이 단계에서 반환되는 stdout/stderr은 비어 있어야 하며, 내부적으로 "마커가 심어졌다"는 사실만 기억하면 된다.
 
 ### 1-2. 현재 pwd 및 프로젝트 디렉토리 확인
 
@@ -75,17 +113,17 @@ ls -t "$PROJECT_DIR"/*.jsonl 2>/dev/null | head -20
 
 ### 1-3. 자기 세션 확정
 
-최신 5개 jsonl에서 NONCE를 검색한다(대부분 최신 1~2개 안에 존재).
+Phase 1-1 에서 literal로 심은 NONCE 문자열을 최신 5개 jsonl에서 검색한다(보통 최신 1~2개 안에 존재). 이 단계는 1-2·1-4 와 **하나의 연속 도구 호출 흐름 안에서 수행**하며, 사용자 텍스트는 여전히 출력하지 않는다.
 
 ```bash
 SELF_SESSION=""
 for f in $(ls -t "$PROJECT_DIR"/*.jsonl 2>/dev/null | head -5); do
-  if grep -q "$NONCE" "$f"; then
+  if grep -q "SESSION_RELOCATE_MARKER_20260420a9f3e1b7" "$f"; then   # ← Phase 1-1 에서 Claude가 쓴 literal과 동일
     SELF_SESSION=$(basename "$f" .jsonl)
     break
   fi
 done
-echo "SELF_SESSION=$SELF_SESSION"
+# stdout 없이 내부 변수로만 유지하거나, 다음 Python 파서 입력으로 전달
 ```
 
 - 매칭 있음 → 자기 세션 id 확정
