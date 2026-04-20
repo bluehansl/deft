@@ -40,22 +40,19 @@ Claude 텍스트 출력은 도구 호출 **후**에만. 사용자 입력 대기 
 **금지**: Phase/Step 번호, NONCE 값, encoded pwd, "~하겠습니다/실행합니다/중입니다", 카드 재요약, "번호를 입력하거나 ctrl+o..." / "10번 이상..." 류.
 
 ## CARD_TEMPLATE
-P1-2 stdout에서 sid/rename/first/last/ts를 꺼내 아래 HTML 테이블 포맷으로 5개(또는 실제 수 만큼) 렌더. `no` 칸은 `rowspan="5"` 로 세로 병합, `### [N]` 외부 헤딩은 쓰지 않는다. 라벨은 `session-id`·`이름`·`시작 대화`·`끝 대화`·`최종 업데이트` 순서 고정.
+P1-2 stdout에서 sid/rename/first/last/ts를 꺼내 아래 **마크다운 3컬럼 테이블**(`no` | `항목` | `값`) 포맷으로 5개(또는 실제 수 만큼) 렌더. 터미널 폭 자동 적응을 위해 마크다운 테이블만 사용하며 HTML 금지. `no` 값은 **각 카드의 첫 행(session-id 행)에만** 표시하고 나머지 행은 빈 칸으로 둔다(마크다운은 rowspan 미지원). 라벨 순서: `session-id` → `이름` → `시작 대화` → `끝 대화` → `최종 업데이트`. `### [N]` 외부 헤딩은 쓰지 않는다.
 
-```html
-<table>
-<thead><tr><th>no</th><th>항목</th><th>값</th></tr></thead>
-<tbody>
-<tr><td rowspan="5" align="center"><b>N</b></td><td>session-id</td><td>{sid}</td></tr>
-<tr><td>이름</td><td>{rename}</td></tr>
-<tr><td>시작 대화</td><td>{first}</td></tr>
-<tr><td>끝 대화</td><td>{last}</td></tr>
-<tr><td>최종 업데이트</td><td>{ts}</td></tr>
-</tbody>
-</table>
+```markdown
+| no | 항목 | 값 |
+|:---:|---|---|
+| N | session-id | {sid} |
+|  | 이름 | {rename} |
+|  | 시작 대화 | {first} |
+|  | 끝 대화 | {last} |
+|  | 최종 업데이트 | {ts} |
 ```
 
-카드 사이에 빈 줄 1개만 삽입. 카드 전·후에 추가 설명 금지.
+**카드가 여러 개일 때**: 카드마다 **별도 테이블**로 출력하고, 테이블 사이에 빈 줄 1개 삽입. 단일 대형 테이블로 합치지 않는다. 카드 전·후 추가 설명·주석 금지.
 
 ## P1-1 (bash, 무출력 NONCE literal 주입)
 Claude가 매 호출 새 literal(영숫자 16자 정도) 생성 → `:` no-op에 박아 실행. shell 확장(`$(date)`,`$RANDOM`) 금지. stdout/stderr 비움.
@@ -69,7 +66,7 @@ env `NONCE`에 P1-1 literal 전달. PROJECT_DIR = `~/.claude/projects/<pwd치환
 유효 user: `type=="user"` AND `isMeta!=True` AND extract_text!=None/공백 AND 텍스트가 아래 marker 중 아무것으로도 시작 안 함:
 `<system-reminder>`, `<command-name>`, `<command-message>`, `<command-args>`, `<local-command-stdout>`, `<user-prompt-submit-hook>`, `<bash-input>`, `<bash-stdout>`, `<bash-stderr>`, `<file-hook>`.
 extract_text: content가 str→그대로; list→type=="text" 블록 join, 단 tool_result/tool_use_id 포함 시 None.
-truncate40: 개행→공백, >40자 시 39자+`…`, 빈값 `—`.
+tr (truncate, 이름/시작 대화/끝 대화 공통): 개행→공백, `>FDL자` 시 `FDL-1자 + …`, 빈값 `—`. 상수 `FDL=30` 하나로 세 필드 일괄 제어.
 KST: UTC+9, `YYYY년 MM월 DD일 HH:mm:ss`, 실패 `—`.
 속도: 첫 user/customTitle은 head 스트리밍; 마지막 user는 파일 끝에서 256KB chunk 역seek → 첫 매치 즉시 break.
 자기 세션 확정: mtime 최신 5개 안에서 NONCE literal in file → 일치 파일의 basename-".jsonl"이 SELF_SESSION. 실패 시 "".
@@ -112,11 +109,12 @@ def vu(e):
     s=t.lstrip()
     if not s: return False
     return not any(s.startswith(m) for m in MM)
-def t40(s):
+FDL=30   # fontDisplayLength: 이름/시작 대화/끝 대화 공통 표시 글자수 (초과 시 FDL-1자 + …)
+def tr(s):
     if s is None: return "—"
     s=s.replace("\n"," ").replace("\r"," ").strip()
     if not s: return "—"
-    return s[:39]+"…" if len(s)>40 else s
+    return s[:FDL-1]+"…" if len(s)>FDL else s
 def kst(ts):
     try: dt=datetime.fromisoformat((ts or "").replace("Z","+00:00"))
     except: return "—"
@@ -166,7 +164,7 @@ print(f"SESSION_COUNT={len(top5)}")
 for f in top5:
     sid=os.path.basename(f)[:-6]
     ct,fu,lu,lts=parse(f)
-    print("---CARD---"); print(f"sid={sid}"); print(f"rename={t40(ct)}"); print(f"first={t40(fu)}"); print(f"last={t40(lu)}"); print(f"ts={kst(lts)}")
+    print("---CARD---"); print(f"sid={sid}"); print(f"rename={tr(ct)}"); print(f"first={tr(fu)}"); print(f"last={tr(lu)}"); print(f"ts={kst(lts)}")
 PY
 ```
 

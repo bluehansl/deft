@@ -4,39 +4,9 @@
 
 형식은 [Keep a Changelog](https://keepachangelog.com/ko/1.1.0/) 를 따르며, 버전 체계는 [Semantic Versioning](https://semver.org/lang/ko/) 을 사용합니다.
 
-## [1.0.6] - 2026-04-20
-
-### Changed
-- 카드 렌더 포맷을 3컬럼 HTML 테이블(`no`/`항목`/`값`)로 변경, `no` 칸은 `rowspan="5"` 로 세로 병합하여 카드 그룹핑을 시각적으로 명확히 함.
-- 라벨 재정렬 및 변경:
-  - `rename` → `이름`
-  - `최종 업데이트 시간` → `최종 업데이트`
-  - 행 순서: `session-id` → `이름` → `시작 대화` → `끝 대화` → `최종 업데이트`
-- 카드 위의 `### [N]` 외부 헤딩 제거 (no가 테이블 내부로 이동).
-
-## [1.0.5] - 2026-04-20
-
-### Performance
-- **SKILL.md 토큰 사용량 대폭 감축**: 1,028줄 → 403줄 (약 -61%), 41 KB → 19 KB (약 -53%).
-- 사용자 노출 문구(안내 2줄, 엣지 14개 메시지, 프롬프트, 드라이런/결과 템플릿)와 실행 스크립트(Python)는 **모두 그대로 유지**.
-- 반복 서술/레퍼런스 섹션/장황한 prose 를 단축 기호·축약 표기로 치환.
-- 통합 실행 섹션(P1-2, P2-0, P5) 의 Python 은 함수/변수명을 압축하되 로직 동치.
-- Phase 2-1 ~ 2-14, Phase 5 Step 1~3 의 중복 레퍼런스 삭제 (통합 스크립트가 이미 같은 검증을 수행).
-
-### Changed
-- 섹션 헤더를 `EXEC_IMMEDIATE`, `FLOW`, `CHECK_INTERNAL`, `USER_OUTPUT`, `CARD_TEMPLATE`, `P1-1`, `P1-2`, `P2-0`, `DRYRUN_TEMPLATE`, `CONFIRM`, `P5`, `P6_RESULT_TEMPLATE`, `EDGES`, `HINTS`, `TOOL_CALL_BUDGET` 로 단축.
-
-## [1.0.4] - 2026-04-20
-
-### Fixed
-- `/session-relocate` 호출 시 카드 리스트가 바로 뜨지 않고 "스킬이 로드되었습니다. Session Relocate는 ...입니다" 류의 소개 메시지 + "세션을 이동하려고 하시나요?" 재질문이 나오던 문제.
-  - SKILL.md 최상단에 "⚡ 즉시 실행 규칙" 섹션 추가: 호출 즉시 도구부터 실행하고 소개/확인/사용법 안내 assistant 텍스트를 일체 금지.
-  - frontmatter `description`을 "즉시 이동 실행" 중심의 능동형 문구로 개정. FQN `/session-relocate:session-relocate` 를 트리거 예시에 명시.
-
-### Known Issues
-- 슬래시 커맨드 자동완성이 FQN `/session-relocate:session-relocate` 를 제안하는 문제는 Claude Code 플랫폼 동작이므로 플러그인에서 제어 불가. FQN 형태여도 즉시 실행 규칙에 의해 동일하게 카드 리스트부터 출력됨. 단축형 `/session-relocate` 는 `/sess` 까지 타이핑한 뒤 `Esc` 로 자동완성을 닫고 직접 입력하거나, FQN 그대로 전송해도 됨.
-
 ## [1.0.3] - 2026-04-20
+
+중간 patch 버전(1.0.4 ~ 1.0.7)에서 이뤄진 반복 개선을 모두 흡수하여 1.0.3 단일 릴리스로 통합.
 
 ### Performance
 - **도구 호출 횟수 대폭 감축**: Phase 1(4~5회) → 2회, Phase 2(10+회) → 1회, Phase 5(3회) → 1회. 체감 속도 개선.
@@ -44,14 +14,31 @@
 - Phase 2-2 ~ 2-14 를 단일 통합 Python 스크립트로 병합 (realpath·순환·fs·disk·lock·충돌 등 일괄 수행).
 - Phase 5 메인·사이드카·정리·롤백을 단일 Python 스크립트로 병합.
 - **대용량 jsonl 파싱 최적화**: 마지막 user 엔트리 추출을 256 KB chunk 역방향 seek 방식으로 전환. 수십 MB 파일에서도 빠른 조기 종료.
+- **SKILL.md 토큰 사용량 대폭 감축**: 1,028줄 → 약 400줄(-61%), 41 KB → 약 19 KB(-53%). 사용자 노출 문구와 Python 실행 로직은 그대로 유지한 채 반복 서술·레퍼런스·장황한 prose 를 단축 표기로 치환. 섹션 헤더도 `EXEC_IMMEDIATE`, `FLOW`, `CHECK_INTERNAL`, `USER_OUTPUT`, `CARD_TEMPLATE`, `P1-1`, `P1-2`, `P2-0`, `DRYRUN_TEMPLATE`, `CONFIRM`, `P5`, `P6_RESULT_TEMPLATE`, `EDGES`, `HINTS`, `TOOL_CALL_BUDGET` 로 단축.
 
 ### Changed
 - Claude 내부 선처리 규칙 명시: UUID/절대경로/`~` expansion/시스템 경로 prefix 검증은 도구 호출 없이 텍스트 수준에서 수행.
 - 공유 상태를 환경변수(`SESSION_ID`, `TARGET`, `NONCE`, `SRC` 등)로 전달해 중간 덤프 호출 제거.
 - 빠른 실행 체크리스트를 "도구 호출 횟수" 기반으로 재작성 (목표: 인자 없음 5회 / 인자 있음 4회).
+- **호출 즉시 실행 규칙 신설**: SKILL.md 최상단에 `⚡ EXEC_IMMEDIATE` 섹션을 추가, 호출 즉시 도구부터 실행하고 소개/로딩알림/의도재확인/사용법 안내 assistant 텍스트를 일체 금지. frontmatter `description` 도 "즉시 이동 실행" 중심 능동형 문구로 개정. FQN `/session-relocate:session-relocate` 도 트리거 예시에 명시.
+- **카드 렌더 포맷**: 마크다운 **3컬럼 테이블**(`no` | `항목` | `값`) 로 변경. 터미널 폭 자동 적응을 위해 마크다운 테이블만 사용(HTML 금지). 카드당 **별도 테이블**로 출력 + 테이블 간 빈 줄 1개 삽입. 외부 `### [N]` 헤딩 제거(번호가 테이블 내부로 이동).
+- **라벨 재정렬/변경**:
+  - `rename` → `이름`
+  - `최종 업데이트 시간` → `최종 업데이트`
+  - 행 순서: `session-id` → `이름` → `시작 대화` → `끝 대화` → `최종 업데이트`
+- **표시 글자수 상수화**: P1-2 Python 에 `FDL = 30` (fontDisplayLength) 도입. `이름`/`시작 대화`/`끝 대화` 세 필드 모두 이 상수로 일괄 절삭. 기본 40 → **30** 으로 축소. 이후 조정은 `FDL` 한 값만 바꾸면 전체 일괄 반영.
+- `truncate40` 함수 → `tr` 로 리네임, `FDL` 상수 참조.
+
+### Fixed
+- `/session-relocate` 호출 시 카드 리스트 대신 "스킬이 로드되었습니다..." 소개 메시지와 "세션을 이동하려고 하시나요?" 재질문이 뜨던 문제.
+- 안내 문구와 카드 리스트가 bash 실행 전후로 갈라져 노출되던 순서 문제(`ctrl+o` 로 툴 결과를 펼쳐야 카드가 보이던 상황 포함).
 
 ### Documentation
-- 기존 Phase 2-1 ~ 2-14, Phase 5 Step 1~3 개별 서술은 레퍼런스로 남김 (실행은 통합 스크립트 경로로).
+- 기존 Phase 2-1 ~ 2-14, Phase 5 Step 1~3 개별 서술은 레퍼런스로 남김(실행은 통합 스크립트 경로로). 1.0.5 에서 중복 레퍼런스 섹션은 삭제되어 통합 스크립트만 권한.
+
+### Known Limitations
+- 마크다운 표준이 rowspan 을 지원하지 않아 "no 칸 세로 병합(중앙)" 는 정확 구현 불가. `no` 값을 각 카드의 첫 행에만 표시하는 방식으로 대체.
+- 슬래시 커맨드 자동완성이 FQN `/session-relocate:session-relocate` 를 제안하는 건 Claude Code 플랫폼 동작이라 플러그인 쪽에서 제어 불가. FQN 형태여도 즉시 실행 규칙에 의해 동일하게 카드 리스트부터 출력됨. 단축형을 원하면 `/sess` 입력 후 `Esc` 로 자동완성을 닫고 직접 `/session-relocate` 를 입력.
 
 ## [1.0.2] - 2026-04-20
 
