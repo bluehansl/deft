@@ -4,6 +4,18 @@
 
 형식은 [Keep a Changelog](https://keepachangelog.com/ko/1.1.0/) 를 따르며, 버전 체계는 [Semantic Versioning](https://semver.org/lang/ko/) 을 사용합니다.
 
+## [1.0.5] - 2026-04-20
+
+### Performance
+- **SKILL.md 토큰 사용량 대폭 감축**: 1,028줄 → 403줄 (약 -61%), 41 KB → 19 KB (약 -53%).
+- 사용자 노출 문구(안내 2줄, 엣지 14개 메시지, 프롬프트, 드라이런/결과 템플릿)와 실행 스크립트(Python)는 **모두 그대로 유지**.
+- 반복 서술/레퍼런스 섹션/장황한 prose 를 단축 기호·축약 표기로 치환.
+- 통합 실행 섹션(P1-2, P2-0, P5) 의 Python 은 함수/변수명을 압축하되 로직 동치.
+- Phase 2-1 ~ 2-14, Phase 5 Step 1~3 의 중복 레퍼런스 삭제 (통합 스크립트가 이미 같은 검증을 수행).
+
+### Changed
+- 섹션 헤더를 `EXEC_IMMEDIATE`, `FLOW`, `CHECK_INTERNAL`, `USER_OUTPUT`, `CARD_TEMPLATE`, `P1-1`, `P1-2`, `P2-0`, `DRYRUN_TEMPLATE`, `CONFIRM`, `P5`, `P6_RESULT_TEMPLATE`, `EDGES`, `HINTS`, `TOOL_CALL_BUDGET` 로 단축.
+
 ## [1.0.4] - 2026-04-20
 
 ### Fixed
