@@ -4,6 +4,14 @@
 
 형식은 [Keep a Changelog](https://keepachangelog.com/ko/1.1.0/) 를 따르며, 버전 체계는 [Semantic Versioning](https://semver.org/lang/ko/) 을 사용합니다.
 
+## [1.0.4] - 2026-04-20
+
+### Fixed
+- `/session-relocate` 또는 `/session-relocate:session-relocate` 호출 시 여전히 "session-relocate 스킬이 준비되었습니다 / ...하시려면 /session-relocate / 혹은 다른 작업이 필요하신가요?" 류의 소개 + 재질문이 노출되던 현상.
+  - 1.0.3 의 `EXEC_IMMEDIATE` 규칙이 과도하게 압축되어 차단력이 약했던 점을 보완.
+  - 금지 문구를 **사용자 실제 보고 기준**으로 구체화하여 SKILL.md 최상단에 예시 나열 (`스킬이 준비되었습니다`, `~하시려면`, `~하시려고 하시나요`, `다른 도움이 필요하신 부분`, 재인용 사용법 등).
+  - 호출 형태별 "즉시 수행할 첫 동작" 표를 복원하여 첫 응답이 assistant 텍스트가 아닌 **도구 호출로 시작**해야 함을 명시.
+
 ## [1.0.3] - 2026-04-20
 
 중간 patch 버전(1.0.4 ~ 1.0.7)에서 이뤄진 반복 개선을 모두 흡수하여 1.0.3 단일 릴리스로 통합.
