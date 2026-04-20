@@ -40,18 +40,22 @@ Claude 텍스트 출력은 도구 호출 **후**에만. 사용자 입력 대기 
 **금지**: Phase/Step 번호, NONCE 값, encoded pwd, "~하겠습니다/실행합니다/중입니다", 카드 재요약, "번호를 입력하거나 ctrl+o..." / "10번 이상..." 류.
 
 ## CARD_TEMPLATE
-P1-2 stdout(형식은 P1-2 섹션 참조)에서 sid/rename/first/last/ts를 꺼내 아래 포맷으로 5개(또는 실제 수 만큼) 렌더:
-```markdown
-### [N]
+P1-2 stdout에서 sid/rename/first/last/ts를 꺼내 아래 HTML 테이블 포맷으로 5개(또는 실제 수 만큼) 렌더. `no` 칸은 `rowspan="5"` 로 세로 병합, `### [N]` 외부 헤딩은 쓰지 않는다. 라벨은 `session-id`·`이름`·`시작 대화`·`끝 대화`·`최종 업데이트` 순서 고정.
 
-| 항목 | 값 |
-|---|---|
-| rename | {rename} |
-| session-id | {sid} |
-| 시작 대화 | {first} |
-| 끝 대화 | {last} |
-| 최종 업데이트 시간 | {ts} |
+```html
+<table>
+<thead><tr><th>no</th><th>항목</th><th>값</th></tr></thead>
+<tbody>
+<tr><td rowspan="5" align="center"><b>N</b></td><td>session-id</td><td>{sid}</td></tr>
+<tr><td>이름</td><td>{rename}</td></tr>
+<tr><td>시작 대화</td><td>{first}</td></tr>
+<tr><td>끝 대화</td><td>{last}</td></tr>
+<tr><td>최종 업데이트</td><td>{ts}</td></tr>
+</tbody>
+</table>
 ```
+
+카드 사이에 빈 줄 1개만 삽입. 카드 전·후에 추가 설명 금지.
 
 ## P1-1 (bash, 무출력 NONCE literal 주입)
 Claude가 매 호출 새 literal(영숫자 16자 정도) 생성 → `:` no-op에 박아 실행. shell 확장(`$(date)`,`$RANDOM`) 금지. stdout/stderr 비움.

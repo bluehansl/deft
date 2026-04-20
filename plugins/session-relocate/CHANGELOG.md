@@ -4,6 +4,16 @@
 
 형식은 [Keep a Changelog](https://keepachangelog.com/ko/1.1.0/) 를 따르며, 버전 체계는 [Semantic Versioning](https://semver.org/lang/ko/) 을 사용합니다.
 
+## [1.0.6] - 2026-04-20
+
+### Changed
+- 카드 렌더 포맷을 3컬럼 HTML 테이블(`no`/`항목`/`값`)로 변경, `no` 칸은 `rowspan="5"` 로 세로 병합하여 카드 그룹핑을 시각적으로 명확히 함.
+- 라벨 재정렬 및 변경:
+  - `rename` → `이름`
+  - `최종 업데이트 시간` → `최종 업데이트`
+  - 행 순서: `session-id` → `이름` → `시작 대화` → `끝 대화` → `최종 업데이트`
+- 카드 위의 `### [N]` 외부 헤딩 제거 (no가 테이블 내부로 이동).
+
 ## [1.0.5] - 2026-04-20
 
 ### Performance
