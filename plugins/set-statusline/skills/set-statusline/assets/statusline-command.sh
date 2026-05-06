@@ -89,14 +89,37 @@ print(w)
   fi
 }
 
-# --- Terminal width ---
+# --- Terminal width detection (Claude Code subprocess compatible) ---
+# Priority: $COLUMNS → /dev/tty → parent process TTY → tput cols → fallback 120.
+# tput cols is last because it returns default 80 in no-TTY subprocess (bogus).
 term_width="${COLUMNS:-}"
+if [ -z "$term_width" ] || [ "$term_width" -lt 20 ] 2>/dev/null; then
+  # Subshell groups redirection + stty so open-failure errors are suppressed
+  term_width=$( (stty size < /dev/tty) 2>/dev/null | awk '{print $2}')
+fi
+if [ -z "$term_width" ] || [ "$term_width" -lt 20 ] 2>/dev/null; then
+  # Walk up process tree to find a parent with a controlling TTY
+  _ptty=""
+  _pid=$PPID
+  while [ -n "$_pid" ] && [ "$_pid" != "1" ]; do
+    _t=$(ps -o tty= -p "$_pid" 2>/dev/null | tr -d ' ')
+    if [ -n "$_t" ] && [ "$_t" != "??" ]; then _ptty="$_t"; break; fi
+    _pid=$(ps -o ppid= -p "$_pid" 2>/dev/null | tr -d ' ')
+  done
+  if [ -n "$_ptty" ]; then
+    term_width=$(stty size < "/dev/$_ptty" 2>/dev/null | awk '{print $2}')
+  fi
+fi
 if [ -z "$term_width" ] || [ "$term_width" -lt 20 ] 2>/dev/null; then
   term_width=$(tput cols 2>/dev/null)
 fi
 if [ -z "$term_width" ] || [ "$term_width" -lt 20 ] 2>/dev/null; then
   term_width=120
 fi
+# Right-edge buffer: keep content away from the absolute right column
+# (terminals with IME cursor hints or subtle padding can truncate the last cell)
+RIGHT_BUFFER=10
+term_width=$((term_width - RIGHT_BUFFER))
 
 # --- Justify ---
 n=${#segments[@]}
@@ -122,10 +145,11 @@ if [ "$term_width" -lt "$min_total" ]; then
   exit 0
 fi
 
+# Justify: first segment left-anchored, last right-anchored, middle evenly spaced.
+# Total output width = term_width exactly (no overflow).
 avail=$((term_width - total_seg_len))
-inflated_avail=$(echo "$avail $gaps" | awk '{printf "%d", int($1 * 1.2)}')
-base_gap=$(( inflated_avail / gaps ))
-leftover=$(( inflated_avail - base_gap * gaps ))
+base_gap=$(( avail / gaps ))
+leftover=$(( avail - base_gap * gaps ))
 
 if [ "$base_gap" -lt 1 ]; then
   out="${segments[0]}"
