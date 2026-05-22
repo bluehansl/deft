@@ -41,7 +41,7 @@ where id='019d1e68-75ae-7e33-8322-84c82c01529a';
 | 호출 형태 | 첫 동작 |
 |---|---|
 | 인자 없음 | 마커 주입(P1-1) → 세션 목록 수집(P1-2) → 카드 5개 출력 |
-| `<sid> <target>` | 마커 주입(P1-1) → self 판별(P1-2) → 검증(P2) → DRYRUN 출력 |
+| `<sid> <target>` | 마커 주입(P1-1) → self 판별(P1-2) → 검증(P2) → 이동 대상 확정 출력 |
 
 금지:
 
@@ -50,6 +50,11 @@ where id='019d1e68-75ae-7e33-8322-84c82c01529a';
 - 세션 JSONL 파일 이동
 - 현재 실행 중인 자기 세션 이동
 - 백업 없는 수정
+- 카드 선택, target 경로 입력, `Y/N` 외 추가 사용자 입력 요청
+- target 입력 후 검증 전 안내 문구 출력
+- `Y` 입력 후 작업 시작 안내 문구 출력
+
+로컬 Bash/Python 명령은 세션 이동 실행에 필요한 작업이므로 추가 승인 질문 없이 바로 실행한다. Codex CLI로 별도 실행해야 하고 권한 확인이 작업을 막는 경우에는 `--dangerously-bypass-approvals-and-sandbox` 상태에서 실행한다.
 
 ## 사용자 출력
 
@@ -72,7 +77,7 @@ where id='019d1e68-75ae-7e33-8322-84c82c01529a';
 |  | 최종 업데이트 | {updated_at_kst} |
 ```
 
-카드 뒤에는 `세션 no를 선택해주세요.`만 출력한다. 세션 번호를 받으면 `이동할 target 절대경로를 입력하세요:`만 출력한다.
+카드 뒤에는 `세션 no를 선택해주세요.`만 출력한다. 세션 번호를 받으면 `이동할 target 절대경로를 입력하세요:`만 출력한다. target 경로 입력 후에는 검증 안내 문장을 출력하지 말고 P2를 실행한다.
 
 ## P1-1. 현재 세션 마커 주입
 
@@ -259,7 +264,7 @@ PY
 - 대상 경로에 읽기/탐색 권한이 없으면 중단한다.
 - source cwd와 target cwd가 같으면 중단한다.
 - 대상 경로가 git repo면 `branch`, `origin`을 읽는다. branch 또는 origin이 없으면 해당 항목은 기존 값을 유지한다.
-- 대상 경로가 git repo가 아니면 git 메타데이터는 기존 값을 유지한다고 DRYRUN에 표시한다.
+- 대상 경로가 git repo가 아니면 git 메타데이터는 기존 값을 유지한다고 확정 출력 내부 상태에 반영한다.
 - `~/.codex/state_*.sqlite` 중 해당 `threads.id` row를 가진 DB를 찾아야 한다. 없으면 Codex `/resume` 표시 성공을 보장할 수 없으므로 중단한다.
 - `rollout_path` 또는 파일 스캔으로 세션 JSONL 파일을 찾아야 한다.
 - `git_sha`/`commit_hash`는 세션 당시의 기준 커밋으로 남겨 둔다. 과거 성공 이력도 sha는 갱신하지 않았다.
@@ -371,31 +376,21 @@ out("OLD_GIT_SHA", thread.get("git_sha") or "")
 PY
 ```
 
-## DRYRUN 출력
+## 이동 대상 확정 출력
 
-P2 결과가 `RESULT=OK`일 때만 아래 형식으로 출력하고 사용자 확인을 받는다.
+P2 결과가 `RESULT=OK`일 때만 아래 형식으로 출력하고 사용자 확인을 받는다. 별도 라벨, 검증 안내, 백업/변경 대상 상세 설명은 사용자에게 출력하지 않는다.
 
 ```markdown
-DRYRUN
-- session-id: {sid}
-- session file: {SESSION_FILE}
-- state db: {STATE_DB}
-- source cwd: {SRC_CWD}
-- target cwd: {TARGET_REAL}
-- git branch: {TARGET_GIT_BRANCH 또는 "기존 값 유지"}
-- git origin: {TARGET_GIT_ORIGIN 또는 "기존 값 유지"}
-- git sha: 기존 값 유지
-- git metadata: {GIT_METADATA_POLICY}
-- 변경 대상: JSONL cwd 및 가능한 branch/origin, SQLite threads.cwd 및 가능한 git_branch/git_origin_url/updated_at
-- 변경 제외: session_index.jsonl, history.jsonl, shell_snapshots, rollout_path, 세션 파일 위치, git_sha/commit_hash
-- 백업: JSONL .bak, SQLite .bak 생성
+이동 대상이 확정되었습니다.
+- session id: {sid}
+- target: {TARGET_REAL}
 
-진행할까요? (y/N)
+진행할까요? (Y/N)
 ```
 
 ## P5. 적용
 
-사용자가 `y` 또는 `yes`로 확인한 경우에만 실행한다. SQLite 백업은 Python `sqlite3.Connection.backup()`으로 만든다. JSONL은 줄 단위로 임시 파일에 준비한 뒤, SQLite update 성공을 확인하고 원본으로 교체한다.
+사용자가 `y` 또는 `yes`로 확인한 경우에만 실행한다. `Y` 입력 후에는 작업 시작 안내 문구를 출력하지 말고 바로 P5를 실행한다. SQLite 백업은 Python `sqlite3.Connection.backup()`으로 만든다. 백업은 세션 파일 옆이나 repo 안에 만들지 않고 OS 임시 디렉터리의 실행별 하위 디렉터리에 만든다. JSONL은 줄 단위로 임시 파일에 준비한 뒤, SQLite update 성공을 확인하고 원본으로 교체한다.
 
 ```bash
 SESSION_ID="<sid>" \
@@ -482,8 +477,9 @@ def update_thread_with_retry():
                 con.close()
     return 0, last_error or "sqlite update failed"
 
-json_bak = f"{JSONL}.bak-{TS}"
-db_bak = f"{DB}.bak-{TS}"
+backup_dir = tempfile.mkdtemp(prefix="codex-session-relocate-backup-")
+json_bak = os.path.join(backup_dir, os.path.basename(JSONL) + f".bak-{TS}")
+db_bak = os.path.join(backup_dir, os.path.basename(DB) + f".bak-{TS}")
 shutil.copy2(JSONL, json_bak)
 
 try:
@@ -567,14 +563,7 @@ PY
 성공 시:
 
 ```markdown
-✅ 세션 경로 변경 완료
-- session-id: {sid}
-- target cwd: {target}
-- JSONL backup: {JSON_BACKUP}
-- SQLite backup: {DB_BACKUP}
-- JSONL changed lines: {JSON_CHANGED_LINES}
-- SQLite rows updated: {THREAD_ROWS_UPDATED}
-- session_index.jsonl: 변경 안 함
+세션 경로를 변경이 완료되었습니다.
 ```
 
 실패 시:
@@ -592,11 +581,11 @@ PY
 
 ## 복구 절차
 
-적용 후 문제가 있으면 생성된 백업을 사용한다.
+적용 후 문제가 있으면 P5 stdout의 `JSON_BACKUP`, `DB_BACKUP` 경로를 사용한다. 백업은 OS 임시 디렉터리에 저장되며 장기간 보존을 전제로 하지 않는다.
 
 ```bash
-cp "<SESSION_FILE>.bak-YYYYMMDDHHMMSS" "<SESSION_FILE>"
-cp "<STATE_DB>.bak-YYYYMMDDHHMMSS" "<STATE_DB>"
+cp "<JSON_BACKUP>" "<SESSION_FILE>"
+cp "<DB_BACKUP>" "<STATE_DB>"
 ```
 
 `session_index.jsonl`은 이 스킬의 변경 대상이 아니므로 복구 대상에 포함하지 않는다.
