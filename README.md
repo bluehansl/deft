@@ -8,7 +8,7 @@ Codex and Claude Code plugins by bluehansl.
 |---|---|---|
 | [multi-check](./plugins/multi-check/) | [`plugins/codex/multi-check`](./plugins/codex/multi-check/) | Codex, Gemini, Claude 등 여러 AI reviewer로 단발성 교차 검증을 수행 |
 | [session-relocate](./plugins/session-relocate/) | [`plugins/codex/session-relocate`](./plugins/codex/session-relocate/) | Codex 세션을 다른 프로젝트의 `/resume` 목록에 보이도록 연결 |
-| [set-statusline](./plugins/set-statusline/) | [`plugins/codex/set-statusline`](./plugins/codex/set-statusline/) | statusline 설정/복원 |
+| [set-statusline](./plugins/set-statusline/) | [`plugins/codex/set-statusline`](./plugins/codex/set-statusline/) | Codex TUI `[tui].status_line` 설정/복원 |
 
 ## Codex Installation
 
