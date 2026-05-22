@@ -1,0 +1,34 @@
+{
+  "name": "multi-check",
+  "version": "0.1.0+codex.20260522034625",
+  "description": "Codex port of multi-check for comparing multiple AI reviews.",
+  "author": {
+    "name": "bluehansl",
+    "email": "bluehansl@naver.com"
+  },
+  "homepage": "https://github.com/bluehansl/bluehansl-plugins",
+  "repository": "https://github.com/bluehansl/bluehansl-plugins",
+  "license": "Personal use only",
+  "keywords": [
+    "codex",
+    "multi-check",
+    "review"
+  ],
+  "skills": "./skills/",
+  "interface": {
+    "displayName": "Multi Check",
+    "shortDescription": "Compare multiple AI reviews from Codex.",
+    "longDescription": "Codex-native port of the multi-check workflow. Implementation is kept separate from the Claude Code plugin while preserving the /multi-check skill name.",
+    "developerName": "bluehansl",
+    "category": "Productivity",
+    "capabilities": [
+      "Interactive"
+    ],
+    "websiteURL": "https://github.com/bluehansl/bluehansl-plugins",
+    "defaultPrompt": [
+      "Run multi-check on this change.",
+      "Cross-check this analysis."
+    ],
+    "brandColor": "#2563EB"
+  }
+}

@@ -1,0 +1,44 @@
+{
+  "name": "bluehansl-codex-plugins",
+  "interface": {
+    "displayName": "BlueHansl Codex Plugins"
+  },
+  "plugins": [
+    {
+      "name": "multi-check",
+      "source": {
+        "source": "local",
+        "path": "./plugins/codex/multi-check"
+      },
+      "policy": {
+        "installation": "AVAILABLE",
+        "authentication": "ON_INSTALL"
+      },
+      "category": "Productivity"
+    },
+    {
+      "name": "session-relocate",
+      "source": {
+        "source": "local",
+        "path": "./plugins/codex/session-relocate"
+      },
+      "policy": {
+        "installation": "AVAILABLE",
+        "authentication": "ON_INSTALL"
+      },
+      "category": "Developer Tools"
+    },
+    {
+      "name": "set-statusline",
+      "source": {
+        "source": "local",
+        "path": "./plugins/codex/set-statusline"
+      },
+      "policy": {
+        "installation": "AVAILABLE",
+        "authentication": "ON_INSTALL"
+      },
+      "category": "Developer Tools"
+    }
+  ]
+}

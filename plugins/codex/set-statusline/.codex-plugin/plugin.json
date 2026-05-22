@@ -1,0 +1,35 @@
+{
+  "name": "set-statusline",
+  "version": "0.1.0+codex.20260521073917",
+  "description": "Codex port of set-statusline for configuring Codex TUI status line settings.",
+  "author": {
+    "name": "bluehansl",
+    "email": "bluehansl@naver.com"
+  },
+  "homepage": "https://github.com/bluehansl/bluehansl-plugins",
+  "repository": "https://github.com/bluehansl/bluehansl-plugins",
+  "license": "Personal use only",
+  "keywords": [
+    "codex",
+    "statusline",
+    "tui"
+  ],
+  "skills": "./skills/",
+  "interface": {
+    "displayName": "Set Statusline",
+    "shortDescription": "Configure the Codex TUI status line.",
+    "longDescription": "Codex-native port of the set-statusline workflow. Implementation is kept separate from the Claude Code plugin while preserving the /set-statusline skill name.",
+    "developerName": "bluehansl",
+    "category": "Developer Tools",
+    "capabilities": [
+      "Interactive",
+      "Write"
+    ],
+    "websiteURL": "https://github.com/bluehansl/bluehansl-plugins",
+    "defaultPrompt": [
+      "Apply my Codex status line.",
+      "Restore my Codex status line."
+    ],
+    "brandColor": "#7C3AED"
+  }
+}

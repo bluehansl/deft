@@ -1,0 +1,35 @@
+{
+  "name": "session-relocate",
+  "version": "0.1.0+codex.20260521073917",
+  "description": "Codex port of session-relocate for moving Codex session state between project directories.",
+  "author": {
+    "name": "bluehansl",
+    "email": "bluehansl@naver.com"
+  },
+  "homepage": "https://github.com/bluehansl/bluehansl-plugins",
+  "repository": "https://github.com/bluehansl/bluehansl-plugins",
+  "license": "Personal use only",
+  "keywords": [
+    "codex",
+    "session",
+    "resume"
+  ],
+  "skills": "./skills/",
+  "interface": {
+    "displayName": "Session Relocate",
+    "shortDescription": "Move Codex sessions between project directories.",
+    "longDescription": "Codex-native port of the session-relocate workflow. Implementation is kept separate from the Claude Code plugin while preserving the /session-relocate skill name.",
+    "developerName": "bluehansl",
+    "category": "Developer Tools",
+    "capabilities": [
+      "Interactive",
+      "Write"
+    ],
+    "websiteURL": "https://github.com/bluehansl/bluehansl-plugins",
+    "defaultPrompt": [
+      "Relocate this Codex session.",
+      "Move a session to another project."
+    ],
+    "brandColor": "#059669"
+  }
+}
