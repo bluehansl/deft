@@ -25,6 +25,15 @@
       "author": {
         "name": "bluehansl"
       }
+    },
+    {
+      "name": "set-statusline",
+      "source": "./plugins/set-statusline",
+      "description": "Claude Code statusline을 folder / git branch / model+effort / context progress bar 4-segment 구성으로 즉시 설정",
+      "version": "1.0.0",
+      "author": {
+        "name": "bluehansl"
+      }
     }
   ]
 }
