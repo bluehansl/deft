@@ -1,6 +1,6 @@
 {
   "name": "set-statusline",
-  "version": "0.1.0+codex.20260522181000",
+  "version": "codex-0.2.0",
   "description": "Configure Codex TUI status_line in ~/.codex/config.toml.",
   "author": {
     "name": "bluehansl",

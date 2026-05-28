@@ -1,6 +1,6 @@
 {
   "name": "session-relocate",
-  "version": "0.1.0+codex.20260522160449",
+  "version": "codex-0.2.1",
   "description": "Codex port of session-relocate for moving Codex session state between project directories.",
   "author": {
     "name": "bluehansl",

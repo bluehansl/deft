@@ -1,6 +1,6 @@
 {
   "name": "multi-check",
-  "version": "0.1.0+codex.20260522040602",
+  "version": "codex-0.2.0",
   "description": "Codex port of multi-check for comparing multiple AI reviews.",
   "author": {
     "name": "bluehansl",
