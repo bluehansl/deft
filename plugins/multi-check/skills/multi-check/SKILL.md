@@ -26,10 +26,14 @@ Collects and multi-checks answers from Codex CLI, Claude CLI, and Gemini CLI on 
 Before spawning agents, check which CLIs are available:
 
 ```bash
-which codex 2>/dev/null && echo "CODEX_OK" || echo "CODEX_NOT_FOUND"
+# Codex reviewer는 claudex(우선) 또는 codex 중 하나라도 있으면 OK
+(which claudex 2>/dev/null || which codex 2>/dev/null) >/dev/null \
+  && echo "CODEX_OK" || echo "CODEX_NOT_FOUND"
 which claude 2>/dev/null && echo "CLAUDE_OK" || echo "CLAUDE_NOT_FOUND"
 which gemini 2>/dev/null && echo "GEMINI_OK" || echo "GEMINI_NOT_FOUND"
 ```
+
+Note: Codex reviewer uses `claudex` if installed (preferred), otherwise falls back to `codex`. Command flags are identical; only the entrypoint differs.
 
 - No CLI available: inform the user that at least one CLI is required and stop
 - One available: proceed with 2-model comparison (available CLI + Lead)
@@ -55,10 +59,10 @@ If TeamCreate fails (Agent Teams not enabled):
 
 On success, spawn agents in **a single message** (parallel):
 
-Codex reviewer (only if codex is available) — GPT-5.4, reasoning: xhigh:
+Codex reviewer (only if codex is available) — GPT-5.5, reasoning: xhigh:
 ```
 Agent(
-  description: "Run Codex CLI analysis (GPT-5.4, xhigh reasoning)",
+  description: "Run Codex CLI analysis (GPT-5.5, xhigh reasoning)",
   prompt: "<composed prompt with context>",
   name: "codex-reviewer",
   subagent_type: "codex-reviewer",
@@ -101,7 +105,7 @@ If Teams is not available, spawn agents sequentially with `run_in_background: tr
 Codex reviewer (only if codex is available):
 ```
 Agent(
-  description: "Run Codex CLI analysis (GPT-5.4, xhigh reasoning)",
+  description: "Run Codex CLI analysis (GPT-5.5, xhigh reasoning)",
   prompt: "<composed prompt>",
   name: "codex-reviewer",
   subagent_type: "codex-reviewer",
