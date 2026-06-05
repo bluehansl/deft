@@ -1,8 +1,28 @@
 # Changelog
 
-이 파일은 session-relocate 플러그인의 모든 주목할 만한 변경 사항을 기록합니다.
+이 파일은 deft 플러그인의 모든 주목할 만한 변경 사항을 기록합니다.
 
-형식은 [Keep a Changelog](https://keepachangelog.com/ko/1.1.0/) 를 따르며, 버전 체계는 [Semantic Versioning](https://semver.org/lang/ko/) 을 사용합니다.
+형식은 [Keep a Changelog](https://keepachangelog.com/ko/1.1.0/) 를 따르며, 버전 체계는 [Semantic Versioning](https://semver.org/lang/ko/) 을 사용합니다 (`claude-X.Y.Z` 접두).
+
+## [claude-2.1.0] - 2026-06-05
+
+### Added
+- **multi-round** 신규 스킬 추가 — broker 없이 여러 AI가 N라운드에 걸쳐 양방향으로 의견을 주고받는 멀티턴 토론 도구.
+  - `claudex mcp-server` (내장 MCP 도구 `codex` / `codex-reply`) + cmux pane 제어 조합으로 동작.
+  - 외부 cloud(api.relaycast.dev / agentrelay.com) 송신 zero — `~/AGENTS.md` §6-1 본업 코드 외부 송신 금지 정책 준수.
+  - 회의 모드: `consult` / `dialogue` (기본) / `collaborate` / `debate` — `~/git/AGENTS.teams.md` §12 정의 이식.
+  - 신호 프로토콜: `ACK`/`STATUS`/`BLOCKED`/`DONE` + 모드별 확장 (`CONSENSUS`/`AGREED`/`DISSENT`/`CONCEDE`/`REVIEW_PASS`/`REVIEW_FAIL`).
+  - 보안 가드 8종: preflight 송신 게이트, `-c mcp_servers={}` 강제, cmux send 줄바꿈 sanitize, cmux search.db 권한 600, settings.json 자동 write 금지, claudex/codex graceful fallback, `cmux identify` 사용, agent-relay 영구 삭제 금지.
+  - 트리거: "멀티 라운드", "라운드 회의", "왔다갔다 토론", "주거니 받거니", "AI끼리 토론시켜", "수렴할 때까지 주고받아" 등 18종 — `multi-check` (1발 비교) / Agent Teams (파일 작업) 와 명확히 분리.
+  - `agents/codex-participant.md`, `agents/claude-participant.md` 두 참가자 페르소나 동봉.
+
+### Changed
+- CHANGELOG 헤더를 "session-relocate 플러그인" → "**deft 플러그인**"으로 정정 (stale 헤더 보정).
+- 버전 표기 정책 정렬: 본 changelog의 버전을 `claude-X.Y.Z` 접두 표기로 통일 (이전 `1.0.X` 표기는 그대로 유지하되 신규 엔트리부터 적용).
+
+### Notes
+- agent-relay broker 의존성 — 본 스킬은 broker를 호출하지 않음. broker가 cloud-coupled로 사용자 환경에서 차단된 경우 (`/etc/hosts`로 `api.relaycast.dev` 차단)에도 정상 동작.
+- Codex 측 포팅 (plugins/codex/deft/skills/multi-round/) 은 별도 사이클로 분리 — Codex 측 변경 시 `codex-X.Y.Z` 독립 bump.
 
 ## [1.0.4] - 2026-04-20
 
