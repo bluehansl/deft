@@ -1,0 +1,38 @@
+{
+  "name": "deft",
+  "version": "codex-1.0.0",
+  "description": "deft — Codex 개인 워크플로 도구 모음 (multi-check / session-relocate / set·restore-statusline).",
+  "author": {
+    "name": "bluehansl",
+    "email": "bluehansl@naver.com"
+  },
+  "homepage": "https://github.com/bluehansl/bluehansl-plugins",
+  "repository": "https://github.com/bluehansl/bluehansl-plugins",
+  "license": "Personal use only",
+  "keywords": [
+    "codex",
+    "multi-check",
+    "session-relocate",
+    "statusline",
+    "review"
+  ],
+  "skills": "./skills/",
+  "interface": {
+    "displayName": "deft",
+    "shortDescription": "Personal Codex workflow toolkit.",
+    "longDescription": "deft bundles bluehansl's personal Codex workflow skills under one namespace: multi-AI cross-check (multi-check), session relocation (session-relocate), and status line set/restore (set-statusline / restore-statusline).",
+    "developerName": "bluehansl",
+    "category": "Developer Tools",
+    "capabilities": [
+      "Interactive",
+      "Write"
+    ],
+    "websiteURL": "https://github.com/bluehansl/bluehansl-plugins",
+    "defaultPrompt": [
+      "Run deft multi-check on this change.",
+      "Relocate this session to another project.",
+      "Apply my Codex status line."
+    ],
+    "brandColor": "#2563EB"
+  }
+}

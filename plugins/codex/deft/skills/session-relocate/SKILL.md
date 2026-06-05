@@ -1,6 +1,6 @@
 ---
 name: session-relocate
-description: Codex 세션을 다른 프로젝트의 `/resume` 목록에 표시되도록 이동한다. 트리거 예시 "세션 이동", "세션 경로 옮기기", "resume 리스트로 옮겨", "move session", "relocate session", "/session-relocate", "/session-relocate:session-relocate".
+description: Codex 세션을 다른 프로젝트의 `/resume` 목록에 표시되도록 이동한다. 트리거 예시 "세션 이동", "세션 경로 옮기기", "resume 리스트로 옮겨", "move session", "relocate session", "/session-relocate", "deft:session-relocate".
 ---
 
 # session-relocate
@@ -36,7 +36,7 @@ where id='019d1e68-75ae-7e33-8322-84c82c01529a';
 
 ## 실행 원칙
 
-사용자가 `/session-relocate`, `/session-relocate:session-relocate`, 또는 자연어 트리거를 입력하면 설명을 먼저 출력하지 말고 도구 호출부터 시작한다.
+사용자가 `/session-relocate`, `deft:session-relocate`, 또는 자연어 트리거를 입력하면 설명을 먼저 출력하지 말고 도구 호출부터 시작한다.
 
 | 호출 형태 | 첫 동작 |
 |---|---|

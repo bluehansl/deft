@@ -1,0 +1,9 @@
+# Agent Relay / 회의 부산물
+.agent-relay/
+.mcp.json
+
+# Claude Code local state
+.claude/
+
+# 개인 파일
+*.xlsx

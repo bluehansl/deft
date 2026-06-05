@@ -1,13 +1,13 @@
 ---
 name: restore-statusline
-description: `/set-statusline` 실행 전 snapshot을 사용해 `$HOME/.codex/config.toml`의 `[tui].status_line`만 원복한다. 전체 config 백업은 emergency 복구용으로만 남긴다. 트리거 예시 "statusline 원복", "statusline 되돌려", "restore statusline", "rollback statusline", "/restore-statusline", "/set-statusline:restore-statusline".
+description: `/set-statusline` 실행 전 snapshot을 사용해 `$HOME/.codex/config.toml`의 `[tui].status_line`만 원복한다. 전체 config 백업은 emergency 복구용으로만 남긴다. 트리거 예시 "statusline 원복", "statusline 되돌려", "restore statusline", "rollback statusline", "/restore-statusline", "deft:restore-statusline".
 ---
 
 # restore-statusline
 
 ## EXEC_IMMEDIATE
 
-사용자가 `/restore-statusline`, `/set-statusline:restore-statusline`, 또는 자연어 트리거("statusline 원복" 등)를 입력했다는 것 자체가 "Codex status line을 원복해 달라"는 명시적 의도 표명이다. 스킬 소개, 의도 재확인, 사용법 재설명을 하지 않는다.
+사용자가 `/restore-statusline`, `deft:restore-statusline`, 또는 자연어 트리거("statusline 원복" 등)를 입력했다는 것 자체가 "Codex status line을 원복해 달라"는 명시적 의도 표명이다. 스킬 소개, 의도 재확인, 사용법 재설명을 하지 않는다.
 
 첫 응답은 assistant 텍스트가 아니라 아래 Bash 도구 호출로 시작한다.
 

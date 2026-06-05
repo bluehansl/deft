@@ -1,5 +1,5 @@
 {
-  "name": "bluehansl-plugins",
+  "name": "bluehansl",
   "owner": {
     "name": "bluehansl",
     "email": "bluehansl@naver.com"
@@ -9,28 +9,10 @@
   },
   "plugins": [
     {
-      "name": "multi-check",
-      "source": "./plugins/multi-check",
-      "description": "AI multi-check: compare answers from Codex (GPT), Claude, and Gemini for synthesized analysis",
-      "version": "claude-1.1.0",
-      "author": {
-        "name": "bluehansl"
-      }
-    },
-    {
-      "name": "session-relocate",
-      "source": "./plugins/session-relocate",
-      "description": "Claude Code 세션 로그 파일을 다른 pwd 프로젝트 디렉토리로 이동시켜 /resume 대상으로 만드는 플러그인",
-      "version": "claude-1.0.4",
-      "author": {
-        "name": "bluehansl"
-      }
-    },
-    {
-      "name": "set-statusline",
-      "source": "./plugins/set-statusline",
-      "description": "Claude Code statusline을 folder / git branch / model+effort / context progress bar 4-segment 구성으로 즉시 설정",
-      "version": "claude-1.0.1",
+      "name": "deft",
+      "source": "./plugins/deft",
+      "description": "deft — 개인 워크플로 도구 모음: multi-check(다중 AI 교차검증) / session-relocate(세션 이동) / set·restore-statusline(상태줄 설정·복원)",
+      "version": "claude-2.0.0",
       "author": {
         "name": "bluehansl"
       }

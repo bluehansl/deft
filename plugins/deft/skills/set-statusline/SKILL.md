@@ -1,13 +1,13 @@
 ---
 name: set-statusline
-description: Claude Code statusline을 folder / git branch / model+effort / ctx progress bar 4-segment 구성으로 즉시 설정한다. 설치 전 현재 상태를 스냅샷으로 저장하여 `/restore-statusline` 으로 원복 가능. 트리거 예시 "statusline 적용", "statusline 설치", "statusline 복제", "apply statusline", "/set-statusline", "/set-statusline:set-statusline".
+description: Claude Code statusline을 folder / git branch / model+effort / ctx progress bar 4-segment 구성으로 즉시 설정한다. 설치 전 현재 상태를 스냅샷으로 저장하여 `/restore-statusline` 으로 원복 가능. 트리거 예시 "statusline 적용", "statusline 설치", "statusline 복제", "apply statusline", "/set-statusline", "deft:set-statusline".
 ---
 
 # set-statusline
 
 ## ⚡ EXEC_IMMEDIATE (최우선 규칙, 절대 준수)
 
-사용자가 `/set-statusline`, `/set-statusline:set-statusline`, 또는 자연어 트리거("statusline 적용" 등)를 입력했다는 것 자체가 **"이 PC에 statusline을 설치해 달라"는 명시적 의도 표명**이다. 스킬 소개·의도 재확인·사용법 재설명을 **절대 하지 않는다**.
+사용자가 `/set-statusline`, `deft:set-statusline`, 또는 자연어 트리거("statusline 적용" 등)를 입력했다는 것 자체가 **"이 PC에 statusline을 설치해 달라"는 명시적 의도 표명**이다. 스킬 소개·의도 재확인·사용법 재설명을 **절대 하지 않는다**.
 
 ### 호출 시 가장 먼저 수행할 행동
 
@@ -15,7 +15,7 @@ description: Claude Code statusline을 folder / git branch / model+effort / ctx 
 
 | 호출 형태 | 즉시 수행할 첫 동작 |
 |---|---|
-| `/set-statusline` / `/set-statusline:set-statusline` / 자연어 트리거 | Bash P1(의존성 + 기존 상태 점검) → TXT(검사 결과 + 설치 컨펌) → 사용자 y/N → Bash P2(스냅샷 + 배포) → TXT(P3 완료 보고) |
+| `/set-statusline` / `deft:set-statusline` / 자연어 트리거 | Bash P1(의존성 + 기존 상태 점검) → TXT(검사 결과 + 설치 컨펌) → 사용자 y/N → Bash P2(스냅샷 + 배포) → TXT(P3 완료 보고) |
 
 ### 금지되는 문장
 

@@ -1,13 +1,13 @@
 ---
 name: set-statusline
-description: Codex TUI status line을 `$HOME/.codex/config.toml`의 `[tui].status_line`으로 설정한다. 설치 전 현재 config와 기존 status_line 블록을 snapshot으로 저장하여 `/restore-statusline` 으로 원복 가능. 트리거 예시 "statusline 적용", "statusline 설치", "Codex statusline 설정", "apply statusline", "/set-statusline", "/set-statusline:set-statusline".
+description: Codex TUI status line을 `$HOME/.codex/config.toml`의 `[tui].status_line`으로 설정한다. 설치 전 현재 config와 기존 status_line 블록을 snapshot으로 저장하여 `/restore-statusline` 으로 원복 가능. 트리거 예시 "statusline 적용", "statusline 설치", "Codex statusline 설정", "apply statusline", "/set-statusline", "deft:set-statusline".
 ---
 
 # set-statusline
 
 ## EXEC_IMMEDIATE
 
-사용자가 `/set-statusline`, `/set-statusline:set-statusline`, 또는 자연어 트리거("statusline 적용" 등)를 입력했다는 것 자체가 "이 PC에 Codex status line을 설정해 달라"는 명시적 의도 표명이다. 스킬 소개, 의도 재확인, 사용법 재설명을 하지 않는다.
+사용자가 `/set-statusline`, `deft:set-statusline`, 또는 자연어 트리거("statusline 적용" 등)를 입력했다는 것 자체가 "이 PC에 Codex status line을 설정해 달라"는 명시적 의도 표명이다. 스킬 소개, 의도 재확인, 사용법 재설명을 하지 않는다.
 
 첫 응답은 assistant 텍스트가 아니라 아래 Bash 도구 호출로 시작한다.
 

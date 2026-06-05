@@ -1,13 +1,13 @@
 ---
 name: restore-statusline
-description: set-statusline 설치 직전 상태로 statusline 설정을 원복한다. `$HOME/.claude/.set-statusline-snapshot/` 에 저장된 스냅샷에서 스크립트와 settings.json의 statusLine 항목을 복원. 트리거 예시 "statusline 원복", "statusline 되돌려", "restore statusline", "rollback statusline", "/restore-statusline", "/set-statusline:restore-statusline".
+description: set-statusline 설치 직전 상태로 statusline 설정을 원복한다. `$HOME/.claude/.set-statusline-snapshot/` 에 저장된 스냅샷에서 스크립트와 settings.json의 statusLine 항목을 복원. 트리거 예시 "statusline 원복", "statusline 되돌려", "restore statusline", "rollback statusline", "/restore-statusline", "deft:restore-statusline".
 ---
 
 # restore-statusline
 
 ## ⚡ EXEC_IMMEDIATE (최우선 규칙, 절대 준수)
 
-사용자가 `/restore-statusline`, `/set-statusline:restore-statusline`, 또는 자연어 트리거("statusline 원복" 등)를 입력했다는 것 자체가 **"원복해 달라"는 명시적 의도 표명**이다. 스킬 소개·의도 재확인·사용법 재설명을 **절대 하지 않는다**.
+사용자가 `/restore-statusline`, `deft:restore-statusline`, 또는 자연어 트리거("statusline 원복" 등)를 입력했다는 것 자체가 **"원복해 달라"는 명시적 의도 표명**이다. 스킬 소개·의도 재확인·사용법 재설명을 **절대 하지 않는다**.
 
 ### 호출 시 가장 먼저 수행할 행동
 
