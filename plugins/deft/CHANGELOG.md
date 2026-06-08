@@ -4,6 +4,21 @@
 
 형식은 [Keep a Changelog](https://keepachangelog.com/ko/1.1.0/) 를 따르며, 버전 체계는 [Semantic Versioning](https://semver.org/lang/ko/) 을 사용합니다 (`claude-X.Y.Z` 접두).
 
+## [claude-2.1.2] - 2026-06-08
+
+### Changed
+- **multi-round 작업 디렉토리 표준화** — skill 실행 시 사용하는 세션·메타·hooks 경로를 `/tmp/multi-round-session/` → **`~/.agents/skills/multi-round/`** 하위로 통일. 다른 사용자 skill들과 일관된 구조 (예: `~/.agents/skills/agent-relay/`).
+  - 새 구조: `sessions/<YYYYMMDD-HHMM-tag>/` (회의별 transcript) + `state/` (영구 메타) + `hooks/` (동작 훅)
+  - SKILL.md: 작업 디렉토리 표준 섹션 신규 추가 + Phase 4-A 예시 경로를 `$SESSION_DIR` 변수로 변경
+  - GUIDE.md: Before You Start에 작업 디렉토리 안내 추가 + Examples 9-5 메타 transcript 경로 갱신
+- **상충 정정 (SKILL.md)** — 이전 2.1.1에서 Phase 0 외부 cloud lsof 체크 제거했으나 보안 가드 #1 + Error Handling에 잔존 표기가 있었던 부분 정정:
+  - 보안 가드 #1: "Phase 0 preflight 통과 (외부 cloud 송신 0)" → "Phase 0 참가자 CLI 1개 이상 설치 확인"
+  - Error Handling: "외부 cloud 연결 발견 (Phase 0) → abort" 제거 + 참가자 CLI 매트릭스 재정렬
+
+### Notes
+- 본 버전은 경로 표준화·문서 일관성 정정. 동작 호환성 유지 (PATCH).
+- `/tmp/multi-round-session/` 임시 데이터는 사용자 환경에서 `~/.agents/skills/multi-round/sessions/<timestamp>/`로 이동 (개인 메타).
+
 ## [claude-2.1.1] - 2026-06-08
 
 ### Changed

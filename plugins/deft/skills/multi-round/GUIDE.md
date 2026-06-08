@@ -34,6 +34,17 @@
 
 > **외부 cloud 송신 체크는 없습니다.** multi-round 자체가 외부 호출을 만들지 않으므로 본 skill 책임 영역 밖. `~/AGENTS.md §5-0` cloud 차단 정책을 적용한 환경이면 시스템 차원에서 자동 보호됨.
 
+### 작업 디렉토리
+
+skill 실행 시 사용하는 세션·메타·hooks는 모두 **`~/.agents/skills/multi-round/` 하위**에 저장됩니다 (다른 사용자 skill들과 일관). 시스템 `/tmp` 경로는 사용하지 않습니다.
+
+```
+~/.agents/skills/multi-round/
+├── sessions/<YYYYMMDD-HHMM-tag>/   # 회의별 prompt·state·transcript (보존)
+├── state/                          # 영구 메타
+└── hooks/                          # 동작 훅 (필요 시)
+```
+
 ---
 
 ## 2. Quick Start
@@ -396,7 +407,7 @@ PostgreSQL vs MongoDB — 우리 결제 시스템에 진짜 뭐가 맞는지 멀
 
 > 본 매뉴얼의 골격(파일 구조·Before You Start 5개 체크박스·실패 모드 표·examples 위치 등)은 **multi-round skill 자체로 결정**됐습니다.
 > claude-A (사용성·UX 관점) + claude-B (안정성·보안 관점) 두 워커가 4라운드 dialogue → CONSENSUS 도달.
-> 회의 transcript는 추후 별도 examples 메타 자료로 공개 검토 (`/tmp/multi-round-session/round{1-4}-*.md`).
+> 회의 transcript 보관: `~/.agents/skills/multi-round/sessions/20260605-1735-design/round{1-4}-*.md` (개인 메타).
 
 ---
 
