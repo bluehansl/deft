@@ -2,7 +2,33 @@
 
 이 파일은 deft 플러그인의 모든 주목할 만한 변경 사항을 기록합니다.
 
-형식은 [Keep a Changelog](https://keepachangelog.com/ko/1.1.0/) 를 따르며, 버전 체계는 [Semantic Versioning](https://semver.org/lang/ko/) 을 사용합니다 (`claude-X.Y.Z` 접두).
+형식은 [Keep a Changelog](https://keepachangelog.com/ko/1.1.0/) 를 따르며, 버전 체계는 [Semantic Versioning](https://semver.org/lang/ko/) 을 사용합니다 (`claude-X.Y.Z` / `codex-X.Y.Z` 접두).
+
+## [codex-1.1.0] - 2026-06-08
+
+### Added
+- **multi-round 스킬 Codex 포팅** — `plugins/codex/deft/skills/multi-round/` 신규 작성. Claude 측 동일 워크플로 + Codex 환경 차이 반영.
+  - 작업 디렉토리 경로: `~/.codex/plugin-data/deft/multi-round/`
+  - MCP 등록 위치: `~/.codex/config.toml [mcp_servers.claudex]` (Claude 측 `settings.json mcpServers` 대응)
+  - **Phase 3-C 신규** — cmux 외부 환경 fallback. codex가 background process로 worker (`claudex` 우선, 없으면 `codex`) 동시 spawn → 응답 파일 캡처 → history 누적으로 양방향 모사. stateless라 max-round 5 권장.
+  - **cmux 환경 자동 검출** (Phase 0): `HAVE_CMUX` 값으로 3-B (pane) / 3-C (codex 내부) 자동 분기.
+  - worker CLI 우선순위: cmux 내 pane 띄울 때 **claudex 우선, 없으면 codex** (사용자 정책 §5-2).
+- **Codex README** — `multi-round` 항목 + 사용자 데이터 경로 컨벤션 추가.
+
+### Notes
+- Codex 측은 첫 다중 skill 진입이라 MINOR bump (codex-1.0.0 → codex-1.1.0).
+- 사용자 데이터 경로 `~/.codex/plugin-data/deft/<skill>/` 컨벤션은 Codex README에 명시.
+
+## [claude-2.1.3] - 2026-06-08
+
+### Changed
+- **multi-round 작업 디렉토리 경로 재정정** — `~/.agents/skills/multi-round/` → **`~/.claude/plugin-data/deft/multi-round/`** 로 변경. plugin cache 영역과 사용자 데이터 영역을 명확히 분리하기 위함.
+- **SKILL.md / GUIDE.md 톤 정리** — 사용자 입장에서 불필요한 히스토리 톤(plugin cache 위험성 설명 등) 제거. 최종 사용자는 "데이터·세션·hooks는 다음 경로에 저장" 한 줄로 충분.
+- **README.md (plugin 루트)** — "사용자 데이터 경로 컨벤션" 섹션 신규 추가. deft 플러그인 차원에서 모든 스킬 공통 경로 패턴(`~/.claude/plugin-data/deft/<skill>/`) 명시.
+- **사용자 환경 데이터 이전** — `~/.agents/skills/multi-round/` → `~/.claude/plugin-data/deft/multi-round/`. 7개 transcript (`sessions/20260605-1735-design/`) 포함 보존.
+
+### Notes
+- 본 버전은 경로 표준 정정 + 문서 톤 정리. 동작 호환성 유지 (PATCH).
 
 ## [claude-2.1.2] - 2026-06-08
 

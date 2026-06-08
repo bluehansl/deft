@@ -1,7 +1,7 @@
 {
   "name": "deft",
-  "version": "codex-1.0.0",
-  "description": "deft — Codex 개인 워크플로 도구 모음 (multi-check / session-relocate / set·restore-statusline).",
+  "version": "codex-1.1.0",
+  "description": "deft — Codex 개인 워크플로 도구 모음 (multi-check / multi-round / session-relocate / set·restore-statusline).",
   "author": {
     "name": "bluehansl",
     "email": "bluehansl@naver.com"
@@ -12,15 +12,17 @@
   "keywords": [
     "codex",
     "multi-check",
+    "multi-round",
     "session-relocate",
     "statusline",
-    "review"
+    "review",
+    "debate"
   ],
   "skills": "./skills/",
   "interface": {
     "displayName": "deft",
     "shortDescription": "Personal Codex workflow toolkit.",
-    "longDescription": "deft bundles bluehansl's personal Codex workflow skills under one namespace: multi-AI cross-check (multi-check), session relocation (session-relocate), and status line set/restore (set-statusline / restore-statusline).",
+    "longDescription": "deft bundles bluehansl's personal Codex workflow skills under one namespace: multi-AI cross-check (multi-check), multi-round dialogue/debate (multi-round), session relocation (session-relocate), and status line set/restore (set-statusline / restore-statusline).",
     "developerName": "bluehansl",
     "category": "Developer Tools",
     "capabilities": [
