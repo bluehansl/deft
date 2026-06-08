@@ -50,6 +50,22 @@ DONE: <한 줄 요약 + 다음 라운드 요청 사항 (있으면)>
 
 ## 다른 참가자와 상호작용
 
-- 다른 워커 (Claudex·Gemini) 의견을 Lead가 전달
+- 다른 워커 (Claudex·Codex·다른 Claude 독립 세션) 의견을 Lead가 전달
 - 본인은 다른 워커에 직접 메시지 보내지 않음 — **모든 통신은 Lead 경유**
 - Lead가 "claudex는 X라고 했는데 본인은?" 식으로 의견 교환 매개
+
+## Lead가 누구인가 — 양방향 가능
+
+- 본 multi-round skill은 **Claude / Claudex 양쪽에서 시작 가능**.
+- 사용자가 Claudex CLI에서 발동하면 Lead = Claudex → 본인(Claude)이 worker
+- 사용자가 Claude Code에서 발동하면 Lead = Claude → 다른 Claudex/Claude가 worker (mix가 default)
+- **어느 쪽이 Lead든 동일한 MCP server를 경유해 통신** (claudex가 띄운 mcp-server).
+- 본 페르소나는 어느 경우든 그대로 적용.
+
+## multi-round vs Agent Teams vs multi-check
+
+| 도구 | 통신 | AI 조합 | 의존성 |
+|---|---|---|---|
+| multi-check | 1회성 fan-out | Codex/Claude/Gemini 동시 | CLI 직접 |
+| **multi-round (본 스킬)** | **지속 N라운드 양방향** | **Claude + Claudex mix** | **MCP 경유, cmux/팀기능 무관** |
+| Agent Teams | 지속 multi-turn | Claude끼리만 | Claude 팀 기능 베이스 |

@@ -4,6 +4,22 @@
 
 형식은 [Keep a Changelog](https://keepachangelog.com/ko/1.1.0/) 를 따르며, 버전 체계는 [Semantic Versioning](https://semver.org/lang/ko/) 을 사용합니다 (`claude-X.Y.Z` 접두).
 
+## [claude-2.1.1] - 2026-06-08
+
+### Changed
+- **multi-round Phase 0 Preflight 단순화** — 외부 cloud 송신 lsof 체크 제거. multi-round skill 자체는 외부 호출을 만들지 않으므로 본 검사는 skill 책임 영역 밖 (`~/AGENTS.md §5-0` cloud 차단 정책 적용자의 환경에서 자동 보호됨). Chrome 등 무관한 시스템 트래픽 false positive 제거.
+- **참가자 양방향 + mix 기본** — claudex 단독 확인 → **claude + claudex(또는 codex) 양쪽 검사**. mix가 default. 한쪽만 설치된 환경에서도 그 쪽만으로 진행 (graceful fallback). 양쪽 모두 Lead가 될 수 있음 명시.
+- **양방향 통신 컨셉 명확화 (§Phase 2)** — MCP server는 항상 claudex가 띄움. Lead가 Claude이든 Claudex이든 동일한 MCP를 경유. **cmux나 Claude 팀 기능에 종속 X — multi-round는 자체 MCP 채널로 독립 동작**.
+- **회의 모드 사용자 선택 메뉴 추가** — consult/dialogue/collaborate/debate 각 모드의 1줄 설명을 함께 노출. 사용자가 1~4 입력으로 선택. 명시 없으면 기본 dialogue.
+- **라운드 게이트 자동 진행 (§Phase 4-C)** — 라운드 종료마다 사용자에게 묻는 방식 제거. **기본 종료 조건 = '모든 AI 합의 (CONSENSUS)' 또는 '사용자 개입'**. Lead는 사용자에게 묻지 않고 자체적으로 라운드 계속. 사용자가 자발 개입(메시지) 하면 즉시 반영. 명시적 종료 조건 변경 요청 시에만 교체.
+- **3-도구 멘탈 모델 강화** — multi-check (1회성 fan-out, MCP 무관) / **multi-round (지속 N라운드, MCP 경유, cmux·팀기능 무관)** / Agent Teams (Claude끼리, Claude 팀 기능 베이스, MCP 불필요) 명확히 구분.
+- **도구 선택 기준 — 사용자 입력 예시 매핑 표 추가** — "토론해서 정해" → multi-round / "GPT랑 Claude 답 비교" → multi-check / "BE·FE·QA 분담" → Agent Teams 등.
+- **agents/codex-participant.md + claude-participant.md** — Lead가 어느 쪽이든 동일 페르소나 적용 명시 + 3-도구 비교표 동봉.
+
+### Notes
+- 본 버전은 동작 개선·UX 보강·정책 정확화. 기존 호출 호환성 유지 (PATCH).
+- Codex 측 포팅 (plugins/codex/deft/skills/multi-round/) 은 여전히 별도 사이클.
+
 ## [claude-2.1.0] - 2026-06-05
 
 ### Added
