@@ -4,6 +4,11 @@
 
 형식은 [Keep a Changelog](https://keepachangelog.com/ko/1.1.0/) 를 따르며, 버전 체계는 [Semantic Versioning](https://semver.org/lang/ko/) 을 사용합니다 (`claude-X.Y.Z` / `codex-X.Y.Z` 접두).
 
+## [codex-1.1.2] - 2026-06-09
+
+### Fixed
+- **restore-statusline SKILL.md YAML frontmatter 파싱 실패 정정** — `description` 값이 백틱(`)으로 시작하여 YAML plain scalar 파서 에러(`found character that cannot start any token at line 2 column 14`). 이 오류로 codex 시작 시 "Skipped loading 1 skill(s) due to invalid SKILL.md files." 경고 + restore-statusline skill 로드 실패. description 본문에서 백틱 제거 (의미 동일 유지).
+
 ## [codex-1.1.1] - 2026-06-09
 
 ### Fixed

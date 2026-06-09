@@ -1,6 +1,6 @@
 ---
 name: restore-statusline
-description: `/set-statusline` 실행 전 snapshot을 사용해 `$HOME/.codex/config.toml`의 `[tui].status_line`만 원복한다. 전체 config 백업은 emergency 복구용으로만 남긴다. 트리거 예시 "statusline 원복", "statusline 되돌려", "restore statusline", "rollback statusline", "/restore-statusline", "deft:restore-statusline".
+description: set-statusline 실행 전 snapshot을 사용해 $HOME/.codex/config.toml 의 [tui].status_line 만 원복한다. 전체 config 백업은 emergency 복구용으로만 남긴다. 트리거 예시 "statusline 원복", "statusline 되돌려", "restore statusline", "rollback statusline", "/restore-statusline", "deft:restore-statusline".
 ---
 
 # restore-statusline
