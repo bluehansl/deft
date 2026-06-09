@@ -1,0 +1,167 @@
+#!/usr/bin/env python3
+"""cmux-rebalancing — 현재 워크스페이스의 좌우 컬럼 비율을 정책대로 리밸런싱한다.
+
+- 실행 시점의 레이아웃을 그대로 읽어, 컬럼(좌우, 세로 구분선) 개수에 맞는 비율로 조정한다.
+- 컬럼 내부의 상하 행(가로 구분선)은 균등 높이로 맞춘다.
+- 비율을 인자로 직접 줄 수도 있다(콜론 구분):  cmux-rebalancing 7:3   (공백 형태 7 3 도 허용)
+
+정책 비율(좌→우):
+  2컬럼 → 60:40
+  3컬럼 → 40:30:30
+  4컬럼 → 25:25:25:25
+  5컬럼 이상 → 균등(1/N)
+"""
+import os, sys, json, subprocess, time
+
+ENV = {**os.environ, "CMUX_QUIET": "1"}
+POLICY = {2: [0.6, 0.4], 3: [0.4, 0.3, 0.3], 4: [0.25, 0.25, 0.25, 0.25]}
+SETTLE = 0.2  # 연속 resize 디바운스 회피용 간격(초)
+
+
+def cmux(*args):
+    r = subprocess.run(["cmux", *args], capture_output=True, text=True, env=ENV)
+    return r.stdout.strip()
+
+
+def layout(ws):
+    d = json.loads(cmux("list-panes", "--workspace", ws, "--json"))
+    return d["panes"]
+
+
+def columns(panes):
+    """좌측 x 기준으로 컬럼 그룹화. 반환: [(x, width, [pane_ref,...]), ...] 좌→우 정렬"""
+    groups = {}
+    for p in panes:
+        x = round(p["pixel_frame"]["x"])
+        groups.setdefault(x, []).append(p)
+    cols = []
+    for x in sorted(groups):
+        members = groups[x]
+        w = round(max(m["pixel_frame"]["width"] for m in members))
+        cols.append((x, w, [m["ref"] for m in members]))
+    return cols
+
+
+def stable_columns(ws, tries=10):
+    """레이아웃이 settle될 때까지(연속 2회 동일) 컬럼을 재조회한다."""
+    prev = None
+    for _ in range(tries):
+        cur = columns(layout(ws))
+        sig = [(x, w) for x, w, _ in cur]
+        if sig == prev:
+            return cur
+        prev = sig
+        time.sleep(SETTLE)
+    return columns(layout(ws))
+
+
+def rows_of(panes, x):
+    col = [p for p in panes if round(p["pixel_frame"]["x"]) == x]
+    return sorted(col, key=lambda p: p["pixel_frame"]["y"])
+
+
+def equalize_rows(ws, x, ch):
+    """컬럼 x 안의 상하 행 높이를 균등화(허용오차 내 수렴)."""
+    for _ in range(4):
+        rows = rows_of(layout(ws), x)
+        k = len(rows)
+        if k < 2:
+            return
+        top = rows[0]["pixel_frame"]["y"]
+        total = sum(r["pixel_frame"]["height"] for r in rows)
+        tgt = round(total / k)
+        for j in range(k - 1):
+            rows = rows_of(layout(ws), x)
+            cur_bottom = rows[j]["pixel_frame"]["y"] + rows[j]["pixel_frame"]["height"]
+            want_bottom = top + tgt * (j + 1)
+            delta = round(want_bottom - cur_bottom)
+            if abs(delta) < ch:
+                continue
+            if delta > 0:   # 행 j 확장(아래로) → -D
+                cmux("resize-pane", "--pane", rows[j]["ref"], "-D", "--amount", str(delta)); time.sleep(SETTLE)
+            else:           # 행 j 축소 → 아래 행을 -U
+                cmux("resize-pane", "--pane", rows[j + 1]["ref"], "-U", "--amount", str(-delta)); time.sleep(SETTLE)
+        rows = rows_of(layout(ws), x)
+        hs = [r["pixel_frame"]["height"] for r in rows]
+        if max(hs) - min(hs) <= ch:
+            break
+
+
+def set_columns_once(ws, targets):
+    """좌→우 경계를 한 번씩 목표에 맞춘다(1 패스)."""
+    n = len(targets)
+    for i in range(n - 1):
+        cols = columns(layout(ws))
+        cur_right = cols[i][0] + cols[i][1]
+        want_right = cols[0][0] + sum(targets[:i + 1])
+        delta = want_right - cur_right
+        if abs(delta) < 9:  # 셀 1칸 미만이면 스킵
+            continue
+        if delta > 0:        # 컬럼 i 확장 → 좌측 컬럼 panes를 -R
+            for ref in cols[i][2]:
+                cmux("resize-pane", "--pane", ref, "-R", "--amount", str(delta)); time.sleep(SETTLE)
+        else:                # 컬럼 i 축소 → 우측 컬럼 panes를 -L
+            for ref in cols[i + 1][2]:
+                cmux("resize-pane", "--pane", ref, "-L", "--amount", str(-delta)); time.sleep(SETTLE)
+
+
+def main():
+    # 워크스페이스: 인자 --workspace 또는 호출 pane 기준
+    ws = None
+    args = sys.argv[1:]
+    if "--workspace" in args:
+        i = args.index("--workspace"); ws = args[i + 1]; del args[i:i + 2]
+    if ws is None:
+        ws = json.loads(cmux("identify", "--json"))["caller"]["workspace_ref"]
+
+    # 비율 인자: 콜론(7:3) 또는 공백(7 3) 모두 허용
+    ratios = None
+    if args:
+        toks = " ".join(args).replace(":", " ").split()
+        try:
+            ratios = [float(t) for t in toks]
+        except ValueError:
+            print(f"오류: 비율 파싱 실패 — '{' '.join(args)}' (예: 7:3, 4:3:3)"); sys.exit(1)
+
+    cols = stable_columns(ws)
+    n = len(cols)
+    if n < 2:
+        print("컬럼이 1개뿐 — 조정할 게 없음"); return
+
+    if ratios is None:
+        ratios = POLICY.get(n, [1.0 / n] * n)
+    if len(ratios) != n:
+        print(f"오류: 비율 개수({len(ratios)})가 컬럼 수({n})와 다름"); sys.exit(1)
+    s = sum(ratios); ratios = [r / s for r in ratios]
+
+    total = sum(w for _, w, _ in cols)
+    targets = [round(r * total) for r in ratios]
+    print(f"컬럼 {n}개, 전체 {total}px → 목표 {targets} (비율 {[round(r*100) for r in ratios]}%)")
+
+    # 허용오차(셀 1칸≈cell_width_px) 내로 들어올 때까지 최대 4패스 반복.
+    cw = json.loads(cmux("list-panes", "--workspace", ws, "--json"))["panes"][0]["cell_width_px"]
+    for _ in range(4):
+        set_columns_once(ws, targets)
+        cols = stable_columns(ws)
+        cur = [cols[0][0] + sum(c[1] for c in cols[:i + 1]) for i in range(n - 1)]
+        want = [cols[0][0] + sum(targets[:i + 1]) for i in range(n - 1)]
+        if all(abs(a - b) <= cw for a, b in zip(cur, want)):
+            break
+
+    # 컬럼 내 상하 행 균등화
+    ch = json.loads(cmux("list-panes", "--workspace", ws, "--json"))["panes"][0]["cell_height_px"]
+    for x, _, refs in stable_columns(ws):
+        if len(refs) > 1:
+            equalize_rows(ws, x, ch)
+
+    cols = stable_columns(ws); total = sum(w for _, w, _ in cols)
+    print("결과(컬럼):", " : ".join(f"{w/total*100:.1f}%" for _, w, _ in cols))
+    for x, w, refs in cols:
+        if len(refs) > 1:
+            rows = rows_of(layout(ws), x)
+            hh = sum(r["pixel_frame"]["height"] for r in rows)
+            print(f"  컬럼 x={x} 행 {len(rows)}개 높이:", " : ".join(f"{r['pixel_frame']['height']/hh*100:.0f}%" for r in rows))
+
+
+if __name__ == "__main__":
+    main()

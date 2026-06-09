@@ -1,21 +1,23 @@
 ---
 name: multi-round
-description: broker 없이 여러 AI(Claudex/Codex/Claude)가 N라운드에 걸쳐 의견을 주고받으며 수렴·반박하는 멀티턴 토론 skill. claudex mcp-server + cmux pane 제어로 동작하며 외부 cloud(api.relaycast.dev 등) 송신 zero. 트리거 — "멀티 라운드", "라운드 회의", "라운드 토론", "N라운드 토론", "여러 라운드 돌려", "왔다갔다 토론", "주거니 받거니", "핑퐁 토론", "AI끼리 토론시켜", "서로 반박하며 좁혀줘", "수렴할 때까지 주고받아", "합의될 때까지 토론", "코덱스랑 클로드 토론", "클로덱스랑 토론", "multi round", "multi-round debate", "back-and-forth between AIs". 1발 비교는 multi-check, 파일 작업·장기 협업은 Agent Teams를 쓰세요. agent-relay broker(cloud-coupled)와는 별개 — broker 사용 불가 환경의 대체 도구입니다.
+description: 여러 AI(Claude/Claudex/Codex)가 N라운드 양방향 토론으로 의견을 좁혀 합의에 도달하는 멀티턴 회의 skill. cmux 환경에선 pane 시각화로, cmux 외부에선 MCP 경유로 동작. 1발 비교는 multi-check, 코드 분담·구현은 agent-teams를 쓰세요. 트리거 키워드 — "멀티 라운드", "라운드 토론", "왔다갔다 토론", "AI끼리 토론시켜", "수렴할 때까지 주고받아", "multi round", "multi-round debate".
 ---
 
 # Multi-Round Skill
 
-여러 AI가 **여러 라운드에 걸쳐 양방향으로 의견을 주고받는** 토론·합의 도구. agent-relay broker(cloud-coupled)를 사용하지 않고 **claudex의 내장 `mcp-server` + cmux pane 제어**로 동작. 외부 cloud 송신 zero.
+여러 AI가 **여러 라운드에 걸쳐 양방향으로 의견을 주고받는** 토론·합의 도구. **`claudex` 의 내장 `mcp-server` + cmux pane 제어** 조합으로 동작.
 
 ## 3-도구 멘탈 모델 (사용자 안내용)
 
 | 도구 | 통신 방식 | AI 조합 | 의존성·기반 | 언제 쓰는가 |
 |---|---|---|---|---|
 | `multi-check` | **1회성** fan-out (응답 비교) | Codex/Claude/Gemini 동시 | CLI 직접 호출 (MCP 무관) | "한 번 물어보고 답만 비교" |
-| **`multi-round`** | **지속 통신** (N라운드 양방향) | **Claude + Claudex (또는 Codex/Claude mix)** | **MCP 서버 경유** — cmux나 Claude 팀 기능에 종속 X | "의견 갈려서 여러 번 주고받으며 좁히고 싶다 / 토론" |
-| Agent Teams | **지속 통신** (multi-turn 협업) | **Claude끼리만** | **Claude 팀 기능 베이스**, MCP 불필요 | "실제 코드 분담·구현·리뷰 루프·티켓 작업" |
+| **`multi-round`** | **지속 통신** (N라운드 양방향) | **Claude + Claudex (또는 Codex/Claude mix)** | **cmux 환경: pane 시각화 / cmux 외부: MCP 또는 codex 내부 fallback** | "의견 갈려서 여러 번 주고받으며 좁히고 싶다 / 토론" |
+| `agent-teams` | **지속 통신** (multi-turn 협업) | **Claude끼리만** | **Claude 팀 기능 베이스** | "실제 코드 분담·구현·리뷰·작업노트" |
 
-판단 키워드: **답이 하나면 multi-check, 답을 좁혀가야 하면 multi-round, 코드를 만져야 하면 Agent Teams.**
+판단 키워드: **답이 하나면 `multi-check`, 답을 좁혀가야 하면 `multi-round`, 코드를 만져야 하면 `agent-teams`.**
+
+> `multi-round` 의 `collaborate` 모드는 **분담 검토 / 분담 설계 / 독립 의견 작성 후 상호 리뷰** 까지. 실제 파일 수정·테스트·작업노트 가 필요한 순간은 `agent-teams` 로 승격.
 
 ### 도구 선택 기준 — 사용자 입력 예시 매핑
 
@@ -95,12 +97,10 @@ mkdir -p "$SESSION_DIR"
 
 ### Phase 0: Preflight (참가자 환경 확인)
 
-> multi-round 자체는 **외부 cloud 호출을 만들지 않음**. 따라서 외부 송신 lsof 체크는 본 skill의 책임 영역 밖. ~/AGENTS.md §5-0 cloud 차단 정책을 사용자가 적용한 환경에서는 자동으로 보호됨.
-
 회의 시작 전 다음을 확인:
 
 ```bash
-# A. 참가자 CLI 양쪽 모두 확인 — claude + claudex (또는 codex)
+# A. 참가자 CLI 확인 — claude / claudex / codex
 HAVE_CLAUDE=0
 HAVE_CLAUDEX=0
 HAVE_CODEX=0
@@ -126,16 +126,30 @@ else
 fi
 echo "참가자 모드: $PARTICIPANTS_MODE"
 
-# B. /etc/hosts 차단 확인 (~/AGENTS.md §5-0 정책 적용자만)
-grep -q "api.relaycast.dev" /etc/hosts 2>/dev/null \
-  && echo "OK: hosts cloud 차단 적용됨" \
-  || echo "INFO: hosts cloud 차단 미적용 (정책 §5-0 미적용자면 정상)"
+# B. cmux 환경 검출 — spawn 정책 분기
+HAVE_CMUX=0
+which cmux >/dev/null 2>&1 && cmux identify >/dev/null 2>&1 && HAVE_CMUX=1
+echo "cmux 환경: $([ "$HAVE_CMUX" -eq 1 ] && echo YES || echo NO)"
+
+# C. cmux-rebalancing 헬퍼 설치 확인 — 미설치 시 plugin 동봉본으로 자동 설치
+if ! command -v cmux-rebalancing >/dev/null 2>&1; then
+  SRC=$(ls -1 ~/.claude/plugins/cache/bluehansl/deft/*/bin/cmux-rebalancing 2>/dev/null | tail -1)
+  [ -z "$SRC" ] && SRC=$(ls -1 ~/.codex/plugins/cache/bluehansl/deft/*/bin/cmux-rebalancing 2>/dev/null | tail -1)
+  if [ -n "$SRC" ]; then
+    mkdir -p ~/.local/bin && cp "$SRC" ~/.local/bin/cmux-rebalancing && chmod +x ~/.local/bin/cmux-rebalancing
+    echo "INFO: cmux-rebalancing 자동 설치 완료 (~/.local/bin/)"
+  else
+    echo "WARN: cmux-rebalancing 미설치 + plugin 동봉본 없음 — pane 비율 자동 조정 비활성"
+  fi
+fi
 ```
 
 **핵심**:
-- **외부 호출 검사 X** — multi-round skill은 외부 cloud 호출 안 만듦. 검사 책임 영역 아님.
-- **양쪽 CLI 모두 검사** — 어느 쪽이든 Lead가 될 수 있음. mix가 default.
-- **한쪽만 있으면 그쪽만으로 진행** — abort 안 함. WARN 후 계속.
+- **참가자 CLI**: 어느 쪽이든 Lead 가 될 수 있음. mix 가 default. 한쪽만 있으면 그쪽만으로 진행 (abort 안 함. WARN 후 계속).
+- **`HAVE_CMUX` 값이 Phase 3 spawn 경로를 결정**한다:
+  - `HAVE_CMUX=1` → **Phase 3-B (cmux pane)** 가 기본 — 사용자가 워커 활동을 시각으로 모니터링
+  - `HAVE_CMUX=0` → Phase 3-A (MCP) 또는 Phase 3-C (codex 내부 fallback)
+- **`cmux-rebalancing` 헬퍼**: cmux 환경에서 워커 spawn 후 pane 비율을 정책대로 재조정한다. PATH 상에 없으면 plugin 동봉본을 `~/.local/bin/` 로 자동 설치. Phase 3 spawn 종료 시점에 자동 호출 (§Phase 3 마지막).
 
 ### Phase 1: 회의 모드 + 참가자 결정
 
@@ -182,14 +196,13 @@ grep -q "api.relaycast.dev" /etc/hosts 2>/dev/null \
    (Claude 또는 Claudex 인스턴스 — mix가 default)
 ```
 
-- **MCP server는 항상 `claudex`가 띄움** (`claudex mcp-server`).
-- Lead가 **Claude이든 Claudex이든 동일한 MCP server를 통해 통신**.
-- Claude → Claudex 워커 호출, Claudex → Claude 워커 호출 모두 그 서버를 경유.
-- **cmux나 Claude 팀 기능에 종속 X** — multi-round는 자체 MCP 채널로 독립 동작.
+- **MCP server는 `claudex` 가 띄움** (`claudex mcp-server`).
+- Lead가 **Claude 이든 Claudex 이든 동일한 MCP server를 통해 통신**.
+- claudex 미설치 환경(`HAVE_CLAUDEX=0`)에서는 3-A 경로 사용 불가 — Phase 3-B/3-C 로만 동작.
 
 #### 2-2. MCP 서버 등록 (자동 write 금지 — 사용자 정책 §6-3)
 
-`~/.claude/settings.json`이 사용자 환경 파일이므로 **자동 수정 금지**. 미등록 시 사용자에게 다음 스니펫을 출력하고 수동 등록을 요청한다.
+`~/.claude/settings.json` 은 사용자 환경 파일이므로 **자동 수정 금지**. 미등록 시 다음 스니펫을 출력하고 수동 등록을 요청한다.
 
 ```json
 // ~/.claude/settings.json — mcpServers 키 추가
@@ -206,25 +219,39 @@ grep -q "api.relaycast.dev" /etc/hosts 2>/dev/null \
 }
 ```
 
-**핵심**: `-c mcp_servers={}` 인자가 **downstream MCP (relaycast/atlassian/grafana 등) 차단**. 누락 시 본업 코드 외부 송신 위험 (`~/AGENTS.md` §6-1 위반).
+또는 동등한 CLI 명령:
+
+```bash
+claude mcp add-json --scope user claudex '{"type":"stdio","command":"claudex","args":["mcp-server","-c","mcp_servers={}"]}'
+```
+
+**핵심**: `-c mcp_servers={}` 인자는 worker conversation 에 downstream MCP 가 함께 로드되지 않도록 **MCP 컨텍스트를 격리**한다. 누락 시 worker 가 의도와 다른 MCP 를 도구로 인식할 수 있음.
 
 등록 확인:
 ```bash
-# Claude Code 재시작 후
-which mcp__claudex__codex >/dev/null 2>&1 || echo "WARN: claudex MCP 미등록 — settings.json 확인 + Claude Code 재시작 필요"
+claude mcp get claudex >/dev/null 2>&1 \
+  || echo "WARN: claudex MCP 미등록 — settings.json 확인 + Claude Code 재시작 필요"
 ```
 
-미등록 시 fallback: cmux pane에 `claudex` TUI를 직접 spawn (Phase 3-B).
+미등록 시 fallback 분기:
+- `HAVE_CMUX=1` → Phase 3-B (cmux pane, 사용자 정책 기본 경로)
+- `HAVE_CMUX=0` → 사용자에게 등록 안내 후 작업 중단 (3-C는 codex 환경 전용)
 
 #### 2-3. Lead가 Claudex일 때
 
-Claudex 자체가 MCP server를 직접 띄움 (`claudex mcp-server`). Lead의 conversation이 그 server에 직접 연결 → 외부 등록 불필요. 단 Phase 3-A로 worker spawn 시 동일 패턴 적용.
+Claudex 자체가 MCP server 를 직접 띄움 (`claudex mcp-server`). Lead 의 conversation 이 그 server 에 직접 연결 → 외부 등록 불필요. 단 Phase 3-A 로 worker spawn 시 동일 패턴 적용.
 
-### Phase 3: 워커 spawn
+### Phase 3: 워커 spawn — 환경별 경로
 
-회의 모드와 등록 상태에 따라 두 경로:
+자동 분기 (사용자 정책 반영):
 
-#### 3-A. claudex MCP 경유 (자동화 우선, 시각화 약함)
+| 환경 | 권장 경로 |
+|---|---|
+| `HAVE_CMUX=1` (cmux 안) | **Phase 3-B (pane)** — 시각화 default. MCP 등록 여부 무관 |
+| `HAVE_CMUX=0` + MCP 등록 | **Phase 3-A (MCP)** |
+| `HAVE_CMUX=0` + MCP 미등록 | Phase 3-C (codex 자체 fallback) 또는 사용자 안내 후 중단 |
+
+#### 3-A. claudex MCP 경유 (cmux 외부 stateful 경로)
 
 각 워커별로 conversation 시작:
 ```
@@ -245,10 +272,11 @@ mcp__claudex__codex-reply(
 )
 ```
 
-장점: 부담 최소, 자동 lifecycle (Claude Code 자식 프로세스).
-단점: cmux pane 시각화 없음 — Lead 출력으로 진행 표시.
+특성: cmux 외부 환경 또는 사용자가 시각화 생략을 명시한 경우의 stateful MCP 경로. 자동 lifecycle (Claude Code 자식 프로세스).
 
-#### 3-B. cmux pane + claudex TUI (시각화·사용자 개입 강함)
+#### 3-B. cmux pane + claudex TUI (cmux 환경 기본 경로)
+
+`HAVE_CMUX=1` 일 때 기본 경로. 사용자가 워커 활동을 우측·아래 pane 으로 시각 모니터링하고 직접 개입 가능.
 
 Lead surface 캡처:
 ```bash
@@ -257,26 +285,43 @@ LEAD_SURFACE=$(cmux identify 2>/dev/null | jq -r '.caller.surface_ref' 2>/dev/nu
 # fallback 실패 시 사용자에게 직접 surface id 요청
 ```
 
-⚠️ **주의**: `cmux current --json` 명령은 존재하지 않음. 반드시 `cmux identify`의 `.caller.surface_ref` 사용 (이전 지침에 잘못 적힌 부분 정정).
-
 첫 워커: 우측 분할
 ```bash
 SPLIT=$(cmux new-split right --focus false 2>&1)
 W1_SURFACE=$(printf '%s' "$SPLIT" | grep -oE 'surface:[0-9]+' | head -1)
 ```
 
-이후 워커: 아래 분할 (직전 워커 pane 기준 §7-1 정책)
+이후 워커: 아래 분할 (직전 워커 pane 기준)
 ```bash
 SPLIT=$(cmux new-split down --pane "<prev_pane>" --focus false 2>&1)
 W2_SURFACE=$(printf '%s' "$SPLIT" | grep -oE 'surface:[0-9]+' | head -1)
 ```
 
-워커 pane에 claudex TUI 기동 + 초기 prompt:
+워커 pane 에 TUI 기동 + 초기 prompt — **`claudex` 우선, 없으면 `codex`**:
 ```bash
-cmux send --surface "$W1_SURFACE" "claudex -c mcp_servers={}"
+if [ "$HAVE_CLAUDEX" -eq 1 ]; then
+  WORKER_CMD="claudex -c mcp_servers={}"
+else
+  WORKER_CMD="codex -c mcp_servers={}"
+fi
+cmux send --surface "$W1_SURFACE" "$WORKER_CMD"
 cmux send-key --surface "$W1_SURFACE" Enter
-sleep 3  # TUI readiness 확인 (capture-pane으로 프롬프트 박스 출현 감지 권장)
+sleep 3  # TUI readiness 확인 (capture-pane 으로 프롬프트 박스 출현 감지 권장)
 ```
+
+#### 3-B-fin. 첫 pane 분할 직후 비율 재조정 (Lead 직접 호출, 1회)
+
+**첫 워커의 우측 분할(`cmux new-split right`)이 끝난 직후 Lead pane 에서 `cmux-rebalancing` 을 한 번 호출**한다. 좌우 컬럼 비율이 바로 정책대로 잡힌다.
+
+```bash
+# Lead pane 에서 직접 실행 — 좌→우: 2컬럼=60:40 / 3컬럼=40:30:30 / 4컬럼=25:25:25:25 / 5+=균등
+command -v cmux-rebalancing >/dev/null 2>&1 && cmux-rebalancing
+# 사용자 명시 비율 (예시): cmux-rebalancing 7:3
+```
+
+> 두 번째 이후 워커는 같은 우측 컬럼 안에서 **하단으로 수직 분할**(`cmux new-split down`)되므로 좌우 비율은 유지된다. **추가 호출 불필요** — TUI 기동·prompt 전달 진행 중에도 비율은 그대로.
+
+⚠️ **첫 분할 직후 본 호출 누락 시** Lead 가 2:8 처럼 축소되어 사용자 가독성 저하.
 
 ### Phase 4: 라운드 진행 (양방향 통신)
 
@@ -387,33 +432,16 @@ cmux 경로의 경우 4-A 패턴 반복.
 - 워커 pane은 release 시 자동 close 안 함 (관찰 보존)
 - 회의 전체 종료 시 사용자에게 "워커 pane 닫을까요?" 컨펌 후 `cmux close-surface --surface surface:N`
 
-#### 5-C. cmux search.db 잔존 처리 (선택)
-
-cmux는 pane 출력을 `~/Library/Application Support/cmux/search.db` (SQLite FTS)에 평문 인덱싱. 본업 코드를 pane으로 흘린 경우 평문 잔존.
-
-권장:
-```bash
-# 권한 정리 (1회만)
-chmod 600 ~/Library/Application\ Support/cmux/search.db*
-
-# 회의 종료 시 선택적 purge (사용자 컨펌)
-# rm -f ~/Library/Application\ Support/cmux/search.db*  # 주의: 전체 cmux 이력 삭제됨
-```
-
 ## 보안 가드 요약
 
 | # | 가드 | 위반 시 |
 |---|---|---|
 | 1 | Phase 0 참가자 CLI 1개 이상 설치 확인 (`claude` / `claudex` / `codex` 중) | abort |
-| 2 | claudex mcp-server 기동 시 `-c mcp_servers={}` 강제 (downstream MCP 차단) | 본업 코드 외부 송신 위험 |
+| 2 | claudex mcp-server 기동 시 `-c mcp_servers={}` 강제 (worker MCP 컨텍스트 격리) | 의도와 다른 MCP 도구 노출 |
 | 3 | cmux send 줄바꿈 sanitize | 조기 제출 / prompt 손상 |
-| 4 | cmux search.db 권한 600 | 평문 노출 |
-| 5 | settings.json 자동 write 금지 (수동 가이드만) | §6-3 사전 컨펌 정책 위반 |
-| 6 | claudex/claude/codex 모두 없으면 명시 에러 (silent 실패 X) | 사용자 혼란 |
-| 7 | `cmux current --json` 사용 금지 → **`cmux identify .caller.surface_ref`** | 명령 부재 → fallback 작동 |
-| 8 | agent-relay 영구 삭제 금지 (사용자 보존 의도) | 미래 재활성화 불가 |
-
-> 외부 cloud 송신 검사는 multi-round 책임 영역 아님 — skill 자체가 외부 호출을 만들지 않음. cloud 차단은 `~/AGENTS.md §5-0` 사용자 환경 정책으로 시스템 차원에서 보호됨.
+| 4 | settings.json 자동 write 금지 (수동 가이드만) | §6-3 사전 컨펌 정책 위반 |
+| 5 | claudex/claude/codex 모두 없으면 명시 에러 (silent 실패 X) | 사용자 혼란 |
+| 6 | Lead surface 캡처는 `cmux identify` 의 `.caller.surface_ref` 사용 | fallback 미작동 |
 
 ## Error Handling
 
@@ -423,26 +451,26 @@ chmod 600 ~/Library/Application\ Support/cmux/search.db*
 | `claudex` + `codex` 미설치 + `claude`만 있음 | `claude-only` 모드 진행 + WARN ("mix 불가 — 시각 다양성 ↓") |
 | `claude` 미설치 + `claudex` 또는 `codex` 있음 | 그 쪽만으로 진행 + WARN |
 | 셋 다 미설치 | abort + "참가자 CLI 1개 이상 설치 필요" 보고 |
-| MCP 등록 X (`mcp__claudex__codex` 호출 불가) | Phase 3-B (cmux pane + claudex TUI) 경로로 자동 전환 |
+| `HAVE_CMUX=1` + MCP 등록 X | Phase 3-B (cmux pane + claudex/codex TUI) 경로로 자동 전환 |
+| `HAVE_CMUX=0` + MCP 등록 X | 사용자에게 등록 안내 후 작업 중단 |
 | 응답 timeout (라운드당 120s) | 해당 워커 skip, 남은 워커로 종합 |
 | 한 워커 BLOCKED | 사용자에게 즉시 보고 + 결정 위임 |
 | max-round 도달 (기본 5) | Phase 5 종합 — 미합의 항목 명시 + Lead 권장안 1개 제시 |
 
 ## Trigger 회피 매트릭스 (오발동 방지)
 
-`multi-round`가 매칭되어선 안 되는 어휘 (relay 전용):
+`multi-round` 가 매칭되어선 안 되는 어휘:
 - "회의", "회의 좀 해줘", "한번 봐줘", "같이 봐줘"
 - "검토해줘", "워커 띄워", "둘이서 얘기해봐"
 
-`multi-check` 와 혼동되지 않게 — `description` 안에 "1발 비교는 multi-check, 파일 작업은 Agent Teams" 한 줄로 모델에게 경계 학습.
+`multi-check` / `agent-teams` 와 혼동되지 않게 — `description` 안에 경계를 한 줄로 표시한다 ("1발 비교는 `multi-check`, 코드 분담·구현은 `agent-teams`").
 
-## 본업 정책 자동 inject (worker prompt 안에 명시)
+## 워커 prompt 표준 inject (각 워커에게 전달)
 
-각 워커 prompt에 다음 라인 inject:
+각 워커 prompt 에 다음 라인 inject:
 ```
-- 응답 언어: 한국어 (~/AGENTS.md §1)
-- 본업 코드 외부 송신 금지 (~/AGENTS.md §6-1)
-- 응답 마지막 줄에 'DONE:' 센티넬 출력 (multi-round skill 응답 완료 감지용)
+- 응답 언어: 한국어
+- 응답 마지막 줄에 'DONE:' 센티넬 출력 (응답 완료 감지용)
 - 회의 모드: {consult|dialogue|collaborate|debate}
 - 신호 프로토콜 사용 (ACK/STATUS/BLOCKED/DONE + 모드별 확장)
 ```

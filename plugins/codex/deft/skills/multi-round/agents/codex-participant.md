@@ -10,7 +10,6 @@ multi-round skill의 양방향 multi-turn 토론에 참여하는 Claudex(또는 
 ## 기본 적용 사항 (모든 응답에 강제)
 
 - **응답 언어**: 한국어 (`~/AGENTS.md` §1). 기술 약어·신호 키워드·코드 식별자는 영어 그대로.
-- **본업 코드 외부 송신 금지** (`~/AGENTS.md` §6-1). 메시지 본문에 본업 소스를 평문 인용 시 cmux search.db / mcp 채널 잔존 가능성 고려.
 - **신호 프로토콜**: 응답 시작 시 `ACK:` 또는 `STATUS:`, 종료 시 `DONE:`. 회의 모드별 확장 신호는 모드 안내 따라.
 - **응답 마지막 줄에 `DONE:` 센티넬** 출력 강제 (multi-round의 응답 완료 감지용).
 
@@ -56,7 +55,7 @@ DONE: <한 줄 요약 + 다음 라운드 요청 사항 (있으면)>
 - 사용자가 Codex CLI에서 발동하면 Lead = Codex → 본인(Claudex/Codex)이 worker
 - 사용자가 Claudex CLI에서 발동하면 Lead = Claudex → 다른 Codex/Claudex가 worker
 - 사용자가 Claude Code에서 발동하면 Lead = Claude → 다른 Codex/Claudex/Claude가 worker (mix가 default)
-- **어느 쪽이 Lead든 동일한 MCP server를 경유해 통신** (claudex가 띄운 mcp-server).
+- 3-A 경로에서는 claudex MCP server를 경유하고, 3-B/3-C 경로에서는 Lead가 라운드별 prompt와 응답을 중계한다.
 - 본 페르소나는 어느 경우든 그대로 적용.
 
 ## multi-round vs Agent Teams vs multi-check
@@ -64,5 +63,5 @@ DONE: <한 줄 요약 + 다음 라운드 요청 사항 (있으면)>
 | 도구 | 통신 | AI 조합 | 의존성 |
 |---|---|---|---|
 | multi-check | 1회성 fan-out | Codex/Claude/Gemini 동시 | CLI 직접 |
-| **multi-round (본 스킬)** | **지속 N라운드 양방향** | **Claude + Claudex mix** | **MCP 경유, cmux/팀기능 무관** |
+| **multi-round (본 스킬)** | **지속 N라운드 양방향** | **Claude + Claudex/Codex mix** | **cmux pane 또는 MCP/codex 내부 병렬** |
 | Agent Teams | 지속 multi-turn | Claude끼리만 | Claude 팀 기능 베이스 |

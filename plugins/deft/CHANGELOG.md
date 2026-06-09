@@ -4,6 +4,67 @@
 
 형식은 [Keep a Changelog](https://keepachangelog.com/ko/1.1.0/) 를 따르며, 버전 체계는 [Semantic Versioning](https://semver.org/lang/ko/) 을 사용합니다 (`claude-X.Y.Z` / `codex-X.Y.Z` 접두).
 
+## [codex-1.1.1] - 2026-06-09
+
+### Fixed
+- multi-round Codex SKILL Phase 2 등록 확인 명령 (`codex --list-tools` → `codex mcp list`)
+- multi-round Codex SKILL Phase 3-C 1-shot 실행 옵션 (`exec --no-tui` → `exec - < <file>`)
+
+### Changed
+- multi-round 자동 분기 우선순위 정정 — cmux 환경 안에서는 3-B (pane) 우선, 외부에서만 3-A (MCP) / 3-C (codex 내부)
+- Phase 0 ↔ Phase 2 claudex 강제 모순 정리 — codex-only 환경에서의 3-A 가용성 명시
+- "MCP 경유 ↔ cmux 제어" 표현 통일 — 경로별 의존성 명확 분리
+- frontmatter description 간결화 (2~4 문장)
+
+### Added
+- **`plugins/codex/deft/bin/cmux-rebalancing` 동봉** — Claude 측과 동일 헬퍼 (pane 비율 자동 조정).
+- **Codex 측 multi-round / multi-check SKILL 에 헬퍼 설치 확인 + spawn 직후 호출 명시** — `~/.codex/plugins/cache/bluehansl-codex/deft/.../bin/cmux-rebalancing` 우선 탐색 후 `~/.local/bin/` 으로 자동 복사. Phase 3-B-fin / reviewer spawn 직후 `cmux-rebalancing` 호출.
+- **Codex GUIDE Before You Start 에 헬퍼 항목 추가**.
+
+### Removed
+- broker / agent-relay / relaycast / 외부 cloud 송신 관련 표현 전수 제거 — multi-round 자체가 외부 호출을 만들지 않으므로 불필요한 잡음
+- cmux search.db 권한·purge 관련 가드 — multi-round 책임 영역 외 (cmux 자체 부산물)
+
+## [claude-2.2.0] - 2026-06-09
+
+### Added
+- **agent-teams 스킬 신규** — `plugins/deft/skills/agent-teams/` 작성. Claude Code 내장 팀 기능 기반의 다중 에이전트 팀 운영 지침을 **자기완결적 skill 패키지**(SKILL.md + `agents/*.md` 8종 + `GUIDE.md`)로 제공. 외부 참조 없이 패키지만으로 운영 가능.
+  - **내장 도구 기반** — `TeamCreate`/`Agent`/`SendMessage`/`Task*` 4종만 사용. `SendMessage` 자동 전달로 별도 폴링·inbox 수동 확인 불필요.
+  - **Phase 0 환경 검증** — 실험 플래그(`CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1`)·Claude Code v2.1.32+·`cmux claude-teams` 확인. cmux 외부 실행 시 단일 Claude degrade(기본) / 재시작 권장 / 명시 요청 시 시각화 비활성 진행. 운영 제약 4종(한 lead=한 team / nested 불가 / in-process resume 불가 / task status lag) 명시.
+  - **work-id 영속 키 + 연속성** — 내장 `team-name`(휘발 가능)과 분리한 영속 작업 키. 같은 work-id면 세션 재시작·새 team-name에도 동일 `work.md`를 이어받아 연속성·누락 방지(in-process resume 한계 보완). 작업 데이터는 `~/.claude/plugin-data/deft/agent-teams/<work-id>/`.
+  - **work-id 명명 규약 자가 결정** — 최초 실행 시 사용자에게 규약 선택(이슈번호/브랜치명/날짜-작업명/자유명/직접입력) → `config.json` + `CONVENTION.md`(plugin-data, update-safe)에 저장. 특정 규약 강요 없이 범용. "규약 바꿔"로 재설정.
+  - **페르소나 라이브러리** — `agents/*.md` 8종(lead/backendDev/frontendDev/qa/designer/architect/reviewer/pm). 프로젝트-중립 일반화(프로젝트 컨벤션은 cwd AGENTS.md 참조).
+  - **회의 모드 6종 + 페어/Trio 패턴** — consult/dialogue/collaborate/debate/cascade/signoff. 신호 프로토콜을 `SendMessage` 본문 규약으로 표현. `multi-round collaborate`(검토·설계·리뷰)와 agent-teams(실제 코드 작업) 경계 및 승격 규칙 명시.
+  - 단계 게이트(요건분석/영향도/Plan/체크리스트)·Plan 게이트·diff 검증·파일 구조(work.md/team.md/role.md)·GUIDE.md(Before You Start 체크리스트 포함). work.md는 Lead 단독 writer, 팀원(qa 포함)은 본인 role.md만 write. 팀 종료는 자연어 지시로 처리.
+
+### Fixed
+- **multi-round (Claude) Phase 2 등록 확인 명령** — `which mcp__claudex__codex` (MCP tool 이름을 PATH 실행파일로 잘못 검사) → `claude mcp get claudex` 로 정정.
+
+### Changed
+- **multi-round (Claude) spawn 경로 자동 분기** — cmux 환경 안에서는 **Phase 3-B (pane 시각화) 우선**, cmux 외부에서만 Phase 3-A (MCP) 사용. 사용자 정책 (cmux 환경: pane / 외부: background) 반영. Phase 0 에 `HAVE_CMUX` 검출 추가, Phase 3 도입부에 환경별 분기 표 신규.
+- **multi-round (Claude) Phase 0 ↔ Phase 2 claudex 강제 모순 정리** — codex-only 환경에서의 3-A 가용성 / 3-B fallback 명시.
+- **multi-round (Claude) "MCP 경유 ↔ cmux 제어" 표현 통일** — 3-A=MCP cmux 무관 / 3-B=cmux 필요 / 3-C 분기를 본문·README·페르소나에서 일관.
+- **multi-round (Claude) frontmatter description 간결화** — 트리거 어휘 대량 나열 + 비교를 압축, 2~4 문장 + 대표 트리거 7개로 축소.
+- **3-도구 비교표 의존성 칸** — `multi-round` 의존성 표현을 "cmux 환경: pane / cmux 외부: MCP" 로 갱신. `multi-round collaborate` ↔ `agent-teams` 경계 한 줄 추가 (검토·설계는 multi-round, 실제 코드 작업은 agent-teams).
+- **공식 MCP 등록 명령 병기** — `claude mcp add-json --scope user claudex '{...}'` 스니펫 추가.
+
+### Removed
+- **multi-round (Claude) Phase 0 의 `/etc/hosts` cloud 차단 확인 블록** — multi-round 자체가 외부 호출을 만들지 않으므로 책임 영역 외. 잡음 제거.
+- **multi-round (Claude) 보안 가드 표 정리** — `cmux search.db 권한 600` / `agent-relay 영구 삭제 금지` / "외부 cloud 검사" 행 삭제. 가드 8개 → 6개 (참가자 CLI / MCP 컨텍스트 격리 / cmux send sanitize / settings.json write 금지 / 환경 진단 / `cmux identify` 사용).
+- **multi-round (Claude) `5-C cmux search.db 잔존 처리` 섹션** — `chmod 600 search.db*` 권장 통째 삭제. cmux 자체 부산물이므로 skill 책임 영역 외.
+- **multi-round (Claude) GUIDE FAQ Q5 (broker 관계) / Q8 (외부 송신 zero) 삭제** — 잡음 제거 + Q 번호 재정렬.
+- **multi-round (Claude) agents/*-participant.md 의 "본업 코드 외부 송신 금지 / search.db 잔존 가능성" 라인 삭제**.
+- **README (Claude) "broker 무관" 표현 제거** — multi-round 행 + 3-도구 비교표 의존성 칸.
+
+### Added (cmux-rebalancing 헬퍼 통합)
+- **`plugins/deft/bin/cmux-rebalancing` 동봉** — pane 비율 자동 조정 헬퍼. 좌→우 정책 비율(2컬럼=60:40 / 3컬럼=40:30:30 / 4컬럼=25:25:25:25 / 5+=균등) 또는 사용자 명시 비율(`cmux-rebalancing 7:3`) 적용.
+- **각 skill Phase 0 에 헬퍼 설치 확인 + 자동 cp**: `~/.local/bin/cmux-rebalancing` 미존재 시 plugin cache(`~/.claude/plugins/cache/.../bin/cmux-rebalancing`)에서 자동 복사 + `chmod +x`.
+- **첫 pane 분할 직후 Lead 가 `cmux-rebalancing` 1회 직접 호출** — multi-round Phase 3-B-fin / agent-teams §2-3 / multi-check Phase 3. 호출 시점은 **첫 워커/팀원의 우측 분할 직후** (마지막 워커 spawn 까지 기다리지 않음). 두 번째 이후 워커는 같은 우측 컬럼 안에서 하단 수직 분할되므로 좌우 비율 유지 — 추가 호출 불필요. Lead pane 가독성 보장 (2:8 축소 방지).
+- **GUIDE Before You Start 에 헬퍼 항목 추가** — multi-round Claude/Codex + agent-teams.
+
+### Notes
+- 신규 skill 추가 + multi-round 동급 release notes + cmux-rebalancing 헬퍼 통합 → MINOR bump (claude-2.1.3 → claude-2.2.0). Codex 측은 별도 [codex-1.1.1] entry.
+
 ## [codex-1.1.0] - 2026-06-08
 
 ### Added

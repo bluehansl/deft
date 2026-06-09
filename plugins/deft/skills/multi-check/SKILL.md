@@ -31,6 +31,15 @@ Before spawning agents, check which CLIs are available:
   && echo "CODEX_OK" || echo "CODEX_NOT_FOUND"
 which claude 2>/dev/null && echo "CLAUDE_OK" || echo "CLAUDE_NOT_FOUND"
 which gemini 2>/dev/null && echo "GEMINI_OK" || echo "GEMINI_NOT_FOUND"
+
+# cmux-rebalancing 헬퍼 설치 확인 — 미설치 시 plugin 동봉본으로 자동 설치
+if ! command -v cmux-rebalancing >/dev/null 2>&1; then
+  SRC=$(ls -1 ~/.claude/plugins/cache/bluehansl/deft/*/bin/cmux-rebalancing 2>/dev/null | tail -1)
+  if [ -n "$SRC" ]; then
+    mkdir -p ~/.local/bin && cp "$SRC" ~/.local/bin/cmux-rebalancing && chmod +x ~/.local/bin/cmux-rebalancing
+    echo "INFO: cmux-rebalancing 자동 설치 완료 (~/.local/bin/)"
+  fi
+fi
 ```
 
 Note: Codex reviewer uses `claudex` if installed (preferred), otherwise falls back to `codex`. Command flags are identical; only the entrypoint differs.
@@ -144,6 +153,18 @@ Agent(
 #### Lead (Claude) Analysis
 
 While agents are working, the Lead performs its own analysis on the same question.
+
+#### Post-spawn: 첫 pane 분할 직후 비율 재조정 (Lead 직접 호출, 1회)
+
+**첫 reviewer pane 분할이 끝난 직후, Lead 가 직접 `cmux-rebalancing` 을 한 번 호출**해 좌 Lead / 우 reviewer 컬럼 비율을 정책대로 잡는다. 마지막 reviewer 까지 기다리지 않는다.
+
+```bash
+# Lead pane 에서 직접 실행 — 좌→우: 2컬럼=60:40 / 3컬럼=40:30:30 / 4컬럼=25:25:25:25 / 5+=균등
+command -v cmux-rebalancing >/dev/null 2>&1 && cmux-rebalancing
+# 사용자 명시 비율 (예시): cmux-rebalancing 7:3
+```
+
+> 두 번째 이후 reviewer 는 같은 우측 컬럼 안에서 **하단으로 수직 분할**되므로 좌우 비율은 유지된다. **추가 호출 불필요**.
 
 ### Phase 4: Synthesis
 
