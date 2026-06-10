@@ -12,6 +12,36 @@ bluehansl 개인 워크플로 도구 모음의 Codex 포팅본. Codex에서 **`d
 | `deft:set-statusline` | Codex TUI status line 설정 (`~/.codex/config.toml`) |
 | `deft:restore-statusline` | status line 복원 |
 
+### 강한 트리거 — 이 문구가 들어가면 해당 skill 이 발동
+
+| 입력에 포함된 문구 | 발동 | 비고 |
+|---|---|---|
+| **"회의"** / **"미팅"** | `multi-round` | |
+| **"코딩 작업"** | Codex 자체 task 실행 | agent-teams 는 Claude 전용 — Codex 에선 자체 task 로 처리 |
+| **"비교"** / **"교차 검증"** / **"멀티 체크"** | `multi-check` | |
+
+### 사용 예제 문구
+
+**multi-check** — 1회 물어보고 답 비교:
+```
+이 설계 멀티 체크해줘
+다른 AI한테도 물어봐서 교차 검증해줘
+```
+
+**multi-round** — N라운드 토론·합의:
+```
+결제 트랜잭션 격리 수준 어떻게 할지 회의 열어줘
+REST vs GraphQL 이 주제로 미팅 진행해줘
+(독립 토론) 이 주제 독립 토론으로 진행해줘
+```
+
+**work-id 연계** — 회의를 작업에 묶는 영속 키:
+```
+(최초 1회) work-id 규약 메뉴에서 선택 — Claude 측에서 이미 정했으면 그 규약 재사용
+(연계 흐름) IT-14610 회의 열어줘 → 합의 → Claude 측 agent-teams 가 같은 work-id 로
+            회의 결과를 작업노트에 반영
+```
+
 ## 설치 (Codex)
 
 ```

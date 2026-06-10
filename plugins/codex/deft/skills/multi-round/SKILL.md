@@ -1,6 +1,6 @@
 ---
 name: multi-round
-description: 여러 AI(Codex/Claudex/Claude)가 N라운드 양방향 토론으로 합의에 도달하는 멀티턴 회의 skill. cmux 환경에서는 pane 시각화를 우선 사용하고, cmux 외부에서는 claudex MCP 또는 codex 내부 병렬 처리로 진행한다. 강한 트리거 — "회의"/"미팅" 단어가 포함된 요청은 본 skill 로 발동 (예: "회의 열어줘", "이 주제로 미팅"). 그 외 트리거 — "멀티 라운드", "라운드 토론", "AI끼리 토론", "합의될 때까지", "클로덱스랑 토론", "multi round", "multi-round debate". 단 "작업" 단어가 포함된 요청은 파일 작업·장기 협업이므로 Codex 자체 task 실행, 1발 비교는 multi-check 를 쓰세요.
+description: 여러 AI(Codex/Claudex/Claude)가 N라운드 양방향 토론으로 합의에 도달하는 멀티턴 회의 skill. cmux 환경에서는 pane 시각화를 우선 사용하고, cmux 외부에서는 claudex MCP 또는 codex 내부 병렬 처리로 진행한다. 강한 트리거 — "회의"/"미팅" 단어가 포함된 요청은 본 skill 로 발동 (예: "회의 열어줘", "이 주제로 미팅"). 그 외 트리거 — "멀티 라운드", "라운드 토론", "AI끼리 토론", "합의될 때까지", "클로덱스랑 토론", "multi round", "multi-round debate". 단 "코딩 작업" 문구가 포함된 요청은 파일 작업·장기 협업이므로 Codex 자체 task 실행, 1발 비교는 multi-check 를 쓰세요.
 ---
 
 # Multi-Round Skill (Codex)
@@ -439,10 +439,10 @@ pgrep -f "claudex mcp-server" 2>/dev/null
 
 ## Trigger 라우팅 규칙 (강한 키워드)
 
-| 사용자 입력에 포함된 단어 | 발동 |
+| 사용자 입력에 포함된 문구 | 발동 |
 |---|---|
 | **"회의"** / **"미팅"** | **`multi-round` (본 skill)** — 예: "회의 열어줘", "이 주제로 미팅" |
-| **"작업"** | Codex 자체 task 실행 (파일 작업·장기 협업) |
+| **"코딩 작업"** | Codex 자체 task 실행 (파일 작업·장기 협업) — "작업" 단독은 라우팅 안 함 |
 | "비교" / "교차 검증" | `multi-check` |
 
 `multi-round` 가 매칭되어선 안 되는 어휘 (단독 사용 시):

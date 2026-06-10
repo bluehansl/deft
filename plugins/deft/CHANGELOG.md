@@ -4,6 +4,17 @@
 
 형식은 [Keep a Changelog](https://keepachangelog.com/ko/1.1.0/) 를 따르며, 버전 체계는 [Semantic Versioning](https://semver.org/lang/ko/) 을 사용합니다 (`claude-X.Y.Z` / `codex-X.Y.Z` 접두).
 
+## [claude-2.4.1] - 2026-06-10
+
+### Changed
+- **agent-teams 강한 트리거 조합형으로 축소** — "작업" 단독 → **"코딩 작업"** 조합. "작업"은 일상어라 오발동 위험 ("파일 정리 작업" 같은 단순 요청에 팀 spawn 방지). multi-round 양쪽 라우팅 표의 대응 표기도 동일 갱신.
+- **README (Claude/Codex) 에 "강한 트리거" + "사용 예제 문구" 섹션 신규** — skill 별 발동 문구·예시·work-id 연계 흐름을 plugin 진입점에서 바로 확인 가능.
+
+## [codex-1.3.1] - 2026-06-10
+
+### Changed
+- multi-round (Codex) 라우팅 표 "작업" → "코딩 작업" 조합형 갱신 + README 트리거/사용 예제 섹션 신규.
+
 ## [claude-2.4.0] - 2026-06-10
 
 ### Added
