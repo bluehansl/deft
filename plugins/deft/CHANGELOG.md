@@ -4,6 +4,22 @@
 
 형식은 [Keep a Changelog](https://keepachangelog.com/ko/1.1.0/) 를 따르며, 버전 체계는 [Semantic Versioning](https://semver.org/lang/ko/) 을 사용합니다 (`claude-X.Y.Z` / `codex-X.Y.Z` 접두).
 
+## [claude-2.2.1] - 2026-06-10
+
+### Added
+- **agent-teams 팀원 모델 명시 복원** — teams-porter 가 프로젝트-중립 일반화 과정에서 제거한 모델 표기를 복구. 모든 팀원은 **Claude Fable 5 (`claude-fable-5`)** 로 통일 — 동질 시각, 컨벤션 강제 일관.
+  - `agents/*.md` 8종(architect/backendDev/designer/frontendDev/lead/pm/qa/reviewer) 각 페르소나 본문 시작부에 모델 메타 라인 삽입 (`> **모델**: Claude Fable 5 (\`claude-fable-5\`) — Agent tool 호출 시 alias \`fable\``).
+  - `SKILL.md` §2 도입부에 팀원 모델 한 줄 요약 + §4-3 spawn 템플릿에 **Agent 도구 호출 인자** 섹션 신규: `model: "fable"` alias 사용 명시 (Agent tool enum 제약: `sonnet`/`opus`/`haiku`/`fable` — 구체 ID 직접 지정 불가).
+
+### Notes
+- 본 버전은 모델 명시 복원. 동작 호환성 유지 (PATCH bump).
+- `~/git/AGENTS.md` + `~/git/AGENTS.teams.md` 의 "Claude opus" 표기 24군데도 동일 패턴으로 갱신 (Lead 환경 본업 정책 — 별도 repo).
+
+## [codex-1.1.3] - 2026-06-10
+
+### Fixed
+- **multi-check (Codex) Bash CLI fallback 의 claude reviewer 모델 ID 갱신** — `plugins/codex/deft/skills/multi-check/SKILL.md:170` 의 `claude --model claude-opus-4-6` → `claude --model claude-fable-5` (신규 모델 반영).
+
 ## [codex-1.1.2] - 2026-06-09
 
 ### Fixed

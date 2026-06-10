@@ -12,7 +12,7 @@
       "name": "deft",
       "source": "./plugins/deft",
       "description": "deft — 개인 워크플로 도구 모음: multi-check(다중 AI 교차검증) / multi-round(멀티라운드 양방향 토론) / agent-teams(에이전트 팀 운영) / session-relocate(세션 이동) / set·restore-statusline(상태줄 설정·복원)",
-      "version": "claude-2.2.0",
+      "version": "claude-2.2.1",
       "author": {
         "name": "bluehansl"
       }
