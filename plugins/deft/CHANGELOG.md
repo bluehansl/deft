@@ -4,6 +4,11 @@
 
 형식은 [Keep a Changelog](https://keepachangelog.com/ko/1.1.0/) 를 따르며, 버전 체계는 [Semantic Versioning](https://semver.org/lang/ko/) 을 사용합니다 (`claude-X.Y.Z` / `codex-X.Y.Z` 접두).
 
+## [claude-2.4.3] - 2026-06-10
+
+### Fixed
+- **외부 참조 삭제의 동작 영향 검증 + 잔존 1건 정정** — 삭제한 참조 3종이 가리키던 내용의 skill 내 이식 여부 확인 (회의 모드 정의·응답 언어 규칙·자동 write 금지 모두 본문에 자기완결 확인). 검증 중 보안 가드 표의 "§6-3 사전 컨펌 정책 위반" 외부 정책 번호 잔존 1건 발견 → "사용자 환경 임의 변경" 으로 일반화.
+
 ## [claude-2.4.2] - 2026-06-10
 
 ### Removed

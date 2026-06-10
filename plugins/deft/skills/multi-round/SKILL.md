@@ -476,7 +476,7 @@ cmux 경로의 경우 4-A 패턴 반복.
 | 1 | Phase 0 참가자 CLI 1개 이상 설치 확인 (`claude` / `claudex` / `codex` 중) | abort |
 | 2 | claudex mcp-server 기동 시 `-c mcp_servers={}` 강제 (worker MCP 컨텍스트 격리) | 의도와 다른 MCP 도구 노출 |
 | 3 | cmux send 줄바꿈 sanitize | 조기 제출 / prompt 손상 |
-| 4 | settings.json 자동 write 금지 (수동 가이드만) | §6-3 사전 컨펌 정책 위반 |
+| 4 | settings.json 자동 write 금지 (수동 가이드만) | 사용자 환경 임의 변경 |
 | 5 | claudex/claude/codex 모두 없으면 명시 에러 (silent 실패 X) | 사용자 혼란 |
 | 6 | Lead surface 캡처는 `cmux identify` 의 `.caller.surface_ref` 사용 | fallback 미작동 |
 
