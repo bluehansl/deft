@@ -1,6 +1,6 @@
 ---
 name: agent-teams
-description: Claude Code 내장 팀 기능으로 다중 Claude 에이전트 팀을 운영하는 skill. Lead가 역할별 팀원(backendDev/frontendDev/qa 등)을 spawn해 분석→구현→검증을 분담하고, 단계 게이트·역할 페르소나·work-id 기반 영속 작업노트로 일관성과 연속성을 보장한다. 1발 비교는 multi-check, AI mix 토론·합의는 multi-round 를 쓰세요. 트리거 — "에이전트 팀", "팀으로 작업", "팀으로 구현", "역할 나눠서 해", "BE/FE 나눠서 해", "QA까지 붙여", "spawn a team".
+description: Claude Code 내장 팀 기능으로 다중 Claude 에이전트 팀을 운영하는 skill. Lead가 역할별 팀원(backendDev/frontendDev/qa 등)을 spawn해 분석→구현→검증을 분담하고, 단계 게이트·역할 페르소나·work-id 기반 영속 작업노트로 일관성과 연속성을 보장한다. 강한 트리거 — "작업" 단어가 포함된 요청은 본 skill 로 발동 (예: "IT-14610 작업 시작", "이거 작업해줘", "작업 이어서"). 그 외 트리거 — "에이전트 팀", "팀으로 작업", "팀으로 구현", "역할 나눠서 해", "BE/FE 나눠서 해", "QA까지 붙여", "spawn a team". 단 "회의"/"미팅" 단어가 포함된 요청은 multi-round, 1발 비교는 multi-check 를 쓰세요.
 ---
 
 # Agent Teams Skill
@@ -71,6 +71,16 @@ fi
 | **`deft:agent-teams`** (본 skill) | **지속 협업** (multi-turn 분담·구현·리뷰) | **Claude끼리** (내장 팀 기능) | **"실제 코드 분담·구현·검증·리뷰 루프·작업노트 관리"** |
 
 판단 키워드: **답이 하나면 multi-check, 답을 좁혀가야 하면 multi-round, 코드를 만져야 하면 agent-teams.**
+
+**강한 트리거 라우팅** (단어 포함 시 우선 적용):
+
+| 사용자 입력에 포함된 단어 | 발동 skill |
+|---|---|
+| **"작업"** | **`agent-teams` (본 skill)** — 예: "IT-14610 작업 시작", "이거 작업해줘" |
+| **"회의"** / **"미팅"** | `multi-round` — 예: "회의 열어줘", "이 주제로 미팅" |
+| "비교" / "교차 검증" | `multi-check` |
+
+작업과 회의가 **함께** 나오면 (예: "작업 시작 전에 회의부터") 먼저 요구되는 쪽을 발동하고, 이어지는 단계는 같은 work-id 로 연계한다.
 
 > **`multi-round collaborate` ↔ `agent-teams` 경계** — multi-round의 `collaborate` 모드는 **분담 검토·분담 설계·독립 의견 작성 후 상호 리뷰**까지다(실제 파일 수정·테스트는 하지 않는다). 실제 **파일 수정·테스트·작업노트·코드 분담 구현**이 필요하면 agent-teams다. → collaborate 진행 중 실제 코드 작업이 필요해지면 **agent-teams로 승격**한다.
 

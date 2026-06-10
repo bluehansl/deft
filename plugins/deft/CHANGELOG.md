@@ -4,6 +4,29 @@
 
 형식은 [Keep a Changelog](https://keepachangelog.com/ko/1.1.0/) 를 따르며, 버전 체계는 [Semantic Versioning](https://semver.org/lang/ko/) 을 사용합니다 (`claude-X.Y.Z` / `codex-X.Y.Z` 접두).
 
+## [claude-2.4.0] - 2026-06-10
+
+### Added
+- **강한 트리거 라우팅 규칙** — 호출 의도가 애매하던 multi-round ↔ agent-teams 경계를 단어 기반으로 명확화:
+  - **"회의" / "미팅"** 단어 포함 → `multi-round` 발동 (예: "회의 열어줘", "이 주제로 미팅")
+  - **"작업"** 단어 포함 → `agent-teams` 발동 (예: "IT-14610 작업 시작", "이거 작업해줘")
+  - 두 단어가 함께 나오면 먼저 요구되는 쪽 발동 + 이어지는 단계는 같은 work-id 로 연계
+  - frontmatter description + SKILL 본문 라우팅 표에 반영 (multi-round / agent-teams 양쪽)
+
+### Fixed
+- **multi-round Trigger 회피 매트릭스의 "회의" 모순 정리** — 과거 broker 시절 흔적으로 "회의"가 회피 어휘에 잔존 → 강한 트리거로 반전. 회피 어휘는 "한번 봐줘"/"검토해줘"(1발 의도) 류만 유지.
+
+### Notes
+- 호출 경로(트리거) 추가 → MINOR bump (claude-2.3.0 → claude-2.4.0).
+
+## [codex-1.3.0] - 2026-06-10
+
+### Added
+- **multi-round (Codex) 강한 트리거** — "회의"/"미팅" 단어 포함 시 발동. "작업" 단어는 Codex 자체 task 실행으로 라우팅.
+
+### Fixed
+- Trigger 회피 매트릭스의 "회의" 모순 정리 (Claude 측과 동일).
+
 ## [claude-2.3.0] - 2026-06-10
 
 ### Added

@@ -1,6 +1,6 @@
 ---
 name: multi-round
-description: 여러 AI(Claude/Claudex/Codex)가 N라운드 양방향 토론으로 의견을 좁혀 합의에 도달하는 멀티턴 회의 skill. cmux 환경에선 pane 시각화로, cmux 외부에선 MCP 경유로 동작. 1발 비교는 multi-check, 코드 분담·구현은 agent-teams를 쓰세요. 트리거 키워드 — "멀티 라운드", "라운드 토론", "왔다갔다 토론", "AI끼리 토론시켜", "수렴할 때까지 주고받아", "multi round", "multi-round debate".
+description: 여러 AI(Claude/Claudex/Codex)가 N라운드 양방향 토론으로 의견을 좁혀 합의에 도달하는 멀티턴 회의 skill. cmux 환경에선 pane 시각화로, cmux 외부에선 MCP 경유로 동작. 강한 트리거 — "회의"/"미팅" 단어가 포함된 요청은 본 skill 로 발동 (예: "회의 열어줘", "미팅 진행해", "이 주제로 회의"). 그 외 트리거 — "멀티 라운드", "라운드 토론", "왔다갔다 토론", "AI끼리 토론시켜", "수렴할 때까지 주고받아", "multi round", "multi-round debate". 단 "작업" 단어가 포함된 요청은 agent-teams, 1발 비교는 multi-check 를 쓰세요.
 ---
 
 # Multi-Round Skill
@@ -496,13 +496,19 @@ cmux 경로의 경우 4-A 패턴 반복.
 | 한 워커 BLOCKED | 사용자에게 즉시 보고 + 결정 위임 |
 | max-round 도달 (기본 5) | Phase 5 종합 — 미합의 항목 명시 + Lead 권장안 1개 제시 |
 
-## Trigger 회피 매트릭스 (오발동 방지)
+## Trigger 라우팅 규칙 (강한 키워드)
 
-`multi-round` 가 매칭되어선 안 되는 어휘:
-- "회의", "회의 좀 해줘", "한번 봐줘", "같이 봐줘"
-- "검토해줘", "워커 띄워", "둘이서 얘기해봐"
+| 사용자 입력에 포함된 단어 | 발동 skill |
+|---|---|
+| **"회의"** / **"미팅"** | **`multi-round` (본 skill)** — 예: "회의 열어줘", "이 주제로 미팅" |
+| **"작업"** | **`agent-teams`** — 예: "IT-14610 작업 시작", "이거 작업해줘" |
+| "비교" / "교차 검증" | `multi-check` |
 
-`multi-check` / `agent-teams` 와 혼동되지 않게 — `description` 안에 경계를 한 줄로 표시한다 ("1발 비교는 `multi-check`, 코드 분담·구현은 `agent-teams`").
+회의·미팅과 작업이 **함께** 나오면 (예: "작업 시작 전에 회의부터") 문맥상 먼저 요구되는 쪽을 발동하고, 이어지는 단계는 work-id 로 연계한다.
+
+`multi-round` 가 매칭되어선 안 되는 어휘 (단독 사용 시):
+- "한번 봐줘", "같이 봐줘", "검토해줘" (1발 검토 의도 — multi-check 또는 단독)
+- "워커 띄워", "둘이서 얘기해봐" (의도 불명 — 1회 확인)
 
 ## 워커 prompt 표준 inject (각 워커에게 전달)
 
