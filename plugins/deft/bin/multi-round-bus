@@ -1,0 +1,402 @@
+#!/usr/bin/env node
+'use strict';
+/*
+ * multi-round-bus — deft multi-round 메시지 버스 (브로드캐스트 보드 + 노크)
+ *
+ * 한 코드 두 진입점:
+ *   multi-round-bus mcp                          # stdio MCP 서버 (워커가 MCP 도구로 접근)
+ *   multi-round-bus <post|check|register|...>    # CLI (Lead 가 Bash 로 직접 호출)
+ *
+ * 통신 모델:
+ *   - board.jsonl       : append-only 메시지 보드 (데이터 채널 — 본문 전부 여기로)
+ *   - participants.json : 참가자 레지스트리 {name: {surface, kind}}
+ *   - cursors.json      : 참가자별 마지막 읽은 메시지 id
+ *   - knocks.json       : 참가자별 마지막 노크 시점 id (디바운스)
+ *   - post 시 발신자 제외 전원에게 cmux send "[bus] 메시지 확인" 노크 (제어 채널 — 한 줄만)
+ *   - 디바운스: knocks[p] > cursors[p] 이면 미확인 노크 존재 → 추가 노크 skip
+ *
+ * 세션 디렉토리: --session <dir> 인자 또는 env MULTI_ROUND_SESSION_DIR
+ * 본인 식별:    --from/--as 인자 또는 env BUS_PARTICIPANT
+ */
+
+const fs = require('fs');
+const path = require('path');
+const { execFileSync } = require('child_process');
+
+const KNOCK_TEXT = '[bus] 메시지 확인';
+const LOCK_STALE_MS = 5000;
+
+// ---------- 공통 유틸 ----------
+
+function fail(msg) {
+  process.stderr.write(`ERROR: ${msg}\n`);
+  process.exit(1);
+}
+
+function readJson(file, fallback) {
+  try {
+    return JSON.parse(fs.readFileSync(file, 'utf8'));
+  } catch (_) {
+    return fallback;
+  }
+}
+
+function writeJson(file, obj) {
+  const tmp = `${file}.tmp.${process.pid}`;
+  fs.writeFileSync(tmp, JSON.stringify(obj, null, 2) + '\n');
+  fs.renameSync(tmp, file);
+}
+
+function withLock(dir, fn) {
+  const lockDir = path.join(dir, '.bus-lock');
+  const deadline = Date.now() + 10000;
+  for (;;) {
+    try {
+      fs.mkdirSync(lockDir);
+      break;
+    } catch (e) {
+      if (e.code !== 'EEXIST') throw e;
+      try {
+        const st = fs.statSync(lockDir);
+        if (Date.now() - st.mtimeMs > LOCK_STALE_MS) {
+          fs.rmdirSync(lockDir); // stale lock 강제 해제
+          continue;
+        }
+      } catch (_) { /* 경합 중 사라짐 — 재시도 */ }
+      if (Date.now() > deadline) throw new Error('bus lock timeout (10s)');
+      const buf = new SharedArrayBuffer(4);
+      Atomics.wait(new Int32Array(buf), 0, 0, 50); // 50ms sleep
+    }
+  }
+  try {
+    return fn();
+  } finally {
+    try { fs.rmdirSync(lockDir); } catch (_) { /* 이미 해제 */ }
+  }
+}
+
+function busFiles(dir) {
+  return {
+    board: path.join(dir, 'board.jsonl'),
+    participants: path.join(dir, 'participants.json'),
+    cursors: path.join(dir, 'cursors.json'),
+    knocks: path.join(dir, 'knocks.json'),
+  };
+}
+
+function readBoard(dir) {
+  const f = busFiles(dir).board;
+  let raw;
+  try { raw = fs.readFileSync(f, 'utf8'); } catch (_) { return []; }
+  const out = [];
+  for (const line of raw.split('\n')) {
+    const t = line.trim();
+    if (!t) continue;
+    try { out.push(JSON.parse(t)); } catch (_) { /* 손상 줄 skip */ }
+  }
+  return out;
+}
+
+// ---------- 노크 (제어 채널) ----------
+
+function cmuxKnock(surface) {
+  try {
+    execFileSync('cmux', ['send', '--surface', surface, KNOCK_TEXT], { stdio: 'ignore', timeout: 5000 });
+    execFileSync('cmux', ['send-key', '--surface', surface, 'Enter'], { stdio: 'ignore', timeout: 5000 });
+    return true;
+  } catch (_) {
+    return false;
+  }
+}
+
+// post 후 호출 — 발신자 제외 전원 노크 + 디바운스. lock 밖에서 실행(외부 프로세스 호출이라 느림).
+function knockOthers(dir, sender, msgId) {
+  const F = busFiles(dir);
+  const participants = readJson(F.participants, {});
+  const cursors = readJson(F.cursors, {});
+  const knocks = readJson(F.knocks, {});
+  const result = { knocked: [], skipped: [], failed: [] };
+
+  for (const [name, info] of Object.entries(participants)) {
+    if (name === sender) continue;
+    if (!info || !info.surface) { result.skipped.push(`${name}(surface 없음)`); continue; }
+    const lastKnock = knocks[name] || 0;
+    const lastRead = cursors[name] || 0;
+    if (lastKnock > lastRead) { result.skipped.push(`${name}(미확인 노크 존재 — 디바운스)`); continue; }
+    if (cmuxKnock(info.surface)) {
+      knocks[name] = msgId;
+      result.knocked.push(name);
+    } else {
+      result.failed.push(name);
+    }
+  }
+  withLock(dir, () => {
+    const cur = readJson(F.knocks, {});
+    for (const n of result.knocked) cur[n] = Math.max(cur[n] || 0, msgId);
+    writeJson(F.knocks, cur);
+  });
+  return result;
+}
+
+// ---------- 핵심 동작 ----------
+
+function doRegister(dir, name, surface, kind) {
+  if (!name) fail('register: --name 필수');
+  fs.mkdirSync(dir, { recursive: true });
+  return withLock(dir, () => {
+    const F = busFiles(dir);
+    const participants = readJson(F.participants, {});
+    participants[name] = { surface: surface || null, kind: kind || 'worker' };
+    writeJson(F.participants, participants);
+    return { registered: name, surface: surface || null, kind: kind || 'worker' };
+  });
+}
+
+function doPost(dir, from, to, content, type) {
+  if (!from) fail('post: 발신자 필요 (--from 또는 env BUS_PARTICIPANT)');
+  if (!to) fail('post: 수신자 필요 (--to <참가자 이름 | all>)');
+  if (!content || !content.trim()) fail('post: 본문이 비어 있음');
+  fs.mkdirSync(dir, { recursive: true });
+  const F = busFiles(dir);
+  const msg = withLock(dir, () => {
+    const board = readBoard(dir);
+    const m = {
+      id: board.length ? board[board.length - 1].id + 1 : 1,
+      ts: new Date().toISOString(),
+      from,
+      to,
+      type: type || 'message',
+      content,
+    };
+    fs.appendFileSync(F.board, JSON.stringify(m) + '\n');
+    return m;
+  });
+  const knock = knockOthers(dir, from, msg.id);
+  return { posted: { id: msg.id, from: msg.from, to: msg.to, type: msg.type }, knock };
+}
+
+function doCheck(dir, as) {
+  if (!as) fail('check: 본인 이름 필요 (--as 또는 env BUS_PARTICIPANT)');
+  const F = busFiles(dir);
+  return withLock(dir, () => {
+    const board = readBoard(dir);
+    const cursors = readJson(F.cursors, {});
+    const last = cursors[as] || 0;
+    const fresh = board.filter((m) => m.id > last && m.from !== as);
+    if (board.length) {
+      cursors[as] = board[board.length - 1].id;
+      writeJson(F.cursors, cursors);
+    }
+    return { participant: as, newMessages: fresh, totalOnBoard: board.length };
+  });
+}
+
+function doParticipants(dir) {
+  return readJson(busFiles(dir).participants, {});
+}
+
+function doHistory(dir, limit) {
+  const board = readBoard(dir);
+  return limit ? board.slice(-limit) : board;
+}
+
+// check 결과를 워커/Lead 가 읽기 좋은 텍스트로
+function renderCheck(res) {
+  if (!res.newMessages.length) return `[bus] 새 메시지 없음 (보드 총 ${res.totalOnBoard}건)`;
+  const me = res.participant;
+  const lines = [`[bus] 새 메시지 ${res.newMessages.length}건 (수신자: ${me})`];
+  for (const m of res.newMessages) {
+    const mine = m.to === me || m.to === 'all';
+    lines.push('');
+    lines.push(`--- #${m.id} | from: ${m.from} | to: ${m.to}${mine ? ' ◀ 본인 수신' : ' (참고용)'} | type: ${m.type} | ${m.ts}`);
+    lines.push(m.content);
+  }
+  lines.push('');
+  lines.push('처리 규칙: 수신자가 본인(또는 all)인 메시지는 작업 수행 후 post_message 로 응답(수신자=요청자). 본인이 아니면 컨텍스트로만 검토하고, 기여할 내용이 있을 때만 수신자를 지정해 자발 발언.');
+  return lines.join('\n');
+}
+
+// ---------- MCP stdio 서버 ----------
+
+const MCP_TOOLS = [
+  {
+    name: 'post_message',
+    description:
+      '메시지 버스 보드에 메시지를 게시한다. 게시 즉시 발신자를 제외한 모든 참가자(Lead 포함)에게 확인 노크가 전달된다. ' +
+      '수신자(to)를 지정해도 보드는 전원에게 공개(브로드캐스트)다 — to 는 "누가 작업/응답할 차례인가"의 지정이다.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        to: { type: 'string', description: '수신자 참가자 이름. 전원 대상이면 "all"' },
+        content: { type: 'string', description: '메시지 본문 (마크다운 가능, 길이 제한 없음)' },
+        type: { type: 'string', description: '선택: request | response | comment | signal (기본 message)' },
+        from: { type: 'string', description: '선택: 발신자 이름 (기본 env BUS_PARTICIPANT)' },
+      },
+      required: ['to', 'content'],
+    },
+  },
+  {
+    name: 'check_messages',
+    description:
+      '버스 보드에서 본인이 아직 읽지 않은 새 메시지를 모두 가져온다. "[bus] 메시지 확인" 노크를 받으면 즉시 호출할 것. ' +
+      '수신자가 본인인 메시지는 작업 후 post_message 로 응답하고, 아니면 컨텍스트로만 검토한다.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        as: { type: 'string', description: '선택: 본인 이름 (기본 env BUS_PARTICIPANT)' },
+      },
+    },
+  },
+  {
+    name: 'list_participants',
+    description: '버스에 등록된 참가자 목록(이름·역할)을 조회한다.',
+    inputSchema: { type: 'object', properties: {} },
+  },
+];
+
+function mcpServe(dir, selfName) {
+  let buf = '';
+  const send = (obj) => process.stdout.write(JSON.stringify(obj) + '\n');
+
+  const handle = (req) => {
+    const { id, method, params } = req;
+    const reply = (result) => { if (id !== undefined) send({ jsonrpc: '2.0', id, result }); };
+    const replyErr = (code, message) => { if (id !== undefined) send({ jsonrpc: '2.0', id, error: { code, message } }); };
+
+    try {
+      switch (method) {
+        case 'initialize':
+          reply({
+            protocolVersion: (params && params.protocolVersion) || '2025-03-26',
+            capabilities: { tools: {} },
+            serverInfo: { name: 'multi-round-bus', version: '1.0.0' },
+          });
+          break;
+        case 'notifications/initialized':
+        case 'notifications/cancelled':
+          break; // 알림 — 응답 없음
+        case 'ping':
+          reply({});
+          break;
+        case 'tools/list':
+          reply({ tools: MCP_TOOLS });
+          break;
+        case 'tools/call': {
+          const tool = params && params.name;
+          const args = (params && params.arguments) || {};
+          let text;
+          if (tool === 'post_message') {
+            const r = doPost(dir, args.from || selfName, args.to, args.content, args.type);
+            text =
+              `[bus] 게시 완료 #${r.posted.id} (to: ${r.posted.to})` +
+              `\n노크 전달: ${r.knock.knocked.join(', ') || '없음'}` +
+              (r.knock.skipped.length ? `\n노크 생략: ${r.knock.skipped.join(', ')}` : '') +
+              (r.knock.failed.length ? `\n노크 실패: ${r.knock.failed.join(', ')} (cmux 미가용 — 상대가 다음 check 때 수신)` : '');
+          } else if (tool === 'check_messages') {
+            text = renderCheck(doCheck(dir, args.as || selfName));
+          } else if (tool === 'list_participants') {
+            text = JSON.stringify(doParticipants(dir), null, 2);
+          } else {
+            replyErr(-32602, `unknown tool: ${tool}`);
+            break;
+          }
+          reply({ content: [{ type: 'text', text }] });
+          break;
+        }
+        default:
+          if (id !== undefined) replyErr(-32601, `method not found: ${method}`);
+      }
+    } catch (e) {
+      replyErr(-32603, String(e && e.message ? e.message : e));
+    }
+  };
+
+  process.stdin.setEncoding('utf8');
+  process.stdin.on('data', (chunk) => {
+    buf += chunk;
+    let nl;
+    while ((nl = buf.indexOf('\n')) >= 0) {
+      const line = buf.slice(0, nl).trim();
+      buf = buf.slice(nl + 1);
+      if (!line) continue;
+      let req;
+      try { req = JSON.parse(line); } catch (_) { continue; }
+      handle(req);
+    }
+  });
+  process.stdin.on('end', () => process.exit(0));
+}
+
+// ---------- CLI 파싱 ----------
+
+function parseArgs(argv) {
+  const opts = { _: [] };
+  for (let i = 0; i < argv.length; i++) {
+    const a = argv[i];
+    if (a.startsWith('--')) {
+      const key = a.slice(2);
+      const next = argv[i + 1];
+      if (next !== undefined && !next.startsWith('--')) { opts[key] = next; i++; }
+      else opts[key] = true;
+    } else {
+      opts._.push(a);
+    }
+  }
+  return opts;
+}
+
+function main() {
+  const [cmd, ...rest] = process.argv.slice(2);
+  const opts = parseArgs(rest);
+  const dir = opts.session || process.env.MULTI_ROUND_SESSION_DIR;
+  const self = process.env.BUS_PARTICIPANT;
+
+  if (!cmd || cmd === 'help' || cmd === '--help') {
+    process.stdout.write(`multi-round-bus — deft multi-round 메시지 버스
+
+사용법:
+  multi-round-bus mcp                                          # stdio MCP 서버 (env MULTI_ROUND_SESSION_DIR, BUS_PARTICIPANT)
+  multi-round-bus register --session <dir> --name <n> [--surface surface:N] [--kind lead|worker]
+  multi-round-bus post     --session <dir> --from <n> --to <n|all> [--type <t>] --content <본문>
+                           (--content 생략 시 stdin 에서 본문 읽음)
+  multi-round-bus check    --session <dir> --as <n> [--json]
+  multi-round-bus participants --session <dir>
+  multi-round-bus history  --session <dir> [--limit N]
+`);
+    process.exit(0);
+  }
+
+  if (!dir) fail('세션 디렉토리 필요 (--session <dir> 또는 env MULTI_ROUND_SESSION_DIR)');
+
+  switch (cmd) {
+    case 'mcp':
+      mcpServe(dir, self);
+      break;
+    case 'register':
+      console.log(JSON.stringify(doRegister(dir, opts.name, opts.surface, opts.kind)));
+      break;
+    case 'post': {
+      let content = opts.content;
+      if (content === undefined || content === true) {
+        content = fs.readFileSync(0, 'utf8'); // stdin
+      }
+      console.log(JSON.stringify(doPost(dir, opts.from || self, opts.to, content, opts.type)));
+      break;
+    }
+    case 'check': {
+      const res = doCheck(dir, opts.as || self);
+      console.log(opts.json ? JSON.stringify(res, null, 2) : renderCheck(res));
+      break;
+    }
+    case 'participants':
+      console.log(JSON.stringify(doParticipants(dir), null, 2));
+      break;
+    case 'history':
+      console.log(JSON.stringify(doHistory(dir, opts.limit ? parseInt(opts.limit, 10) : 0), null, 2));
+      break;
+    default:
+      fail(`알 수 없는 명령: ${cmd} (multi-round-bus help 참조)`);
+  }
+}
+
+main();

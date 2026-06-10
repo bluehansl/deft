@@ -207,8 +207,8 @@ work-id를 **어떤 규칙으로 만들지**는 특정 값(예: 티켓번호)을
      └─ 없음 → §6-1 템플릿으로 신규 생성
   3. multi-round 회의록 교차 참조 (§3-5):
      ~/.claude/plugin-data/deft/multi-round/sessions/<work-id>/ 존재?
-     ├─ 있음 → 최근 회의 transcript 의 합의 결과를 확인하고,
-     │         미반영 결정이 있으면 work.md `## 설계 결정` 에 반영 (Lead)
+     ├─ 있음 → 최근 회의의 합의 결과(`summary.md` 우선, 없으면 `board.jsonl` 회의록 원본)를
+     │         확인하고, 미반영 결정이 있으면 work.md `## 설계 결정` 에 반영 (Lead)
      └─ 없음 → skip
   4. 각 팀원도 본인 <role>.md 존재 시 미완료 항목부터 이어서 진행
   5. work.md `## META`에 "현재 team-name" 기록 (내장 team-name 추적용)

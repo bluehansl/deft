@@ -4,6 +4,44 @@
 
 형식은 [Keep a Changelog](https://keepachangelog.com/ko/1.1.0/) 를 따르며, 버전 체계는 [Semantic Versioning](https://semver.org/lang/ko/) 을 사용합니다 (`claude-X.Y.Z` / `codex-X.Y.Z` 접두).
 
+## [claude-2.5.0] - 2026-06-11
+
+### Added
+- **multi-round 메시지 버스 신규** (`bin/multi-round-bus`, node 단일 스크립트·의존성 0) — 브로드캐스트 보드 + 노크 아키텍처로 통신 계층 전면 재설계:
+  - **한 코드 두 진입점**: 워커는 `mcp` 서브커맨드(stdio MCP 서버 — `post_message`/`check_messages`/`list_participants`), Lead 는 `post`/`check`/`register`/`history` CLI 를 Bash 직접 호출 (Lead MCP 등록 불필요).
+  - **보드 = 데이터 채널**: 모든 발언이 `board.jsonl` 에 게시 (전원 공개·브로드캐스트). 줄바꿈·길이 제한 없음 — cmux send sanitize·캡처 노이즈 문제 구조적 해소.
+  - **노크 = 제어 채널**: post 마다 발신자 제외 전원의 pane 에 `[bus] 메시지 확인` 한 줄 자동 주입 (Lead 포함 — 폴링 불필요). 참가자별 디바운스 (미확인 노크 존재 시 skip — 깨어나면 누적 일괄 처리).
+  - **수신자 지정 + 전원 공개**: 수신자만 작업·응답, 비수신 참가자는 컨텍스트 검토 + 필요 시 자발 발언 (회의실 메타포).
+  - 동시 쓰기 lock 직렬화 (`mkdir` atomic + stale 해제), 읽음 커서(`cursors.json`), 참가자 레지스트리(`participants.json`).
+
+### Changed
+- **multi-round SKILL Phase 2/3/4 전면 재편** — 통신 우선순위 매트릭스 신설:
+  - AI mix·전원 claudex/codex (cmux): ① MCP 버스 ② send/capture 폴백 ③ multi-check 안내 후 중단
+  - 전원 Claude: ① 팀메이트 기능 ② MCP 버스 ③ multi-check 안내 후 중단
+  - cmux 외부: claudex MCP conversation (stateful) → 불가 시 multi-check 안내 후 중단
+- **워커 MCP 인라인 주입** — 버스는 spawn 명령에 `-c mcp_servers.bus={...}` (claudex/codex TOML) 또는 `--strict-mcp-config --mcp-config <세션파일>` (claude) 로 주입. **사용자 환경 파일(`settings.json`/`config.toml`) 등록 절차 자체가 제거됨**.
+- **실측 발견 3건 반영** (claudex 0.138 E2E 테스트 — handshake·check·post·Lead 노크 수신 전체 사이클 검증 완료):
+  - `-c mcp_servers.*` 인라인은 기존 등록 서버에 **병합**(교체 아님) — 격리는 기존 서버 `enabled=false` 명시 비활성으로 (claude 측은 `--strict-mcp-config` 가 완전 격리).
+  - MCP 도구 호출마다 승인 elicitation 발급 (`tool_call_mcp_elicitation` stable 기능) — 워커 spawn 에 `--disable tool_call_mcp_elicitation` 포함 (인스턴스 한정).
+  - cmux surface 는 화면 렌더 시 쉘 기동(lazy-init) — 분할 직후 send 유실 방지용 readiness 마커 가드 신설 (§Phase 3-A (3.5)).
+- 페르소나 (codex/claude-participant) — 버스 프로토콜 신설 (노크 수신 → check → 수신자 판단 → 작업·응답 / 검토·자발 발언). "모든 통신은 Lead 경유" 모델 폐기.
+- 회의록 표준 변경 — 원본 `board.jsonl` + 종합 `summary.md` (구 round<N>-*.md 패턴 대체). agent-teams 연속성 절차의 회의 참조도 동일 갱신.
+- GUIDE/README — 버스 아키텍처 반영 (통신 구조 다이어그램, 트러블슈팅 노크·버스 항목, FAQ).
+
+### Removed
+- **1-shot history 재전송 경로 금지 명문화** — 멀티라운드는 지속 대화가 본질. 해당 형태가 필요한 요구는 multi-check 가 올바른 도구이므로 안내 후 중단.
+
+## [codex-1.4.0] - 2026-06-11
+
+### Added
+- multi-round (Codex) — Claude 측과 동일한 메시지 버스 아키텍처 포팅 (`bin/multi-round-bus` 동봉, Codex cache 경로 우선 자동 설치).
+
+### Changed
+- multi-round (Codex) SKILL/GUIDE/agents 전면 재편 — 통신 우선순위 매트릭스 (버스 → send/capture → multi-check 안내 / cmux 외부는 claudex MCP conversation).
+
+### Removed
+- **구 3-C (codex 내부 병렬 1-shot + history 누적 재전송) 제거** — 지속 대화 원칙 위반. multi-check 안내로 대체.
+
 ## [claude-2.4.4] - 2026-06-10
 
 ### Changed

@@ -1,6 +1,6 @@
 # multi-round — 사람용 가이드
 
-> 여러 AI(Claude / Claudex / Codex)가 한 주제에 대해 **N라운드에 걸쳐 양방향으로 의견을 주고받으며 합의에 도달**하는 멀티턴 회의 도구. cmux 환경에서는 pane 시각화로, cmux 외부에서는 `claudex mcp-server` 경유로 동작.
+> 여러 AI(Claude / Claudex / Codex)가 한 주제에 대해 **N라운드에 걸쳐 양방향으로 의견을 주고받으며 합의에 도달**하는 멀티턴 회의 도구. **메시지 버스(브로드캐스트 보드 + 노크)** 기반 — 워커는 cmux pane 의 살아있는 TUI, 통신 본문은 버스 보드, 깨우기는 한 줄 노크.
 
 ## 한 줄 컨셉
 
@@ -28,8 +28,8 @@
 
 - [ ] **참가자 CLI 1개 이상 설치** — `claude` 또는 `claudex` 또는 `codex` 중 최소 하나 (`which claude && which claudex && which codex`)
 - [ ] **mix 가능 여부 확인** — claude + claudex(또는 codex) 양쪽이면 mix가 default. 한쪽만이면 그 쪽만으로 진행
-- [ ] **cmux 환경 여부 확인** — cmux 안이면 pane 경로(Phase 3-B)가 우선. cmux 외부에서만 claudex MCP(Phase 3-A) 또는 단순 fallback 사용
-- [ ] **claudex MCP 등록** (cmux 외부에서 Lead가 Claude Code일 때) — `~/.claude/settings.json` 의 `mcpServers.claudex` 등록 확인 (또는 `claude mcp add-json --scope user claudex ...`). 미등록이고 cmux 환경이면 자동으로 Phase 3-B 로 진행
+- [ ] **cmux 환경 여부 확인** — cmux 안이면 메시지 버스 경로(Phase 3-A)가 기본. cmux 외부에서는 claudex MCP conversation(Phase 3-C)
+- [ ] **node 설치 여부** — 메시지 버스 헬퍼(`multi-round-bus`)가 node 스크립트. 없으면 send/capture 폴백(Phase 3-B)으로 자동 강등. 버스 헬퍼 자체는 skill 첫 실행 시 plugin 동봉본이 `~/.local/bin/` 으로 자동 설치됨 — **사용자 환경 파일(`settings.json` 등) 등록은 일절 불필요**
 - [ ] **회의 모드 결정 의도 정리** — 4지선다 메뉴 보고 고를지, 명시적으로 "토론해줘"·"분담해서" 등 키워드로 줄지
 - [ ] **종료 조건 결정** — 기본 "모든 AI 합의"로 자동 진행. 다른 조건 원하면 "max-round=10" / "한쪽 항복까지" 등 명시
 - [ ] **work-id 연계 확인** — 회의는 기본적으로 작업(work-id)에 연계됨. 입력에 티켓 번호 등이 있으면 자동 감지, 없으면 1회 질문. **독립 토론을 원하면 "독립 토론"이라고 명시**. work-id 규약 미설정이면 최초 1회 메뉴로 결정 (agent-teams 와 공유)
@@ -147,7 +147,7 @@ skill 실행 시 사용하는 세션·메타·hooks는 모두 **`~/.claude/plugi
 |---|---|---|---|
 | 통신 방식 | **1회성** fan-out (응답 비교) | **지속 N라운드** 양방향 | 지속 multi-turn |
 | AI 조합 | Codex / Claude / Gemini 동시 | **Claude + Claudex mix** (또는 Codex/Claude) | **Claude끼리만** |
-| 의존성·기반 | CLI 직접 호출 (MCP 무관) | **MCP 경유**, cmux·팀기능 무관 | Claude 팀 기능 베이스, MCP 불필요 |
+| 의존성·기반 | CLI 직접 호출 (MCP 무관) | **메시지 버스 + cmux pane** (팀기능 무관) | Claude 팀 기능 베이스, MCP 불필요 |
 | 종료 | 1라운드 답변 비교 | 합의 또는 사용자 개입 | 작업 완료 |
 | 결과물 | 답변 비교 표 | 합의된 결정 | 코드·파일·PR |
 | 무거움 | 가벼움 | 중간 | 무거움 |
@@ -177,27 +177,25 @@ skill 실행 시 사용하는 세션·메타·hooks는 모두 **`~/.claude/plugi
 
 ## 5. 동작 원리
 
-### 5-1. 통신 구조 (핵심)
+### 5-1. 통신 구조 (핵심) — 메시지 버스
 
 ```
-[Lead (Claude 또는 Claudex)]
-            │
-            ▼
-   ┌──────────────────┐
-   │   claudex가 띄운  │
-   │   mcp-server      │  ← 단일 MCP 서버. Lead가 어느 쪽이든 같은 서버 사용
-   │   (stdio)         │
-   └──────────────────┘
-        │         │
-        ▼         ▼
-   [Worker A] [Worker B]
-   (Claude 또는 Claudex 인스턴스 — mix가 default)
+[Lead pane (Claude Code)]     [Worker1 pane (claudex TUI)]    [Worker2 pane ...]
+        │ bin 헬퍼 Bash 호출           │ MCP 도구                      │ MCP 도구
+        ▼                             ▼                               ▼
+   ┌──────────────────────────────────────────────────────────────────┐
+   │            메시지 버스 (회의 세션 디렉토리 공유 보드)                │
+   │   board.jsonl — 모든 발언이 게시되는 보드 (전원 공개·브로드캐스트)    │
+   │   participants.json — 참가자 레지스트리 (이름 + pane surface)       │
+   └──────────────────────────────────────────────────────────────────┘
+      게시될 때마다: 발신자 제외 전원의 pane 에 "[bus] 메시지 확인" 노크
 ```
 
-- **MCP server는 항상 `claudex`가 띄움** (`claudex mcp-server`).
-- Lead가 **Claude이든 Claudex이든 동일한 MCP server를 통해 통신**.
-- Claude → Claudex 워커 호출, Claudex → Claude 워커 호출 모두 그 서버를 경유.
-- **cmux나 Claude 팀 기능에 종속 X** — multi-round는 자체 MCP 채널로 독립 동작.
+- **채널 분리**: 본문 전부는 버스 보드(데이터 채널), pane 으로는 노크 한 줄만(제어 채널) — `cmux send` 의 줄바꿈 조기 제출·캡처 노이즈 문제가 구조적으로 없음.
+- **워커 = pane 의 살아있는 TUI 본체** — 지속 대화가 유지되고, 사용자가 pane 으로 가서 직접 개입 가능. MCP 는 pane 에 노출되지 않는 순수 배관.
+- **수신자 지정 + 전원 공개**: Lead 가 수신자(예: worker1)를 지정해 게시해도 보드는 전원에게 보임. 수신자만 작업·응답하고, 나머지는 컨텍스트로 검토하다가 기여할 내용이 있을 때만 자발 발언 — **회의실 메타포**.
+- **노크가 턴을 굴림**: 게시 → 전원 노크 → 깨어난 참가자가 보드 확인 → 응답 게시 → 다시 전원 노크 (Lead 포함 — Lead 도 폴링 없이 깨어남). 연속 게시 시 미확인 노크가 있는 참가자에겐 노크 생략(디바운스) — 깨어나면 밀린 메시지를 한 번에 읽음.
+- Lead 는 버스 헬퍼를 Bash 로 직접 호출하고(MCP 등록 불필요), 워커는 spawn 명령에 인라인 주입된 MCP 도구(`check_messages`/`post_message`)로 같은 보드에 접근.
 
 ### 5-2. 라운드 진행 자동화
 
@@ -223,14 +221,15 @@ skill 실행 시 사용하는 세션·메타·hooks는 모두 **`~/.claude/plugi
 
 **Lead는 사용자에게 라운드별로 묻지 않습니다** — 합의 도달까지 자동 진행. 사용자가 자발적으로 메시지를 보내면 즉시 그 시점부터 반영.
 
-### 5-3. 두 가지 통신 경로 (환경별)
+### 5-3. 통신 우선순위 (환경·구성별)
 
-| 경로 | 동작 | 적용 조건 | 장단점 |
+| 참가자 구성 | 1순위 | 2순위 | 3순위 |
 |---|---|---|---|
-| **Phase 3-A. MCP 경유** | Lead가 `mcp__claudex__codex` / `codex-reply` 도구로 워커 호출. session ID로 워커별 conversation 분리 | **cmux 외부** + claudex MCP 등록 | stateful. 단 pane 시각화 없음 |
-| **Phase 3-B. cmux pane + claudex/codex TUI** | cmux로 우측·아래 pane 분할 → 각 pane에 `claudex`(우선) 또는 `codex` TUI 기동 → cmux send/capture로 양방향 | **cmux 환경 내부 기본값** | 사용자가 pane으로 진행 관찰 + 직접 개입 가능 |
+| **AI mix 또는 전원 claudex/codex** (cmux 환경) | **Phase 3-A. 메시지 버스** — pane TUI 워커 + 보드 + 자동 노크 | Phase 3-B. send/capture 폴백 | `multi-check` 사용 안내 후 중단 |
+| **전원 Claude** (Lead + 워커 모두) | **팀메이트 기능** (Claude 팀 기능 통신) | 메시지 버스 (claude CLI 워커) | `multi-check` 사용 안내 후 중단 |
+| **cmux 외부 환경** | Phase 3-C. claudex MCP conversation (stateful 지속 대화) | `multi-check` 사용 안내 후 중단 | — |
 
-자동 분기: cmux 환경 안에서는 MCP 등록 여부와 무관하게 3-B 가 default. cmux 외부 + MCP 등록 시에만 3-A 사용. cmux 안에서 3-A 를 쓰는 것은 사용자가 명시적으로 "시각화 생략" 을 요청한 경우에만 허용.
+하위로 내려가는 조건: 상위 경로의 전제(버스 헬퍼·node·cmux·팀 기능)가 충족되지 않을 때 — 내려갈 때마다 사유 1줄 보고. **헤드리스 1-shot + 컨텍스트 재전송 방식은 어떤 경우에도 쓰지 않음** (멀티라운드는 지속 대화가 본질 — 그게 필요 없으면 `multi-check` 가 올바른 도구).
 
 ---
 
@@ -240,13 +239,12 @@ multi-round skill 내부에 다음 가드가 강제됩니다.
 
 | # | 가드 | 사용자 영향 |
 |---|---|---|
-| 1 | `claudex mcp-server` 기동 시 `-c mcp_servers={}` 강제 — worker MCP 컨텍스트 격리 | settings.json 스니펫 그대로 사용 |
-| 2 | `~/.claude/settings.json` 자동 write 금지 — 수동 등록 가이드만 출력 | 본인이 직접 등록 (한 번만) |
-| 3 | cmux send 줄바꿈 sanitize — multi-line prompt 조기 제출 방지 | 자동 처리 |
+| 1 | 워커 MCP 는 버스만 인라인 주입 (`mcp_servers={bus=...}` / `--strict-mcp-config`) — downstream MCP 차단 + 컨텍스트 격리 | 자동 처리 |
+| 2 | 사용자 환경 파일(`~/.claude/settings.json`, `~/.codex/config.toml`) 자동 write 금지 — 버스는 spawn 명령 인라인/세션 파일 주입뿐이라 등록 자체가 불필요 | 등록 작업 0 |
+| 3 | 3-B 폴백에서만 cmux send 줄바꿈 sanitize (버스 경로는 본문이 보드로 가므로 해당 없음) | 자동 처리 |
 | 4 | claudex/claude/codex 모두 없으면 명시 에러 — silent 실패 방지 | 환경 진단 명확 |
 | 5 | `cmux identify` 의 `.caller.surface_ref` 사용 — Lead surface 캡처 표준 | 자동 처리 |
-
-`-c mcp_servers={}` 인자는 worker conversation 에 의도와 다른 MCP 도구가 노출되지 않도록 컨텍스트를 격리한다.
+| 6 | 1-shot + history 재전송 금지 — 불가 환경은 `multi-check` 안내 후 중단 | 지속 대화 보장 |
 
 ---
 
@@ -257,10 +255,14 @@ multi-round skill 내부에 다음 가드가 강제됩니다.
 | 증상 | 의미 | 즉시 조치 | 재현 / 자세히 |
 |---|---|---|---|
 | Phase 0에서 "ABORT: 참가자 CLI 1개 이상 설치 필요" | claude / claudex / codex 모두 미설치 | `which claude && which claudex && which codex`로 PATH 확인. 1개 이상 `npm install -g` 또는 `nvm use` 정정 | §1 Before You Start |
-| `claudex mcp-server` 등록 미확인 — Phase 3-A 진행 안 됨 | `~/.claude/settings.json` 에 mcpServers.claudex 없음 | SKILL.md Phase 2 스니펫 등록 + Claude Code 재시작. cmux 환경이면 자동으로 3-B 로 fallback 됨 | §6 가드 #1·#2 |
-| Lead surface 캡처 실패 (LEAD_SURFACE 빈값) | `cmux identify`가 caller surface 못 잡음 | 환경 변수 `CMUX_SURFACE_ID` 확인. 없으면 사용자가 직접 surface id 제공 | §6 가드 #6 |
+| "메시지 버스: NO" — send/capture 폴백으로 강등 | node 미설치 또는 `multi-round-bus` 헬퍼 미발견 | `which node` 확인. plugin 동봉본 자동 설치 실패 시 `~/.claude/plugins/cache/bluehansl/deft/*/bin/multi-round-bus` 를 `~/.local/bin/` 으로 수동 복사 | §1, §5-3 |
+| 노크(`[bus] 메시지 확인`)가 안 옴 — Lead 가 워커 응답을 모름 | cmux send 실패 또는 워커가 post 안 함 | `multi-round-bus check --session <dir> --as lead` 수동 1회 → 보드에 응답 있으면 노크만 유실(메시지는 안전). 보드에도 없으면 워커 pane 상태 확인 | §5-1 노크 |
+| 워커가 노크를 받고도 보드를 안 읽음 | 부트 prompt 의 버스 지침 누락 | 워커 pane 에 "check_messages 를 호출해 새 메시지를 확인하세요" 직접 입력 (1회 교정 — 이후 학습됨) | §5-1 |
+| 워커가 버스 도구 호출 시 승인 프롬프트가 뜸 / 호출이 취소됨 | MCP 도구 호출 승인 elicitation (claudex/codex 기본 동작) | spawn 명령의 `--disable tool_call_mcp_elicitation` 포함 확인. 이미 뜬 프롬프트는 워커 pane 에서 1회 승인 | §Phase 3-A (4) |
+| 분할 직후 send 한 명령이 사라짐 (워커 미기동) | cmux lazy-init — surface 가 화면에 렌더될 때 쉘 기동 | cmux 창을 화면에 보이게 한 뒤 readiness 마커 가드(§Phase 3-A (3.5)) 통과 후 재전송 | §Phase 3-A (3.5) |
+| Lead surface 캡처 실패 (LEAD_SURFACE 빈값) | `cmux identify`가 caller surface 못 잡음 | 환경 변수 `CMUX_SURFACE_ID` 확인. 없으면 사용자가 직접 surface id 제공 | §6 가드 #5 |
 | 워커 응답이 와도 Lead가 다음 라운드로 못 넘어감 | 워커 응답 마지막 줄에 `DONE:` 센티넬 누락 | 다음 라운드 prompt에 "마지막 줄 `DONE:` 강제" 재주입 | §5-2 라운드 자동화 |
-| 워커 TUI에 prompt 보냈는데 조기 제출됨 (절반만 들어감) | `cmux send`가 `\n`을 Enter로 해석 | prompt를 파일로 저장 → 워커에게 "Read /tmp/.../prompt.md" 안내 (skill 자동 처리) | §6 가드 #3 |
+| (3-B 폴백 한정) prompt 조기 제출됨 (절반만 들어감) | `cmux send`가 `\n`을 Enter로 해석 | prompt를 파일로 저장 → 워커에게 "Read <경로>" 안내 (skill 자동 처리). 버스 경로에선 발생하지 않음 | §6 가드 #3 |
 | 양 워커 한쪽이 계속 같은 의견만 반복 | 페르소나가 너무 약하거나 prompt에 다른 입장 정보 누락 | 다음 라운드 prompt에 상대 입장을 명시적으로 인용 + "본인 입장 변경 가능한지 검토" 추가 | §3-2 dialogue 흐름 |
 | max-round 도달했는데 합의 안 됨 | 본질적으로 미합의인 주제 또는 페르소나 갭이 큼 | Lead가 미합의 항목 명시 + Lead 판단으로 권장안 1개 제시 + 사용자 결정 위임 | §5-2 종료 사례 |
 | 사용자가 "지금 종료" 메시지 보냈는데 라운드 계속 | Lead 폴링 루프에서 사용자 메시지 인지 누락 | 사용자 메시지 우선 처리 (Lead 응답 시작 시 inbox 확인) | §2-3 사용자 개입 |
@@ -276,22 +278,25 @@ A. 아니요. 사용자 입력에서 키워드("토론해줘", "분담해서", "
 A. 아니요. **기본 정책 = '모든 AI 합의'까지 자동 진행**. 사용자가 자발적으로 메시지를 보낼 때만 그 시점 반영. 묻지 않음.
 
 ### Q3. Lead는 누구?
-A. **스킬을 시작한 쪽**. Claude Code에서 발동하면 Lead=Claude. Claudex CLI에서 발동하면 Lead=Claudex. 어느 쪽이든 동일한 MCP server 경유로 동작 동일.
+A. **스킬을 시작한 쪽**. Claude Code에서 발동하면 Lead=Claude. Claudex CLI에서 발동하면 Lead=Claudex. 어느 쪽이든 같은 버스 보드를 공유 — Lead 는 CLI 진입점, 워커는 MCP 도구로 접근할 뿐 프로토콜 동일.
 
 ### Q4. claudex와 claude 중 한쪽만 설치되어 있다면?
 A. 그 쪽만으로 진행. mix는 아니지만 회의 자체는 가능 (시각 다양성 ↓).
 
 ### Q5. `agent-teams` 와 어떻게 다른가?
-A. `agent-teams` = **Claude 끼리만, Claude 팀 기능 베이스**. `multi-round` = **Claude + Claudex mix, cmux pane 또는 MCP 경유**. 결정적 차이는 AI 다양성 (Codex/Claudex vs Claude 시각 차) + 의존성. `multi-round` 의 `collaborate` 모드(분담 협업) 는 **분담 검토·설계·독립 의견 후 상호 리뷰** 까지로 제한. 실제 파일 수정·테스트가 필요하면 `agent-teams` 로 승격.
+A. `agent-teams` = **Claude 끼리만, Claude 팀 기능 베이스**. `multi-round` = **Claude + Claudex mix, 메시지 버스 + cmux pane**. 결정적 차이는 AI 다양성 (Codex/Claudex vs Claude 시각 차) + 의존성. `multi-round` 의 `collaborate` 모드(분담 협업) 는 **분담 검토·설계·독립 의견 후 상호 리뷰** 까지로 제한. 실제 파일 수정·테스트가 필요하면 `agent-teams` 로 승격.
 
 ### Q6. cmux 환경 안인데 pane 이 안 보여요
-A. 사용자 정책상 cmux 환경 안에서는 Phase 3-B (pane) 가 default. pane 이 보이지 않는다면 Phase 0 의 `HAVE_CMUX` 검출이 실패한 경우. `cmux identify` 가 정상 작동하는지 확인 후 재실행.
+A. cmux 환경 안에서는 pane 워커 + 메시지 버스가 default. pane 이 보이지 않는다면 Phase 0 의 `HAVE_CMUX` 검출이 실패한 경우. `cmux identify` 가 정상 작동하는지 확인 후 재실행.
 
 ### Q7. cmux 외부 환경에서도 회의 가능?
-A. **예**. cmux 외부에서는 Phase 3-A (MCP 경유) 로 동작. claudex MCP 등록이 필요. 미등록 시 사용자에게 등록 안내 후 작업 중단.
+A. **예**. cmux 외부에서는 Phase 3-C (claudex MCP conversation — stateful 지속 대화) 로 동작. claudex MCP 등록이 필요. 미등록·미설치면 multi-check 안내 후 중단.
+
+### Q7-1. 버스를 쓰려고 따로 등록할 게 있나?
+A. **없음**. 버스 MCP 는 워커 spawn 명령에 인라인 주입되고, Lead 는 헬퍼를 Bash 로 직접 호출. 사용자 환경 파일은 건드리지 않으며, 헬퍼는 첫 실행 시 `~/.local/bin/` 에 자동 설치.
 
 ### Q8. 회의 결과는 어디 저장?
-A. 라운드 prompt / state / transcript 는 `~/.claude/plugin-data/deft/multi-round/sessions/<work-id>/<tag>/` (연계 회의) 또는 `sessions/standalone/<tag>/` (독립 토론) 에 보존. Phase 5 최종 결론은 conversation 안에 남으며, 별도 결론 파일 저장은 사용자 명시 요청 시에만. 연계 회의의 합의 결과는 이후 agent-teams 가 같은 work-id 로 시작될 때 작업노트에 반영됨.
+A. 회의록 원본은 버스 보드 `board.jsonl` (모든 발언이 시간순 보존), 종합 결과는 `summary.md` — 위치는 `~/.claude/plugin-data/deft/multi-round/sessions/<work-id>/<tag>/` (연계 회의) 또는 `sessions/standalone/<tag>/` (독립 토론). 전문 확인은 `multi-round-bus history --session <dir>`. 연계 회의의 합의 결과는 이후 agent-teams 가 같은 work-id 로 시작될 때 작업노트에 반영됨.
 
 ### Q9. `multi-check` 를 `multi-round` 안에서 호출?
 A. 가능. 라운드 중 "이 부분은 1회성으로 확인하자" 가 필요하면 Lead 가 `multi-check` 호출 → 결과를 다음 라운드 prompt 에 inject.
@@ -407,7 +412,7 @@ PostgreSQL vs MongoDB — 우리 결제 시스템에 진짜 뭐가 맞는지 멀
 
 > 본 매뉴얼의 골격(파일 구조·Before You Start 5개 체크박스·실패 모드 표·examples 위치 등)은 **multi-round skill 자체로 결정**됐습니다.
 > claude-A (사용성·UX 관점) + claude-B (안정성·보안 관점) 두 워커가 4라운드 dialogue → CONSENSUS 도달.
-> 회의 transcript 보관: `~/.claude/plugin-data/deft/multi-round/sessions/standalone/20260605-1735-design/round{1-4}-*.md` (개인 메타).
+> 회의 transcript 보관: `~/.claude/plugin-data/deft/multi-round/sessions/standalone/` 하위 (개인 메타).
 
 ---
 

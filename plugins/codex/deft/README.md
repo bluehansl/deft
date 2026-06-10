@@ -7,7 +7,7 @@ bluehansl 개인 워크플로 도구 모음의 Codex 포팅본. Codex에서 **`d
 | FQN | 동작 |
 |---|---|
 | `deft:multi-check` | Codex + Claude + Gemini 다중 AI **1회성** 교차검증/비교 (fan-out) |
-| `deft:multi-round` | **여러 AI가 N라운드 양방향으로 토론·합의 도달** 하는 멀티턴 회의. cmux 환경에서는 pane 시각화, cmux 외부에서는 claudex MCP 또는 codex 내부 병렬 처리. [상세 가이드](skills/multi-round/GUIDE.md) |
+| `deft:multi-round` | **여러 AI가 N라운드 양방향으로 토론·합의 도달** 하는 멀티턴 회의. 메시지 버스(브로드캐스트 보드 + 노크) 기반 — pane 시각화 + 자동 깨우기. [상세 가이드](skills/multi-round/GUIDE.md) |
 | `deft:session-relocate` | 세션 로그를 다른 프로젝트 디렉토리로 이동(`/resume` 대상화) |
 | `deft:set-statusline` | Codex TUI status line 설정 (`~/.codex/config.toml`) |
 | `deft:restore-statusline` | status line 복원 |
