@@ -13,6 +13,11 @@
 - **multi-round (Claude) 워커 모델 버전 명시** — Phase 3-A MCP 호출 `model: "<model>"` placeholder → `model: "gpt-5.5"` 표준 명시. Phase 3-B TUI 기동 명령에 `-m gpt-5.5` (claudex/codex) / `--model claude-fable-5` (claude-only) 분기 추가.
 - **multi-round (Claude) 결과 양식 예시** — "Claude(Opus 4.8)" → "Claude(Fable 5)".
 
+## [codex-1.1.5] - 2026-06-10
+
+### Changed
+- **multi-round (Codex) 의 codex CLI 배포 버전 표기 제거** — "codex 0.134.0" → "codex". 설치 CLI 버전은 skill 본문에 명시할 필요 없음 (버전 갱신마다 stale 위험).
+
 ## [codex-1.1.4] - 2026-06-10
 
 ### Fixed
