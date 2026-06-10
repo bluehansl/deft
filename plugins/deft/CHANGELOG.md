@@ -4,6 +4,31 @@
 
 형식은 [Keep a Changelog](https://keepachangelog.com/ko/1.1.0/) 를 따르며, 버전 체계는 [Semantic Versioning](https://semver.org/lang/ko/) 을 사용합니다 (`claude-X.Y.Z` / `codex-X.Y.Z` 접두).
 
+## [claude-2.3.0] - 2026-06-10
+
+### Added
+- **work-id 규약을 deft 플러그인 공통으로 승격** — config 위치를 `agent-teams/config.json` → **`~/.claude/plugin-data/deft/config.json`** (공통 루트) 로 이동. agent-teams 와 multi-round 가 같은 규약·같은 config 를 공유 — 어느 skill 이 먼저 실행되든 최초 1회만 결정. 구버전(skill 전용 위치) config 는 공통 위치로 자동 마이그레이션 (agent-teams SKILL §3-3 ⑤).
+- **multi-round work-id 연계 default** — 회의는 기본적으로 작업(work-id)에 연계. 사용자 입력에서 work-id 감지(티켓 번호 등), 감지 안 되면 1회 질문. **사용자가 "독립 토론" 명시 시에만** work-id 없이 진행. 세션 디렉토리 구조 분리: `sessions/<work-id>/<tag>/` (연계 기본) / `sessions/standalone/<tag>/` (독립).
+- **agent-teams ↔ multi-round 양방향 교차 참조** (같은 work-id):
+  - multi-round Phase 1-0: 회의 시작 시 `agent-teams/<work-id>/work.md` 존재하면 Read → 요건분석·영향도·설계결정을 라운드 1 prompt 에 컨텍스트로 inject.
+  - agent-teams 연속성 절차 3단계 신규 + §3-5: 팀 시작/재개 시 `multi-round/sessions/<work-id>/` 회의록의 합의 결과를 work.md `## 설계 결정` 에 반영.
+  - 작업 중 토론 호출 패턴: 팀 진행 중 결정이 갈리면 같은 work-id 로 multi-round 호출 → 합의 → work.md 기록 → 팀 재개.
+- **GUIDE 갱신** — multi-round Before You Start 에 work-id 연계 항목, 작업 디렉토리 구조 갱신, FAQ 저장 경로 갱신. agent-teams GUIDE A-1 공통 config 반영.
+
+### Notes
+- 신규 동작(연계 default + 교차 참조) 추가 → MINOR bump (claude-2.2.2 → claude-2.3.0).
+- 사용자 환경의 기존 독립 토론 transcript (`sessions/20260605-1735-design/`) 는 `sessions/standalone/` 하위로 이동됨.
+
+## [codex-1.2.0] - 2026-06-10
+
+### Added
+- **multi-round (Codex) work-id 연계 default** — Claude 측과 동일 설계. config 읽기 순서: ① `~/.codex/plugin-data/deft/config.json` → ② Claude 측 `~/.claude/plugin-data/deft/config.json` (이미 결정했으면 복사 후 재사용) → ③ 최초 1회 메뉴. 세션 디렉토리 `sessions/<work-id>/<tag>/` (기본) / `sessions/standalone/<tag>/` (독립 명시 시).
+- **Claude 측 agent-teams 작업노트 교차 참조** — work-id 확정 시 `~/.claude/plugin-data/deft/agent-teams/<work-id>/work.md` 존재하면 Read 후 라운드 1 컨텍스트로 inject.
+- **GUIDE 갱신** — Before You Start work-id 항목 + 작업 디렉토리 구조.
+
+### Notes
+- 신규 동작 추가 → MINOR bump (codex-1.1.5 → codex-1.2.0).
+
 ## [claude-2.2.2] - 2026-06-10
 
 ### Fixed

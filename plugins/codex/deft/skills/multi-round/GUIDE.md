@@ -34,17 +34,23 @@
 - [ ] **claudex MCP 등록** (cmux 외부 + Lead가 Codex일 때) — `~/.codex/config.toml`의 `[mcp_servers.claudex]` 등록 확인. claudex 미설치/미등록이면 codex 내부 fallback(Phase 3-C)로 자동 전환
 - [ ] **회의 모드 결정 의도 정리** — 4지선다 메뉴 보고 고를지, 명시적으로 "토론해줘"·"분담해서" 등 키워드로 줄지
 - [ ] **종료 조건 결정** — 기본 "모든 AI 합의"로 자동 진행. 다른 조건 원하면 "max-round=10" / "한쪽 항복까지" 등 명시
+- [ ] **work-id 연계 확인** — 회의는 기본적으로 작업(work-id)에 연계됨. 입력에 티켓 번호 등이 있으면 자동 감지, 없으면 1회 질문. **독립 토론을 원하면 "독립 토론"이라고 명시**. work-id 규약 미설정이면 최초 1회 메뉴로 결정 (Claude 측 agent-teams 와 공유 — Claude 측에서 이미 결정했으면 그 규약 재사용)
 - [ ] **`cmux-rebalancing` 헬퍼** — PATH 에 있는지 확인. 없으면 skill 첫 실행 시 plugin 동봉본이 `~/.local/bin/` 으로 자동 설치됨. 워커 spawn 후 Lead/워커 pane 비율 재조정에 사용 (cmux 환경 한정)
 
 ### 작업 디렉토리
 
 skill 실행 시 사용하는 세션·메타·hooks는 모두 **`~/.codex/plugin-data/deft/multi-round/` 하위**에 저장됩니다.
 
+회의는 **기본적으로 작업(work-id)에 연계**됩니다 — 같은 키로 Claude 측 agent-teams 작업노트와 회의록을 상호 참조합니다. 독립 토론은 사용자가 명시할 때만.
+
 ```
-~/.codex/plugin-data/deft/multi-round/
-├── sessions/<YYYYMMDD-HHMM-tag>/   # 회의별 prompt·state·transcript (보존)
-├── state/                          # 영구 메타
-└── hooks/                          # 동작 훅 (필요 시)
+~/.codex/plugin-data/deft/
+├── config.json                              # work-id 규약 (deft 공통)
+└── multi-round/
+    ├── sessions/<work-id>/<YYYYMMDD-HHMM-tag>/    # 연계 회의 (기본)
+    ├── sessions/standalone/<YYYYMMDD-HHMM-tag>/   # 독립 토론 (명시 시만)
+    ├── state/                                     # 영구 메타
+    └── hooks/                                     # 동작 훅 (필요 시)
 ```
 
 ---
@@ -403,7 +409,7 @@ PostgreSQL vs MongoDB — 우리 결제 시스템에 진짜 뭐가 맞는지 멀
 
 > 본 매뉴얼의 골격(파일 구조·Before You Start 5개 체크박스·실패 모드 표·examples 위치 등)은 **multi-round skill 자체로 결정**됐습니다.
 > claude-A (사용성·UX 관점) + claude-B (안정성·보안 관점) 두 워커가 4라운드 dialogue → CONSENSUS 도달.
-> 회의 transcript 보관: `~/.codex/plugin-data/deft/multi-round/sessions/20260605-1735-design/round{1-4}-*.md` (개인 메타).
+> 회의 transcript 보관: `~/.codex/plugin-data/deft/multi-round/sessions/standalone/20260605-1735-design/round{1-4}-*.md` (개인 메타).
 
 ---
 

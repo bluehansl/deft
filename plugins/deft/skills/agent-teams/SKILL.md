@@ -141,9 +141,9 @@ command -v cmux-rebalancing >/dev/null 2>&1 && cmux-rebalancing
 
 → 사용자가 팀을 **몇 번을 새로 띄우든, team-name이 무엇이든, 같은 work-id만 대면** 같은 작업노트(`work.md`)를 이어받는다. 내장 `TeamCreate`의 team-name 재사용 동작에 의존하지 않으므로 견고하다. (§0-3의 "in-process teammate resume 불가" 한계를 이 설계가 보완)
 
-### 3-3. work-id 명명 규약 — 최초 1회 결정 + 영속 저장
+### 3-3. work-id 명명 규약 — 최초 1회 결정 + 영속 저장 (deft 플러그인 공통)
 
-work-id를 **어떤 규칙으로 만들지**는 특정 값(예: 티켓번호)을 강요하지 않고, **사용자 환경마다 최초 1회 결정**한다.
+work-id를 **어떤 규칙으로 만들지**는 특정 값(예: 티켓번호)을 강요하지 않고, **사용자 환경마다 최초 1회 결정**한다. 이 규약은 본 skill 전용이 아니라 **deft 플러그인 공통** — `multi-round` 도 같은 규약·같은 config 를 사용한다 (어느 skill 이 먼저 실행되든 한 번 정하면 양쪽 공유).
 
 **① 최초 실행 시 (규약 미설정이면):** 다음 메뉴를 출력하고 선택받는다.
 ```
@@ -157,21 +157,24 @@ work-id를 **어떤 규칙으로 만들지**는 특정 값(예: 티켓번호)을
 번호 입력:
 ```
 
-**② 결정을 영속 저장** (두 파일, plugin-data — update-safe):
+**② 결정을 영속 저장** (두 파일, **플러그인 공통 루트** — update-safe):
 ```
-~/.claude/plugin-data/deft/agent-teams/
-├── config.json     ← 기계용 SSOT
+~/.claude/plugin-data/deft/
+├── config.json     ← 기계용 SSOT (deft 공통 — agent-teams + multi-round 공유)
 │   { "workIdConvention": "<선택값>", "example": "<예시>", "decidedAt": "<YYYY-MM-DD>" }
 └── CONVENTION.md    ← 사람용 명시
     # work-id 규약 (현재)
     - 규약: <선택값 한국어 설명>
     - 예시: <예시>
+    - 적용 skill: agent-teams (작업노트 키) / multi-round (회의 연계 키)
     - 변경하려면: 스킬에 "work-id 규약 바꿔" 요청  또는  이 파일 + config.json 직접 수정
 ```
 
 **③ 이후 실행:** `config.json`/`CONVENTION.md`를 읽어 규약대로 work-id 생성·확인. **재질문하지 않는다.**
 
-**④ 규약 변경:** 사용자가 `"work-id 규약 바꿔"`(또는 "규약 변경", "work-id 규칙 바꿔") 요청 시 → ①의 메뉴 재출력 → 선택 → `config.json` + `CONVENTION.md` **두 파일 갱신**. (기존 작업 디렉토리는 그대로 두고, 이후 신규 작업부터 새 규약 적용)
+**④ 규약 변경:** 사용자가 `"work-id 규약 바꿔"`(또는 "규약 변경", "work-id 규칙 바꿔") 요청 시 → ①의 메뉴 재출력 → 선택 → `config.json` + `CONVENTION.md` **두 파일 갱신**. (기존 작업 디렉토리는 그대로 두고, 이후 신규 작업부터 새 규약 적용. multi-round 에도 즉시 반영됨 — 같은 config)
+
+**⑤ 구버전 config 마이그레이션:** `~/.claude/plugin-data/deft/agent-teams/config.json` (skill 전용 위치 — 구버전) 이 존재하고 공통 위치에 없으면, 공통 위치로 **이동**(mv) 후 사용. 재질문하지 않는다.
 
 > 규약 "값"은 plugin-data에 저장하고, 본 SKILL.md(=plugin cache)에는 규약 "값"을 적지 않는다 — cache는 update 시 교체되어 소실되기 때문. SKILL.md는 위 메커니즘·변경 절차만 정의한다.
 
@@ -192,11 +195,26 @@ work-id를 **어떤 규칙으로 만들지**는 특정 값(예: 티켓번호)을
   2. <work-id>/work.md 존재?
      ├─ 있음 → 로드 → "## 완료 항목" 이후 "## 작업 계획"의 미완료 체크리스트부터 이어서
      └─ 없음 → §6-1 템플릿으로 신규 생성
-  3. 각 팀원도 본인 <role>.md 존재 시 미완료 항목부터 이어서 진행
-  4. work.md `## META`에 "현재 team-name" 기록 (내장 team-name 추적용)
+  3. multi-round 회의록 교차 참조 (§3-5):
+     ~/.claude/plugin-data/deft/multi-round/sessions/<work-id>/ 존재?
+     ├─ 있음 → 최근 회의 transcript 의 합의 결과를 확인하고,
+     │         미반영 결정이 있으면 work.md `## 설계 결정` 에 반영 (Lead)
+     └─ 없음 → skip
+  4. 각 팀원도 본인 <role>.md 존재 시 미완료 항목부터 이어서 진행
+  5. work.md `## META`에 "현재 team-name" 기록 (내장 team-name 추적용)
 ```
 
 > `work.md`의 `## 작업 계획` 체크리스트가 **유일한 진행 상태 소스**다(누락 방지). 부산물 파일(배포 스크립트·성능테스트 폴더 등)은 같은 `<work-id>/` 하위에 자유롭게 둘 수 있다(강제 스키마 아님).
+
+### 3-5. multi-round 와의 교차 참조 (같은 work-id)
+
+`multi-round` 회의도 기본적으로 같은 work-id 에 연계된다 (multi-round SKILL 참조). 두 skill 의 산출물은 같은 키로 상호 참조 가능:
+
+| 방향 | 시점 | 동작 |
+|---|---|---|
+| **회의 결과 → 팀** | 팀/작업 시작 시 (위 연속성 절차 3단계) | `multi-round/sessions/<work-id>/` 의 합의 결과를 work.md `## 설계 결정` 에 반영 |
+| **팀 산출물 → 회의** | multi-round 회의 시작 시 | multi-round 가 `agent-teams/<work-id>/work.md` 를 읽어 워커 컨텍스트로 inject |
+| **작업 중 토론 호출** | 팀 진행 중 결정이 갈릴 때 | Lead 가 같은 work-id 로 multi-round 호출 → 합의 후 work.md 에 결정 기록 → 팀 진행 재개 |
 
 ---
 

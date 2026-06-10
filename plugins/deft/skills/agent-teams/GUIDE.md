@@ -21,9 +21,9 @@ SKILL.md의 규약을 **실전 시나리오**로 풀어쓴 보조 문서. 처음
 
 > 시나리오: "결제 모듈에 환불 기능 추가. 팀으로 진행해."
 
-### A-1. work-id 규약 (최초 실행 1회)
+### A-1. work-id 규약 (최초 실행 1회 — deft 플러그인 공통)
 
-`~/.claude/plugin-data/deft/agent-teams/config.json`이 없으면 메뉴 출력:
+`~/.claude/plugin-data/deft/config.json` (플러그인 공통 — multi-round 와 공유) 이 없으면 메뉴 출력:
 
 ```
 이 환경의 work-id(작업 영속 키) 규약을 정해주세요:
@@ -47,7 +47,7 @@ SKILL.md의 규약을 **실전 시나리오**로 풀어쓴 보조 문서. 처음
 - 변경하려면: 스킬에 "work-id 규약 바꿔" 요청  또는  이 파일 + config.json 직접 수정
 ```
 
-→ 이후 실행부터는 재질문 없이 이 규약으로 work-id를 받는다.
+→ 이후 실행부터는 재질문 없이 이 규약으로 work-id를 받는다. **multi-round 도 같은 config 를 읽으므로 거기서도 재질문 없음** — 어느 skill 이 먼저 정하든 공유된다.
 
 ### A-2. work-id 확정 + 작업노트 로드
 

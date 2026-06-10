@@ -32,17 +32,23 @@
 - [ ] **claudex MCP 등록** (cmux 외부에서 Lead가 Claude Code일 때) — `~/.claude/settings.json` 의 `mcpServers.claudex` 등록 확인 (또는 `claude mcp add-json --scope user claudex ...`). 미등록이고 cmux 환경이면 자동으로 Phase 3-B 로 진행
 - [ ] **회의 모드 결정 의도 정리** — 4지선다 메뉴 보고 고를지, 명시적으로 "토론해줘"·"분담해서" 등 키워드로 줄지
 - [ ] **종료 조건 결정** — 기본 "모든 AI 합의"로 자동 진행. 다른 조건 원하면 "max-round=10" / "한쪽 항복까지" 등 명시
+- [ ] **work-id 연계 확인** — 회의는 기본적으로 작업(work-id)에 연계됨. 입력에 티켓 번호 등이 있으면 자동 감지, 없으면 1회 질문. **독립 토론을 원하면 "독립 토론"이라고 명시**. work-id 규약 미설정이면 최초 1회 메뉴로 결정 (agent-teams 와 공유)
 - [ ] **`cmux-rebalancing` 헬퍼** — PATH 에 있는지 확인 (`which cmux-rebalancing`). 없으면 skill 첫 실행 시 plugin 동봉본이 `~/.local/bin/` 으로 자동 설치됨. 워커 spawn 후 Lead/워커 pane 비율 재조정에 사용 (cmux 환경 한정)
 
 ### 작업 디렉토리
 
 skill 실행 시 사용하는 세션·메타·hooks는 모두 **`~/.claude/plugin-data/deft/multi-round/` 하위**에 저장됩니다.
 
+회의는 **기본적으로 작업(work-id)에 연계**됩니다 — work-id 는 agent-teams 와 공유하는 플러그인 공통 키로, 같은 키로 작업노트와 회의록을 상호 참조합니다. 독립 토론은 사용자가 명시할 때만.
+
 ```
-~/.claude/plugin-data/deft/multi-round/
-├── sessions/<YYYYMMDD-HHMM-tag>/   # 회의별 prompt·state·transcript (보존)
-├── state/                          # 영구 메타
-└── hooks/                          # 동작 훅 (필요 시)
+~/.claude/plugin-data/deft/
+├── config.json                          # work-id 규약 (agent-teams 와 공유, 최초 1회 결정)
+└── multi-round/
+    ├── sessions/<work-id>/<YYYYMMDD-HHMM-tag>/    # 연계 회의 (기본)
+    ├── sessions/standalone/<YYYYMMDD-HHMM-tag>/   # 독립 토론 (명시 시만)
+    ├── state/                                     # 영구 메타
+    └── hooks/                                     # 동작 훅 (필요 시)
 ```
 
 ---
@@ -285,7 +291,7 @@ A. 사용자 정책상 cmux 환경 안에서는 Phase 3-B (pane) 가 default. pa
 A. **예**. cmux 외부에서는 Phase 3-A (MCP 경유) 로 동작. claudex MCP 등록이 필요. 미등록 시 사용자에게 등록 안내 후 작업 중단.
 
 ### Q8. 회의 결과는 어디 저장?
-A. 라운드 prompt / state / transcript 는 `~/.claude/plugin-data/deft/multi-round/sessions/<tag>/` 에 보존. Phase 5 최종 결론은 conversation 안에 남으며, 별도 결론 파일 저장은 사용자 명시 요청 시에만.
+A. 라운드 prompt / state / transcript 는 `~/.claude/plugin-data/deft/multi-round/sessions/<work-id>/<tag>/` (연계 회의) 또는 `sessions/standalone/<tag>/` (독립 토론) 에 보존. Phase 5 최종 결론은 conversation 안에 남으며, 별도 결론 파일 저장은 사용자 명시 요청 시에만. 연계 회의의 합의 결과는 이후 agent-teams 가 같은 work-id 로 시작될 때 작업노트에 반영됨.
 
 ### Q9. `multi-check` 를 `multi-round` 안에서 호출?
 A. 가능. 라운드 중 "이 부분은 1회성으로 확인하자" 가 필요하면 Lead 가 `multi-check` 호출 → 결과를 다음 라운드 prompt 에 inject.
@@ -401,7 +407,7 @@ PostgreSQL vs MongoDB — 우리 결제 시스템에 진짜 뭐가 맞는지 멀
 
 > 본 매뉴얼의 골격(파일 구조·Before You Start 5개 체크박스·실패 모드 표·examples 위치 등)은 **multi-round skill 자체로 결정**됐습니다.
 > claude-A (사용성·UX 관점) + claude-B (안정성·보안 관점) 두 워커가 4라운드 dialogue → CONSENSUS 도달.
-> 회의 transcript 보관: `~/.claude/plugin-data/deft/multi-round/sessions/20260605-1735-design/round{1-4}-*.md` (개인 메타).
+> 회의 transcript 보관: `~/.claude/plugin-data/deft/multi-round/sessions/standalone/20260605-1735-design/round{1-4}-*.md` (개인 메타).
 
 ---
 
