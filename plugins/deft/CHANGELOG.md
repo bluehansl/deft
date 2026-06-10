@@ -4,6 +4,24 @@
 
 형식은 [Keep a Changelog](https://keepachangelog.com/ko/1.1.0/) 를 따르며, 버전 체계는 [Semantic Versioning](https://semver.org/lang/ko/) 을 사용합니다 (`claude-X.Y.Z` / `codex-X.Y.Z` 접두).
 
+## [claude-2.2.2] - 2026-06-10
+
+### Fixed
+- **multi-check (Claude) `claude-opus-4-6` 잔존 6군데 정정** — SKILL.md description 표기 ×2 + `agents/claude-reviewer.md` 의 `--model claude-opus-4-6` ×4 → `claude-fable-5`. (이전 2.2.1 에서 Codex 측 SKILL L170 한 곳만 고치고 누락된 부분.)
+
+### Changed
+- **multi-round (Claude) 워커 모델 버전 명시** — Phase 3-A MCP 호출 `model: "<model>"` placeholder → `model: "gpt-5.5"` 표준 명시. Phase 3-B TUI 기동 명령에 `-m gpt-5.5` (claudex/codex) / `--model claude-fable-5` (claude-only) 분기 추가.
+- **multi-round (Claude) 결과 양식 예시** — "Claude(Opus 4.8)" → "Claude(Fable 5)".
+
+## [codex-1.1.4] - 2026-06-10
+
+### Fixed
+- **multi-check (Codex) `agents/claude-reviewer.md` 의 `claude-opus-4-6` ×2 정정** → `claude-fable-5`.
+- **multi-round (Codex) Phase 3-C `claude` worker 호출 잠재 버그 정정** — `claude` CLI 에는 `exec` 서브명령이 없어 `"$WORKER_B" exec -` 가 실패하던 문제. CLI 별 명령 배열 분기로 교체: claudex/codex 는 `exec -m gpt-5.5 -`, claude 는 `claude -p - --model claude-fable-5`.
+
+### Changed
+- **multi-round (Codex) 워커 모델 버전 명시** — Phase 3-A `model: "gpt-5.5"` 표준 명시 + Phase 3-B TUI 기동 `-m gpt-5.5` / `--model claude-fable-5` 분기 + 결과 양식 예시 "Claude(Fable 5)".
+
 ## [claude-2.2.1] - 2026-06-10
 
 ### Added

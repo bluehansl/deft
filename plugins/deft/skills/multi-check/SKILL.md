@@ -84,7 +84,7 @@ Agent(
 Claude reviewer (only if claude CLI is available) — Independent Claude session:
 ```
 Agent(
-  description: "Run Claude CLI analysis (Claude Opus 4.6, independent session)",
+  description: "Run Claude CLI analysis (Claude Fable 5, independent session)",
   prompt: "<composed prompt with context>",
   name: "claude-reviewer",
   subagent_type: "claude-reviewer",
@@ -127,7 +127,7 @@ Agent(
 Claude reviewer (only if claude CLI is available):
 ```
 Agent(
-  description: "Run Claude CLI analysis (Claude Opus 4.6, independent session)",
+  description: "Run Claude CLI analysis (Claude Fable 5, independent session)",
   prompt: "<composed prompt>",
   name: "claude-reviewer",
   subagent_type: "claude-reviewer",

@@ -257,7 +257,7 @@ Claudex 자체가 MCP server 를 직접 띄움 (`claudex mcp-server`). Lead 의 
 ```
 mcp__claudex__codex(
   prompt: "<페르소나 + 라운드 1 prompt>",
-  model: "<model>",
+  model: "gpt-5.5",                  # claudex/codex worker 표준 모델
   cwd: "<원하는 cwd>",
   developer-instructions: "<페르소나 골격 — agents/codex-participant.md 본문>"
 )
@@ -297,12 +297,15 @@ SPLIT=$(cmux new-split down --pane "<prev_pane>" --focus false 2>&1)
 W2_SURFACE=$(printf '%s' "$SPLIT" | grep -oE 'surface:[0-9]+' | head -1)
 ```
 
-워커 pane 에 TUI 기동 + 초기 prompt — **`claudex` 우선, 없으면 `codex`**:
+워커 pane 에 TUI 기동 + 초기 prompt — **`claudex` 우선, 없으면 `codex`**. 모델 버전 명시:
 ```bash
+# 워커 모델 표준 — claudex/codex: GPT-5.5 / claude: Claude Fable 5 (claude-fable-5)
 if [ "$HAVE_CLAUDEX" -eq 1 ]; then
-  WORKER_CMD="claudex -c mcp_servers={}"
+  WORKER_CMD="claudex -m gpt-5.5 -c mcp_servers={}"
+elif [ "$HAVE_CODEX" -eq 1 ]; then
+  WORKER_CMD="codex -m gpt-5.5 -c mcp_servers={}"
 else
-  WORKER_CMD="codex -c mcp_servers={}"
+  WORKER_CMD="claude --model claude-fable-5"   # claude-only 환경
 fi
 cmux send --surface "$W1_SURFACE" "$WORKER_CMD"
 cmux send-key --surface "$W1_SURFACE" Enter
@@ -404,7 +407,7 @@ cmux 경로의 경우 4-A 패턴 반복.
 
 ### 회의 정보
 - 모드: {consult|dialogue|collaborate|debate}
-- 참가자: {Claudex(GPT-5.5), Claude(Opus 4.8), ...}
+- 참가자: {Claudex(GPT-5.5), Claude(Fable 5), ...}
 - 진행 라운드: {N/M}
 - 종료 사유: {CONSENSUS 도달 | max-round | 사용자 조기 종료}
 

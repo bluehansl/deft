@@ -185,7 +185,7 @@ codex mcp list 2>/dev/null | grep -q '^claudex' || echo "WARN: claudex MCP 미�
 ```
 claudex.codex(
   prompt: "<페르소나 + 라운드 1 prompt>",
-  model: "<model>",
+  model: "gpt-5.5",                  # claudex/codex worker 표준 모델
   cwd: "<원하는 cwd>",
   developer-instructions: "<페르소나 골격 — agents/codex-participant.md 본문>"
 )
@@ -225,12 +225,15 @@ SPLIT=$(cmux new-split down --pane "<prev_pane>" --focus false 2>&1)
 W2_SURFACE=$(printf '%s' "$SPLIT" | grep -oE 'surface:[0-9]+' | head -1)
 ```
 
-워커 pane에 TUI 기동 — **claudex 우선, 없으면 codex**:
+워커 pane에 TUI 기동 — **claudex 우선, 없으면 codex**. 모델 버전 명시:
 ```bash
+# 워커 모델 표준 — claudex/codex: GPT-5.5 / claude: Claude Fable 5 (claude-fable-5)
 if [ "$HAVE_CLAUDEX" -eq 1 ]; then
-  WORKER_CMD="claudex -c mcp_servers={}"
+  WORKER_CMD="claudex -m gpt-5.5 -c mcp_servers={}"
+elif [ "$HAVE_CODEX" -eq 1 ]; then
+  WORKER_CMD="codex -m gpt-5.5 -c mcp_servers={}"
 else
-  WORKER_CMD="codex -c mcp_servers={}"
+  WORKER_CMD="claude --model claude-fable-5"   # claude-only 환경
 fi
 cmux send --surface "$W1_SURFACE" "$WORKER_CMD"
 cmux send-key --surface "$W1_SURFACE" Enter
@@ -256,20 +259,24 @@ command -v cmux-rebalancing >/dev/null 2>&1 && cmux-rebalancing
 `HAVE_CMUX=0` + 3-A의 MCP 미등록/미설치 시 사용하는 background 경량 모드. Codex가 자체적으로 worker 인스턴스를 background process로 spawn해서 라운드별 응답을 수집.
 
 ```bash
-# worker 1 — claudex 우선
-if [ "$HAVE_CLAUDEX" -eq 1 ]; then WORKER_A="claudex"; else WORKER_A="codex"; fi
-if [ "$HAVE_CLAUDE"  -eq 1 ]; then WORKER_B="claude";  else WORKER_B="$WORKER_A"; fi
+# worker 1 — claudex 우선. CLI 별 1-shot 실행 형식과 모델 버전이 다름에 주의:
+#   claudex/codex: exec -m gpt-5.5 - < <file>      (stdin)
+#   claude:        claude -p - --model claude-fable-5 < <file>   (exec 서브명령 없음)
+if [ "$HAVE_CLAUDEX" -eq 1 ]; then WORKER_A_CMD=(claudex exec -m gpt-5.5 -)
+else                               WORKER_A_CMD=(codex   exec -m gpt-5.5 -); fi
+if [ "$HAVE_CLAUDE" -eq 1 ];  then WORKER_B_CMD=(claude -p - --model claude-fable-5 --permission-mode dontAsk --output-format text)
+else                               WORKER_B_CMD=("${WORKER_A_CMD[@]}"); fi
 
 # 라운드별 — background로 동시 실행 (병렬), 응답을 파일로 캡처
-"$WORKER_A" exec - < "$SESSION_DIR/round1-A.md" > "$SESSION_DIR/round1-A.out" 2>&1 &
+"${WORKER_A_CMD[@]}" < "$SESSION_DIR/round1-A.md" > "$SESSION_DIR/round1-A.out" 2>&1 &
 PID_A=$!
-"$WORKER_B" exec - < "$SESSION_DIR/round1-B.md" > "$SESSION_DIR/round1-B.out" 2>&1 &
+"${WORKER_B_CMD[@]}" < "$SESSION_DIR/round1-B.md" > "$SESSION_DIR/round1-B.out" 2>&1 &
 PID_B=$!
 
 wait "$PID_A" "$PID_B"
 ```
 
-> codex 0.134.0 / claudex는 stdin 기반 1-shot 실행에 `exec - < <file>` 형식을 사용한다. `claude` worker는 Claude CLI의 non-interactive 실행 형식에 맞춰 wrapper를 둘 수 있다 (`$SKILL_BASE/hooks/run-worker.sh`).
+> codex 0.134.0 / claudex 는 stdin 기반 1-shot 실행에 `exec -m gpt-5.5 - < <file>` 형식을 사용한다. **`claude` CLI 에는 `exec` 서브명령이 없으므로 `claude -p - --model claude-fable-5` 형식**을 사용한다.
 
 라운드 양방향성 유지:
 - worker 응답 history를 `$SESSION_DIR/worker-A.history.md` 에 누적
@@ -329,7 +336,7 @@ done
 
 - **3-A**: `claudex.codex-reply(conversationId, prompt)` 호출
 - **3-B**: 4-A 패턴 반복
-- **3-C**: history 누적된 새 prompt 파일로 worker 재실행 (`$WORKER exec - < round<N>-*.md`)
+- **3-C**: history 누적된 새 prompt 파일로 worker 재실행 (`"${WORKER_X_CMD[@]}" < round<N>-*.md` — 3-C 의 CLI 별 명령 배열 재사용)
 
 ### Phase 5: 종합 + 정리
 
@@ -340,7 +347,7 @@ done
 
 ### 회의 정보
 - 모드: {consult|dialogue|collaborate|debate}
-- 참가자: {Codex(gpt-5.5), Claudex(GPT-5.5), Claude(Opus 4.8), ...}
+- 참가자: {Codex(gpt-5.5), Claudex(GPT-5.5), Claude(Fable 5), ...}
 - 진행 라운드: {N/M}
 - 종료 사유: {CONSENSUS 도달 | max-round | 사용자 조기 종료}
 - 실행 경로: {3-A MCP | 3-B cmux | 3-C codex-internal}
