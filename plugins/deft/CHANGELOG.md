@@ -4,6 +4,11 @@
 
 형식은 [Keep a Changelog](https://keepachangelog.com/ko/1.1.0/) 를 따르며, 버전 체계는 [Semantic Versioning](https://semver.org/lang/ko/) 을 사용합니다 (`claude-X.Y.Z` / `codex-X.Y.Z` 접두).
 
+## [claude-2.4.4] - 2026-06-10
+
+### Changed
+- **CHANGELOG 과거 entry 일반화 정리** — 폐기된 외부 도구명·도메인·개인 환경 경로가 남아 있던 표현 20곳을 삭제 또는 일반화 ("외부 협업 도구", "외부 연결 검사", "이전 구성" 등). 변경 이력의 사실성(무엇이 언제 바뀌었는지)은 유지.
+
 ## [claude-2.4.3] - 2026-06-10
 
 ### Fixed
@@ -14,15 +19,15 @@
 ### Removed
 - **플러그인 전체 검토 — 개인 정보·외부 참조 잔존 일소** (제로베이스 정합):
   - multi-round GUIDE "더 깊이" 의 작성자 실명 + 개인 환경 경로 + 트래킹 파일 참조 2줄 삭제.
-  - multi-round SKILL 의 `~/git/AGENTS.teams.md §12` 외부 파일 참조 삭제 (자기완결 원칙).
-  - `~/AGENTS.md §1` 개인 정책 참조 제거 (신호 프로토콜·응답 언어 줄 — 정책 내용 자체는 유지).
+  - multi-round SKILL 의 외부 개인 환경 파일 참조 삭제 (자기완결 원칙).
+  - 개인 정책 문서 참조 제거 (신호 프로토콜·응답 언어 줄 — 정책 내용 자체는 유지).
   - Phase 2 제목의 "사용자 정책 §6-3" → "사용자 환경 파일 — 자동 write 금지" 일반 표현으로.
 - 유지 판정: agent-teams 의 "cwd 의 `AGENTS.md`/`CLAUDE.md` 컨벤션 준수" 표현은 사용자 본인 프로젝트 컨벤션 파일의 일반 참조이므로 정당 — 유지.
 
 ## [codex-1.3.2] - 2026-06-10
 
 ### Removed
-- multi-round (Codex) — Claude 측과 동일한 개인 정보·외부 참조 잔존 일소 (GUIDE "더 깊이" 2줄, agents 페르소나의 `~/AGENTS.md §1` 참조, Phase 2 제목 정책 번호).
+- multi-round (Codex) — Claude 측과 동일한 개인 정보·외부 참조 잔존 일소 (GUIDE "더 깊이" 2줄, agents 페르소나의 개인 정책 참조, Phase 2 제목 정책 번호).
 
 ## [claude-2.4.1] - 2026-06-10
 
@@ -45,7 +50,7 @@
   - frontmatter description + SKILL 본문 라우팅 표에 반영 (multi-round / agent-teams 양쪽)
 
 ### Fixed
-- **multi-round Trigger 회피 매트릭스의 "회의" 모순 정리** — 과거 broker 시절 흔적으로 "회의"가 회피 어휘에 잔존 → 강한 트리거로 반전. 회피 어휘는 "한번 봐줘"/"검토해줘"(1발 의도) 류만 유지.
+- **multi-round Trigger 회피 매트릭스의 "회의" 모순 정리** — 과거 구성의 흔적으로 "회의"가 회피 어휘에 잔존 → 강한 트리거로 반전. 회피 어휘는 "한번 봐줘"/"검토해줘"(1발 의도) 류만 유지.
 
 ### Notes
 - 호출 경로(트리거) 추가 → MINOR bump (claude-2.3.0 → claude-2.4.0).
@@ -115,7 +120,6 @@
 
 ### Notes
 - 본 버전은 모델 명시 복원. 동작 호환성 유지 (PATCH bump).
-- `~/git/AGENTS.md` + `~/git/AGENTS.teams.md` 의 "Claude opus" 표기 24군데도 동일 패턴으로 갱신 (Lead 환경 본업 정책 — 별도 repo).
 
 ## [codex-1.1.3] - 2026-06-10
 
@@ -145,7 +149,7 @@
 - **Codex GUIDE Before You Start 에 헬퍼 항목 추가**.
 
 ### Removed
-- broker / agent-relay / relaycast / 외부 cloud 송신 관련 표현 전수 제거 — multi-round 자체가 외부 호출을 만들지 않으므로 불필요한 잡음
+- 외부 협업 도구·외부 연결 검사 관련 표현 전수 제거 — multi-round 자체가 외부 호출을 만들지 않으므로 불필요한 잡음
 - cmux search.db 권한·purge 관련 가드 — multi-round 책임 영역 외 (cmux 자체 부산물)
 
 ## [claude-2.2.0] - 2026-06-09
@@ -172,12 +176,12 @@
 - **공식 MCP 등록 명령 병기** — `claude mcp add-json --scope user claudex '{...}'` 스니펫 추가.
 
 ### Removed
-- **multi-round (Claude) Phase 0 의 `/etc/hosts` cloud 차단 확인 블록** — multi-round 자체가 외부 호출을 만들지 않으므로 책임 영역 외. 잡음 제거.
-- **multi-round (Claude) 보안 가드 표 정리** — `cmux search.db 권한 600` / `agent-relay 영구 삭제 금지` / "외부 cloud 검사" 행 삭제. 가드 8개 → 6개 (참가자 CLI / MCP 컨텍스트 격리 / cmux send sanitize / settings.json write 금지 / 환경 진단 / `cmux identify` 사용).
+- **multi-round (Claude) Phase 0 의 외부 도메인 차단 확인 블록** — multi-round 자체가 외부 호출을 만들지 않으므로 책임 영역 외. 잡음 제거.
+- **multi-round (Claude) 보안 가드 표 정리** — `cmux search.db 권한 600` / 이전 구성 보존 관련 / "외부 연결 검사" 행 삭제. 가드 8개 → 6개 (참가자 CLI / MCP 컨텍스트 격리 / cmux send sanitize / settings.json write 금지 / 환경 진단 / `cmux identify` 사용).
 - **multi-round (Claude) `5-C cmux search.db 잔존 처리` 섹션** — `chmod 600 search.db*` 권장 통째 삭제. cmux 자체 부산물이므로 skill 책임 영역 외.
-- **multi-round (Claude) GUIDE FAQ Q5 (broker 관계) / Q8 (외부 송신 zero) 삭제** — 잡음 제거 + Q 번호 재정렬.
+- **multi-round (Claude) GUIDE FAQ 2건 (이전 구성 관계 / 외부 송신) 삭제** — 잡음 제거 + Q 번호 재정렬.
 - **multi-round (Claude) agents/*-participant.md 의 "본업 코드 외부 송신 금지 / search.db 잔존 가능성" 라인 삭제**.
-- **README (Claude) "broker 무관" 표현 제거** — multi-round 행 + 3-도구 비교표 의존성 칸.
+- **README (Claude) 불필요한 비교 표현 제거** — multi-round 행 + 3-도구 비교표 의존성 칸.
 
 ### Added (cmux-rebalancing 헬퍼 통합)
 - **`plugins/deft/bin/cmux-rebalancing` 동봉** — pane 비율 자동 조정 헬퍼. 좌→우 정책 비율(2컬럼=60:40 / 3컬럼=40:30:30 / 4컬럼=25:25:25:25 / 5+=균등) 또는 사용자 명시 비율(`cmux-rebalancing 7:3`) 적용.
@@ -217,13 +221,13 @@
 ## [claude-2.1.2] - 2026-06-08
 
 ### Changed
-- **multi-round 작업 디렉토리 표준화** — skill 실행 시 사용하는 세션·메타·hooks 경로를 `/tmp/multi-round-session/` → **`~/.agents/skills/multi-round/`** 하위로 통일. 다른 사용자 skill들과 일관된 구조 (예: `~/.agents/skills/agent-relay/`).
+- **multi-round 작업 디렉토리 표준화** — skill 실행 시 사용하는 세션·메타·hooks 경로를 `/tmp/multi-round-session/` → **`~/.agents/skills/multi-round/`** 하위로 통일. 다른 사용자 skill들과 일관된 구조.
   - 새 구조: `sessions/<YYYYMMDD-HHMM-tag>/` (회의별 transcript) + `state/` (영구 메타) + `hooks/` (동작 훅)
   - SKILL.md: 작업 디렉토리 표준 섹션 신규 추가 + Phase 4-A 예시 경로를 `$SESSION_DIR` 변수로 변경
   - GUIDE.md: Before You Start에 작업 디렉토리 안내 추가 + Examples 9-5 메타 transcript 경로 갱신
-- **상충 정정 (SKILL.md)** — 이전 2.1.1에서 Phase 0 외부 cloud lsof 체크 제거했으나 보안 가드 #1 + Error Handling에 잔존 표기가 있었던 부분 정정:
-  - 보안 가드 #1: "Phase 0 preflight 통과 (외부 cloud 송신 0)" → "Phase 0 참가자 CLI 1개 이상 설치 확인"
-  - Error Handling: "외부 cloud 연결 발견 (Phase 0) → abort" 제거 + 참가자 CLI 매트릭스 재정렬
+- **상충 정정 (SKILL.md)** — 이전 2.1.1에서 Phase 0 외부 연결 체크 제거했으나 보안 가드 #1 + Error Handling에 잔존 표기가 있었던 부분 정정:
+  - 보안 가드 #1: "Phase 0 preflight 통과 (외부 연결 0)" → "Phase 0 참가자 CLI 1개 이상 설치 확인"
+  - Error Handling: "외부 연결 발견 (Phase 0) → abort" 제거 + 참가자 CLI 매트릭스 재정렬
 
 ### Notes
 - 본 버전은 경로 표준화·문서 일관성 정정. 동작 호환성 유지 (PATCH).
@@ -232,7 +236,7 @@
 ## [claude-2.1.1] - 2026-06-08
 
 ### Changed
-- **multi-round Phase 0 Preflight 단순화** — 외부 cloud 송신 lsof 체크 제거. multi-round skill 자체는 외부 호출을 만들지 않으므로 본 검사는 skill 책임 영역 밖 (`~/AGENTS.md §5-0` cloud 차단 정책 적용자의 환경에서 자동 보호됨). Chrome 등 무관한 시스템 트래픽 false positive 제거.
+- **multi-round Phase 0 Preflight 단순화** — 외부 연결 검사 제거. multi-round skill 자체는 외부 호출을 만들지 않으므로 본 검사는 skill 책임 영역 밖. 무관한 시스템 트래픽 false positive 제거.
 - **참가자 양방향 + mix 기본** — claudex 단독 확인 → **claude + claudex(또는 codex) 양쪽 검사**. mix가 default. 한쪽만 설치된 환경에서도 그 쪽만으로 진행 (graceful fallback). 양쪽 모두 Lead가 될 수 있음 명시.
 - **양방향 통신 컨셉 명확화 (§Phase 2)** — MCP server는 항상 claudex가 띄움. Lead가 Claude이든 Claudex이든 동일한 MCP를 경유. **cmux나 Claude 팀 기능에 종속 X — multi-round는 자체 MCP 채널로 독립 동작**.
 - **회의 모드 사용자 선택 메뉴 추가** — consult/dialogue/collaborate/debate 각 모드의 1줄 설명을 함께 노출. 사용자가 1~4 입력으로 선택. 명시 없으면 기본 dialogue.
@@ -248,12 +252,11 @@
 ## [claude-2.1.0] - 2026-06-05
 
 ### Added
-- **multi-round** 신규 스킬 추가 — broker 없이 여러 AI가 N라운드에 걸쳐 양방향으로 의견을 주고받는 멀티턴 토론 도구.
+- **multi-round** 신규 스킬 추가 — 여러 AI가 N라운드에 걸쳐 양방향으로 의견을 주고받는 멀티턴 토론 도구.
   - `claudex mcp-server` (내장 MCP 도구 `codex` / `codex-reply`) + cmux pane 제어 조합으로 동작.
-  - 외부 cloud(api.relaycast.dev / agentrelay.com) 송신 zero — `~/AGENTS.md` §6-1 본업 코드 외부 송신 금지 정책 준수.
-  - 회의 모드: `consult` / `dialogue` (기본) / `collaborate` / `debate` — `~/git/AGENTS.teams.md` §12 정의 이식.
+  - 회의 모드: `consult` / `dialogue` (기본) / `collaborate` / `debate` 4종 정의.
   - 신호 프로토콜: `ACK`/`STATUS`/`BLOCKED`/`DONE` + 모드별 확장 (`CONSENSUS`/`AGREED`/`DISSENT`/`CONCEDE`/`REVIEW_PASS`/`REVIEW_FAIL`).
-  - 보안 가드 8종: preflight 송신 게이트, `-c mcp_servers={}` 강제, cmux send 줄바꿈 sanitize, cmux search.db 권한 600, settings.json 자동 write 금지, claudex/codex graceful fallback, `cmux identify` 사용, agent-relay 영구 삭제 금지.
+  - 초기 보안 가드 8종 구성 (preflight 검사, `-c mcp_servers={}` 강제, cmux send 줄바꿈 sanitize, settings.json 자동 write 금지, claudex/codex graceful fallback, `cmux identify` 사용 등).
   - 트리거: "멀티 라운드", "라운드 회의", "왔다갔다 토론", "주거니 받거니", "AI끼리 토론시켜", "수렴할 때까지 주고받아" 등 18종 — `multi-check` (1발 비교) / Agent Teams (파일 작업) 와 명확히 분리.
   - `agents/codex-participant.md`, `agents/claude-participant.md` 두 참가자 페르소나 동봉.
 
@@ -262,7 +265,6 @@
 - 버전 표기 정책 정렬: 본 changelog의 버전을 `claude-X.Y.Z` 접두 표기로 통일 (이전 `1.0.X` 표기는 그대로 유지하되 신규 엔트리부터 적용).
 
 ### Notes
-- agent-relay broker 의존성 — 본 스킬은 broker를 호출하지 않음. broker가 cloud-coupled로 사용자 환경에서 차단된 경우 (`/etc/hosts`로 `api.relaycast.dev` 차단)에도 정상 동작.
 - Codex 측 포팅 (plugins/codex/deft/skills/multi-round/) 은 별도 사이클로 분리 — Codex 측 변경 시 `codex-X.Y.Z` 독립 bump.
 
 ## [1.0.4] - 2026-04-20
