@@ -417,5 +417,3 @@ PostgreSQL vs MongoDB — 우리 결제 시스템에 진짜 뭐가 맞는지 멀
 
 - skill 내부 동작 상세: [SKILL.md](SKILL.md)
 - 참가자 페르소나: [agents/claude-participant.md](agents/claude-participant.md), [agents/codex-participant.md](agents/codex-participant.md)
-- 본업 환경 (정새한슬 개인 정책): `~/AGENTS.md §5-0`, `~/git/AGENTS.teams.md §14`
-- 트래킹: `~/relay-setup-customizations.md §24~`

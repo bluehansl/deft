@@ -177,7 +177,7 @@ fi
 - ③ 둘 다 없고 `claude` 만 있으면 claude
   - 단, 본 skill은 Codex 측이므로 claudex/codex 가 1순위
 
-### Phase 2: MCP 서버 등록 가이드 (자동 write 금지 — 사용자 정책 §6-3)
+### Phase 2: MCP 서버 등록 가이드 (사용자 환경 파일 — 자동 write 금지)
 
 `~/.codex/config.toml` 은 사용자 환경 파일이므로 **자동 수정 금지**. 미등록 시 사용자에게 다음 스니펫을 출력하고 수동 등록을 요청한다.
 
@@ -453,7 +453,7 @@ pgrep -f "claudex mcp-server" 2>/dev/null
 
 각 워커 prompt에 다음 라인 inject:
 ```
-- 응답 언어: 한국어 (~/AGENTS.md §1)
+- 응답 언어: 한국어
 - 응답 마지막 줄에 'DONE:' 센티넬 출력
 - 회의 모드: {consult|dialogue|collaborate|debate}
 - 신호 프로토콜 사용 (ACK/STATUS/BLOCKED/DONE + 모드별 확장)

@@ -4,6 +4,21 @@
 
 형식은 [Keep a Changelog](https://keepachangelog.com/ko/1.1.0/) 를 따르며, 버전 체계는 [Semantic Versioning](https://semver.org/lang/ko/) 을 사용합니다 (`claude-X.Y.Z` / `codex-X.Y.Z` 접두).
 
+## [claude-2.4.2] - 2026-06-10
+
+### Removed
+- **플러그인 전체 검토 — 개인 정보·외부 참조 잔존 일소** (제로베이스 정합):
+  - multi-round GUIDE "더 깊이" 의 작성자 실명 + 개인 환경 경로 + 트래킹 파일 참조 2줄 삭제.
+  - multi-round SKILL 의 `~/git/AGENTS.teams.md §12` 외부 파일 참조 삭제 (자기완결 원칙).
+  - `~/AGENTS.md §1` 개인 정책 참조 제거 (신호 프로토콜·응답 언어 줄 — 정책 내용 자체는 유지).
+  - Phase 2 제목의 "사용자 정책 §6-3" → "사용자 환경 파일 — 자동 write 금지" 일반 표현으로.
+- 유지 판정: agent-teams 의 "cwd 의 `AGENTS.md`/`CLAUDE.md` 컨벤션 준수" 표현은 사용자 본인 프로젝트 컨벤션 파일의 일반 참조이므로 정당 — 유지.
+
+## [codex-1.3.2] - 2026-06-10
+
+### Removed
+- multi-round (Codex) — Claude 측과 동일한 개인 정보·외부 참조 잔존 일소 (GUIDE "더 깊이" 2줄, agents 페르소나의 `~/AGENTS.md §1` 참조, Phase 2 제목 정책 번호).
+
 ## [claude-2.4.1] - 2026-06-10
 
 ### Changed
