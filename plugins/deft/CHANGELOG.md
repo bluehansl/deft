@@ -4,6 +4,17 @@
 
 형식은 [Keep a Changelog](https://keepachangelog.com/ko/1.1.0/) 를 따르며, 버전 체계는 [Semantic Versioning](https://semver.org/lang/ko/) 을 사용합니다 (`claude-X.Y.Z` / `codex-X.Y.Z` 접두).
 
+## [claude-2.5.1] - 2026-06-11
+
+### Fixed
+- **SKILL.md frontmatter strict YAML 정합** — multi-round·agent-teams 의 `description` 값에 따옴표 없는 `예:` 콜론이 있어 strict YAML 파서(codex)에서 "mapping values are not allowed" 파싱 실패 → 작은따옴표 스칼라로 감쌈. 전 스킬 frontmatter `yaml.safe_load` 일괄 검증 통과.
+- **multi-round-bus CLI: `--content` 값이 `--` 로 시작하면 stdin 대기로 빠지는 행(hang)** — 페르소나 frontmatter(`---`) 본문을 인자로 전달하는 실사용에서 발견. 값을 받는 옵션은 다음 토큰을 무조건 값으로 소비하도록 parseArgs 정정 + 회귀 테스트.
+
+## [codex-1.4.1] - 2026-06-11
+
+### Fixed
+- multi-round (Codex) — Claude 측과 동일 2건: SKILL.md frontmatter strict YAML 정정 (codex 는 strict 파서라 스킬 로드 자체가 실패했음), multi-round-bus parseArgs 행 정정.
+
 ## [claude-2.5.0] - 2026-06-11
 
 ### Added

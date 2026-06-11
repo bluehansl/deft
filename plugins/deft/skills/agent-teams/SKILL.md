@@ -1,6 +1,6 @@
 ---
 name: agent-teams
-description: Claude Code 내장 팀 기능으로 다중 Claude 에이전트 팀을 운영하는 skill. Lead가 역할별 팀원(backendDev/frontendDev/qa 등)을 spawn해 분석→구현→검증을 분담하고, 단계 게이트·역할 페르소나·work-id 기반 영속 작업노트로 일관성과 연속성을 보장한다. 강한 트리거 — "코딩 작업" 문구가 포함된 요청은 본 skill 로 발동 (예: "IT-14610 코딩 작업 시작", "이거 코딩 작업해줘", "코딩 작업 이어서"). 그 외 트리거 — "에이전트 팀", "팀으로 작업", "팀으로 구현", "역할 나눠서 해", "BE/FE 나눠서 해", "QA까지 붙여", "spawn a team". 단 "회의"/"미팅" 단어가 포함된 요청은 multi-round, 1발 비교는 multi-check 를 쓰세요.
+description: 'Claude Code 내장 팀 기능으로 다중 Claude 에이전트 팀을 운영하는 skill. Lead가 역할별 팀원(backendDev/frontendDev/qa 등)을 spawn해 분석→구현→검증을 분담하고, 단계 게이트·역할 페르소나·work-id 기반 영속 작업노트로 일관성과 연속성을 보장한다. 강한 트리거 — "코딩 작업" 문구가 포함된 요청은 본 skill 로 발동 (예: "IT-14610 코딩 작업 시작", "이거 코딩 작업해줘", "코딩 작업 이어서"). 그 외 트리거 — "에이전트 팀", "팀으로 작업", "팀으로 구현", "역할 나눠서 해", "BE/FE 나눠서 해", "QA까지 붙여", "spawn a team". 단 "회의"/"미팅" 단어가 포함된 요청은 multi-round, 1발 비교는 multi-check 를 쓰세요.'
 ---
 
 # Agent Teams Skill

@@ -329,6 +329,9 @@ function mcpServe(dir, selfName) {
 
 // ---------- CLI 파싱 ----------
 
+// 값을 받는 옵션 — 다음 토큰이 '--' 로 시작해도 무조건 값으로 소비 (본문이 '---' 로 시작하는 경우 등)
+const VALUE_OPTS = new Set(['session', 'from', 'to', 'type', 'content', 'name', 'surface', 'kind', 'as', 'limit']);
+
 function parseArgs(argv) {
   const opts = { _: [] };
   for (let i = 0; i < argv.length; i++) {
@@ -336,8 +339,14 @@ function parseArgs(argv) {
     if (a.startsWith('--')) {
       const key = a.slice(2);
       const next = argv[i + 1];
-      if (next !== undefined && !next.startsWith('--')) { opts[key] = next; i++; }
-      else opts[key] = true;
+      if (VALUE_OPTS.has(key)) {
+        if (next === undefined) { opts[key] = true; } // 값 누락 → stdin 등 호출부 분기
+        else { opts[key] = next; i++; }
+      } else if (next !== undefined && !next.startsWith('--')) {
+        opts[key] = next; i++;
+      } else {
+        opts[key] = true;
+      }
     } else {
       opts._.push(a);
     }

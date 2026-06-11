@@ -1,6 +1,6 @@
 ---
 name: multi-round
-description: 여러 AI(Claude/Claudex/Codex)가 N라운드 양방향 토론으로 의견을 좁혀 합의에 도달하는 멀티턴 회의 skill. 메시지 버스(브로드캐스트 보드 + 노크) 기반 — cmux 환경에선 pane 시각화 + 자동 깨우기, 통신 본문은 MCP 버스로. 강한 트리거 — "회의"/"미팅" 단어가 포함된 요청은 본 skill 로 발동 (예: "회의 열어줘", "미팅 진행해", "이 주제로 회의"). 그 외 트리거 — "멀티 라운드", "라운드 토론", "왔다갔다 토론", "AI끼리 토론시켜", "수렴할 때까지 주고받아", "multi round", "multi-round debate". 단 "코딩 작업" 문구가 포함된 요청은 agent-teams, 1발 비교는 multi-check 를 쓰세요.
+description: '여러 AI(Claude/Claudex/Codex)가 N라운드 양방향 토론으로 의견을 좁혀 합의에 도달하는 멀티턴 회의 skill. 메시지 버스(브로드캐스트 보드 + 노크) 기반 — cmux 환경에선 pane 시각화 + 자동 깨우기, 통신 본문은 MCP 버스로. 강한 트리거 — "회의"/"미팅" 단어가 포함된 요청은 본 skill 로 발동 (예: "회의 열어줘", "미팅 진행해", "이 주제로 회의"). 그 외 트리거 — "멀티 라운드", "라운드 토론", "왔다갔다 토론", "AI끼리 토론시켜", "수렴할 때까지 주고받아", "multi round", "multi-round debate". 단 "코딩 작업" 문구가 포함된 요청은 agent-teams, 1발 비교는 multi-check 를 쓰세요.'
 ---
 
 # Multi-Round Skill
