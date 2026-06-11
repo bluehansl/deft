@@ -25,6 +25,7 @@ const { execFileSync } = require('child_process');
 
 const KNOCK_TEXT = '[bus] 메시지 확인';
 const LOCK_STALE_MS = 5000;
+const KNOCK_RETRY_MS = 60000; // 미확인 노크가 이 시간 경과하면 다음 post 때 재노크 (aged-knock)
 
 // ---------- 공통 유틸 ----------
 
@@ -43,24 +44,38 @@ function readJson(file, fallback) {
 
 function writeJson(file, obj) {
   const tmp = `${file}.tmp.${process.pid}`;
-  fs.writeFileSync(tmp, JSON.stringify(obj, null, 2) + '\n');
+  const fd = fs.openSync(tmp, 'w');
+  fs.writeSync(fd, JSON.stringify(obj, null, 2) + '\n');
+  fs.fsyncSync(fd); // 전원 차단 시 partial write 방지
+  fs.closeSync(fd);
   fs.renameSync(tmp, file);
+}
+
+function pidAlive(pid) {
+  try { process.kill(pid, 0); return true; } catch (_) { return false; }
 }
 
 function withLock(dir, fn) {
   const lockDir = path.join(dir, '.bus-lock');
+  const ownerFile = path.join(lockDir, 'owner.json');
   const deadline = Date.now() + 10000;
   for (;;) {
     try {
       fs.mkdirSync(lockDir);
+      try { fs.writeFileSync(ownerFile, JSON.stringify({ pid: process.pid, startedAt: Date.now() })); } catch (_) { /* 메타 실패해도 lock 유효 */ }
       break;
     } catch (e) {
       if (e.code !== 'EEXIST') throw e;
+      // stale 판정: age 경과 + owner pid 사망 확인 (split-brain 방지 — 살아있는 holder 의 lock 은 뺏지 않음)
       try {
         const st = fs.statSync(lockDir);
         if (Date.now() - st.mtimeMs > LOCK_STALE_MS) {
-          fs.rmdirSync(lockDir); // stale lock 강제 해제
-          continue;
+          const owner = readJson(ownerFile, null);
+          if (!owner || !owner.pid || !pidAlive(owner.pid)) {
+            fs.rmSync(lockDir, { recursive: true, force: true }); // stale lock 해제 (holder 사망 확인됨)
+            continue;
+          }
+          // holder 생존 — 긴 작업 중일 수 있으므로 timeout 까지 대기 지속
         }
       } catch (_) { /* 경합 중 사라짐 — 재시도 */ }
       if (Date.now() > deadline) throw new Error('bus lock timeout (10s)');
@@ -71,7 +86,7 @@ function withLock(dir, fn) {
   try {
     return fn();
   } finally {
-    try { fs.rmdirSync(lockDir); } catch (_) { /* 이미 해제 */ }
+    try { fs.rmSync(lockDir, { recursive: true, force: true }); } catch (_) { /* 이미 해제 */ }
   }
 }
 
@@ -89,11 +104,13 @@ function readBoard(dir) {
   let raw;
   try { raw = fs.readFileSync(f, 'utf8'); } catch (_) { return []; }
   const out = [];
+  let skipped = 0;
   for (const line of raw.split('\n')) {
     const t = line.trim();
     if (!t) continue;
-    try { out.push(JSON.parse(t)); } catch (_) { /* 손상 줄 skip */ }
+    try { out.push(JSON.parse(t)); } catch (_) { skipped++; }
   }
+  if (skipped) process.stderr.write(`[bus] WARN: board.jsonl 손상 줄 ${skipped}건 skip (발언 유실 가능 — 보드 파일 점검 권장)\n`);
   return out;
 }
 
@@ -109,31 +126,53 @@ function cmuxKnock(surface) {
   }
 }
 
-// post 후 호출 — 발신자 제외 전원 노크 + 디바운스. lock 밖에서 실행(외부 프로세스 호출이라 느림).
+// knocks.json 항목 정규화 — 구버전(숫자 id)과 신버전({id, ts}) 모두 수용
+function normKnock(v) {
+  if (typeof v === 'number') return { id: v, ts: 0 };
+  if (v && typeof v === 'object') return { id: v.id || 0, ts: v.ts || 0 };
+  return { id: 0, ts: 0 };
+}
+
+// post 후 호출 — 발신자 제외 전원 노크 + 디바운스 + aged 재노크. lock 밖에서 실행(외부 프로세스 호출이라 느림).
 function knockOthers(dir, sender, msgId) {
   const F = busFiles(dir);
   const participants = readJson(F.participants, {});
   const cursors = readJson(F.cursors, {});
   const knocks = readJson(F.knocks, {});
+  const now = Date.now();
   const result = { knocked: [], skipped: [], failed: [] };
+  const staleMarks = [];
 
   for (const [name, info] of Object.entries(participants)) {
     if (name === sender) continue;
     if (!info || !info.surface) { result.skipped.push(`${name}(surface 없음)`); continue; }
-    const lastKnock = knocks[name] || 0;
+    const k = normKnock(knocks[name]);
     const lastRead = cursors[name] || 0;
-    if (lastKnock > lastRead) { result.skipped.push(`${name}(미확인 노크 존재 — 디바운스)`); continue; }
+    // 디바운스: 미확인 노크 존재 + 아직 신선(60초 미만) → skip. 60초 경과면 aged 재노크 (sent ≠ consumed 보정)
+    if (k.id > lastRead && now - k.ts < KNOCK_RETRY_MS) {
+      result.skipped.push(`${name}(미확인 노크 존재 — 디바운스)`);
+      continue;
+    }
     if (cmuxKnock(info.surface)) {
-      knocks[name] = msgId;
+      knocks[name] = { id: msgId, ts: now };
       result.knocked.push(name);
     } else {
       result.failed.push(name);
+      staleMarks.push(name); // 노크 실패 → registry 에 stale 의심 마킹
     }
   }
   withLock(dir, () => {
     const cur = readJson(F.knocks, {});
-    for (const n of result.knocked) cur[n] = Math.max(cur[n] || 0, msgId);
+    for (const n of result.knocked) {
+      const prev = normKnock(cur[n]);
+      cur[n] = { id: Math.max(prev.id, msgId), ts: now };
+    }
     writeJson(F.knocks, cur);
+    if (staleMarks.length) {
+      const ps = readJson(F.participants, {});
+      for (const n of staleMarks) if (ps[n]) ps[n].lastKnockFailedAt = new Date(now).toISOString();
+      writeJson(F.participants, ps);
+    }
   });
   return result;
 }
@@ -291,7 +330,7 @@ function mcpServe(dir, selfName) {
               `[bus] 게시 완료 #${r.posted.id} (to: ${r.posted.to})` +
               `\n노크 전달: ${r.knock.knocked.join(', ') || '없음'}` +
               (r.knock.skipped.length ? `\n노크 생략: ${r.knock.skipped.join(', ')}` : '') +
-              (r.knock.failed.length ? `\n노크 실패: ${r.knock.failed.join(', ')} (cmux 미가용 — 상대가 다음 check 때 수신)` : '');
+              (r.knock.failed.length ? `\n노크 실패: ${r.knock.failed.join(', ')} (stale surface 의심 — registry 에 마킹됨. 메시지는 보드에 보존, 상대가 다음 check 때 수신)` : '');
           } else if (tool === 'check_messages') {
             text = renderCheck(doCheck(dir, args.as || selfName));
           } else if (tool === 'list_participants') {

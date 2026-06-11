@@ -4,6 +4,23 @@
 
 형식은 [Keep a Changelog](https://keepachangelog.com/ko/1.1.0/) 를 따르며, 버전 체계는 [Semantic Versioning](https://semver.org/lang/ko/) 을 사용합니다 (`claude-X.Y.Z` / `codex-X.Y.Z` 접두).
 
+## [claude-2.6.0] - 2026-06-11
+
+### Added
+- **버스 신뢰성 보강 3건** — multi-round 첫 실전 회의(버스 자체를 의제로 한 dialogue, 2라운드 CONSENSUS)에서 합의된 개선을 그대로 구현:
+  - **lock pid 검증 (High)**: lock 에 owner pid 메타 기록, stale 판정 시 pid 생존 확인 — 살아있는 holder 의 lock 은 탈취하지 않음 (split-brain 방지). `writeJson` 에 fsync 추가.
+  - **aged-knock 재노크 (High~Mid)**: 미확인 노크가 60초 경과하면 다음 post 때 재노크 (sent ≠ consumed 보정). knocks.json 을 `{id, ts}` 구조로 확장 (구버전 숫자 호환).
+  - **stale surface 마킹 + 손상 줄 로깅 (Mid)**: 노크 실패 시 레지스트리에 `lastKnockFailedAt` 마킹 + post 결과에 stale 의심 표시. board.jsonl 손상 줄 skip 시 stderr WARN (조용한 발언 유실 방지).
+- 단위 테스트 통과: aged 재노크 발화 / 신선 디바운스 skip / 죽은 holder 해제 / 살아있는 holder 10s timeout 대기 / stale 마킹 / 손상 줄 WARN.
+
+### Changed
+- SKILL 디바운스 설명에 aged 재노크·stale 마킹 반영.
+
+## [codex-1.5.0] - 2026-06-11
+
+### Added
+- multi-round (Codex) — Claude 측과 동일한 버스 신뢰성 보강 3건 (`bin/multi-round-bus` 동기화) + SKILL 디바운스 문구 갱신.
+
 ## [claude-2.5.1] - 2026-06-11
 
 ### Fixed
