@@ -4,6 +4,29 @@
 
 형식은 [Keep a Changelog](https://keepachangelog.com/ko/1.1.0/) 를 따르며, 버전 체계는 [Semantic Versioning](https://semver.org/lang/ko/) 을 사용합니다 (`claude-X.Y.Z` / `codex-X.Y.Z` 접두).
 
+## [claude-2.8.0] - 2026-06-12
+
+### Added
+- **버스 시퀀스 프로토콜 (P1~P4)** — "워커가 요청 A 처리 중 추가 요청 B 가 오면 B 가 묻히는" 레이스 실측(사용자 발견)의 구조적 해결:
+  - `reply_to` 필드 — 응답↔요청 기계적 연결 (CLI `--reply-to` + MCP `post_message` 인자)
+  - **미응답 요청 큐** — check 가 "본인 대상 request 중 reply_to 응답 없는 것"을 읽음 커서와 독립으로 매번 재계산해 `⚠ 미응답 요청` 섹션 반복 노출 (자기 치유 — 읽고 빠뜨린 요청도 응답까지 계속 보임)
+  - 처리 규칙 재정의 ("게시·응답 시점 무관, id 순 전부 처리") — check 출력·MCP 도구 설명·페르소나 4종 반영
+  - 과거 데이터 관대 폴백 (reply_to 없는 구식 응답 호환)
+- **`transcript` 서브커맨드 (C1~C7)** — board.jsonl → 가독 마크다운 회의록. multi-round 3인 회의 합의 사양 그대로:
+  - Timeline (`### #id · type · ts`, `from → to`, `← #N 응답`), 신호 12종 강조, DONE 비최종행 경고
+  - 세션 디렉토리 입력 시 `transcript.md` 자동 저장 기본 (`-o -` 로 stdout), MVP 옵션 3개 (positional·`-o`·`--full`)
+  - 주입(페르소나) 메시지 기본 발췌 (`inject:true` 마커 — post `--inject` 신설 + frontmatter 휴리스틱 폴백), `--full` 전문 (동적 fence)
+  - SKILL Phase 5 표준 호출 1줄 + 역할 분리 명시 (audit=board.jsonl / 가독=transcript.md / 종합=summary.md)
+- parseArgs: `-o` short 옵션 + FLAG_OPTS (기존 `--json` 의 뒤 토큰 흡수 버그성 동작 교정)
+
+### Notes
+- agent-teams 첫 실전 운영으로 구현 (backendDev 구현 + qa 36케이스 REVIEW_PASS + Lead diff 검증) — multi-round 회의 합의 → work.md 설계 결정 → 팀 구현의 교차 참조 흐름 검증 완료.
+
+## [codex-1.7.0] - 2026-06-12
+
+### Added
+- multi-round (Codex) — Claude 측과 동일: 버스 시퀀스 프로토콜 + transcript 서브커맨드 (`bin/multi-round-bus` 동기화, SKILL·페르소나 갱신).
+
 ## [claude-2.7.0] - 2026-06-12
 
 ### Added

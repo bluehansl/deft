@@ -410,7 +410,7 @@ cmux send-key --surface "$W1_SURFACE" Enter
 
 ```bash
 # 첫 메시지: 페르소나 + 의제 (수신자 = 해당 워커)
-"$BUS_BIN" post --session "$SESSION_DIR" --from lead --to "$WORKER_NAME" --type request \
+"$BUS_BIN" post --session "$SESSION_DIR" --from lead --to "$WORKER_NAME" --type request --inject \
   --content "$(cat <<'EOF'
 <agents/ 페르소나 본문>
 
@@ -464,7 +464,12 @@ Lead 의 라운드 동작:
 "$BUS_BIN" check --session "$SESSION_DIR" --as lead
 
 # 종료 조건 미충족 → 다음 라운드 게시 (다른 워커 의견 요약 + Lead 입장 + 질문)
+# 워커 응답에 대한 후속 요청이면 --reply-to <응답 id> 로 연결 (시퀀스 그래프 — 회의록에 ← #N 표기)
 "$BUS_BIN" post --session "$SESSION_DIR" --from lead --to "$NEXT_WORKER" --type request --content "..."
+```
+
+- **미응답 요청 큐**: check 출력의 `⚠ 미응답 요청` 섹션은 "본인 대상 request 중 reply_to 응답이 없는 것"을 매번 재계산해 반복 노출한다 — 워커가 읽고 빠뜨린 요청도 응답할 때까지 계속 보임 (게시·응답 시점 교차 레이스에 의한 묻힘 방지). Lead 의 check 에도 동일 적용.
+```bash
 ```
 
 - **폴링 불필요**: 워커 응답 post 가 Lead 를 노크로 깨운다.
@@ -536,7 +541,13 @@ Lead 의 라운드 동작:
 - 최종 권장안 (Lead 종합)
 ```
 
-회의록 전문 확인: `"$BUS_BIN" history --session "$SESSION_DIR"`
+가독 회의록 자동 생성 (Lead 종합 직후 표준 호출 — `$SESSION_DIR/transcript.md` 자동 저장):
+
+```bash
+"$BUS_BIN" transcript "$SESSION_DIR"   # 즉석 확인: -o - / 주입문 전문: --full
+```
+
+회의록 전문 확인: `"$BUS_BIN" history --session "$SESSION_DIR"` (원본 audit 은 board.jsonl, 가독 파생물은 transcript.md, Lead 종합은 summary.md — 역할 분리)
 
 #### 5-B. 정리 (워커 + pane)
 

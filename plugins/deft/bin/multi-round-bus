@@ -99,10 +99,10 @@ function busFiles(dir) {
   };
 }
 
-function readBoard(dir) {
-  const f = busFiles(dir).board;
+// jsonl 파일 → 메시지 배열 (transcript 의 board.jsonl 직접 입력도 이 함수 사용)
+function readJsonlLines(file) {
   let raw;
-  try { raw = fs.readFileSync(f, 'utf8'); } catch (_) { return []; }
+  try { raw = fs.readFileSync(file, 'utf8'); } catch (_) { return []; }
   const out = [];
   let skipped = 0;
   for (const line of raw.split('\n')) {
@@ -110,8 +110,12 @@ function readBoard(dir) {
     if (!t) continue;
     try { out.push(JSON.parse(t)); } catch (_) { skipped++; }
   }
-  if (skipped) process.stderr.write(`[bus] WARN: board.jsonl 손상 줄 ${skipped}건 skip (발언 유실 가능 — 보드 파일 점검 권장)\n`);
+  if (skipped) process.stderr.write(`[bus] WARN: ${path.basename(file)} 손상 줄 ${skipped}건 skip (발언 유실 가능 — 보드 파일 점검 권장)\n`);
   return out;
+}
+
+function readBoard(dir) {
+  return readJsonlLines(busFiles(dir).board);
 }
 
 // ---------- 노크 (제어 채널) ----------
@@ -191,10 +195,15 @@ function doRegister(dir, name, surface, kind) {
   });
 }
 
-function doPost(dir, from, to, content, type) {
+function doPost(dir, from, to, content, type, replyTo, inject) {
   if (!from) fail('post: 발신자 필요 (--from 또는 env BUS_PARTICIPANT)');
   if (!to) fail('post: 수신자 필요 (--to <참가자 이름 | all>)');
   if (!content || !content.trim()) fail('post: 본문이 비어 있음');
+  let replyToId;
+  if (replyTo !== undefined && replyTo !== null) {
+    replyToId = parseInt(replyTo, 10);
+    if (!Number.isInteger(replyToId) || replyToId < 1) fail('post: --reply-to 는 1 이상의 메시지 id 숫자여야 함');
+  }
   fs.mkdirSync(dir, { recursive: true });
   const F = busFiles(dir);
   const msg = withLock(dir, () => {
@@ -205,13 +214,34 @@ function doPost(dir, from, to, content, type) {
       from,
       to,
       type: type || 'message',
-      content,
     };
+    if (replyToId !== undefined) m.reply_to = replyToId; // 응답↔요청 기계적 연결 (P1) — 미지정 시 필드 자체 생략 (과거 데이터와 동형)
+    if (inject) m.inject = true; // 주입(페르소나/의제) 메시지 마킹 — transcript 발췌 대상 (C7). Lead CLI 전용
+    m.content = content;
     fs.appendFileSync(F.board, JSON.stringify(m) + '\n');
     return m;
   });
   const knock = knockOthers(dir, from, msg.id);
-  return { posted: { id: msg.id, from: msg.from, to: msg.to, type: msg.type }, knock };
+  const posted = { id: msg.id, from: msg.from, to: msg.to, type: msg.type };
+  if (msg.reply_to !== undefined) posted.reply_to = msg.reply_to;
+  return { posted, knock };
+}
+
+// 미응답 요청 큐 (P2) — type=request 이고 to=본인인 메시지 중, 본인이 아직 응답하지 않은 것을 id 순으로 반환.
+// to='all' request 는 큐 미포함 — 특정 응답자 지정이 아니므로 (전원 응답 추적은 복잡도 대비 이득 없음, 노크+새 메시지 표시로 충분).
+// 읽음 커서와 독립 — 매 check 마다 보드 전체를 재계산한다 (한 번 놓쳐도 다음 check 에 다시 노출되는 자기 치유).
+function pendingRequests(board, as) {
+  const requests = board.filter((m) => m.type === 'request' && m.to === as);
+  if (!requests.length) return [];
+  const replied = new Set(); // 본인이 reply_to 로 응답한 요청 id 집합 (P1 기계적 연결)
+  let legacyMax = 0; // reply_to 없는 본인 response 의 최대 id — P4 관대 폴백용 (과거 데이터 호환)
+  for (const m of board) {
+    if (m.from !== as) continue;
+    if (m.reply_to !== undefined) replied.add(m.reply_to);
+    else if (m.type === 'response' && m.id > legacyMax) legacyMax = m.id;
+  }
+  // P4 관대 폴백: 요청 id 이후 본인 response(reply_to 없음)가 존재하면 그 요청은 응답된 것으로 간주
+  return requests.filter((r) => !replied.has(r.id) && r.id > legacyMax);
 }
 
 function doCheck(dir, as) {
@@ -226,7 +256,7 @@ function doCheck(dir, as) {
       cursors[as] = board[board.length - 1].id;
       writeJson(F.cursors, cursors);
     }
-    return { participant: as, newMessages: fresh, totalOnBoard: board.length };
+    return { participant: as, newMessages: fresh, pendingRequests: pendingRequests(board, as), totalOnBoard: board.length };
   });
 }
 
@@ -281,18 +311,164 @@ function doWatch(dir, opts) {
 
 // check 결과를 워커/Lead 가 읽기 좋은 텍스트로
 function renderCheck(res) {
-  if (!res.newMessages.length) return `[bus] 새 메시지 없음 (보드 총 ${res.totalOnBoard}건)`;
   const me = res.participant;
-  const lines = [`[bus] 새 메시지 ${res.newMessages.length}건 (수신자: ${me})`];
-  for (const m of res.newMessages) {
-    const mine = m.to === me || m.to === 'all';
+  const pending = res.pendingRequests || [];
+  if (!res.newMessages.length && !pending.length) return `[bus] 새 메시지 없음 (보드 총 ${res.totalOnBoard}건)`;
+  const lines = [];
+  if (res.newMessages.length) {
+    lines.push(`[bus] 새 메시지 ${res.newMessages.length}건 (수신자: ${me})`);
+    for (const m of res.newMessages) {
+      const mine = m.to === me || m.to === 'all';
+      lines.push('');
+      lines.push(`--- #${m.id} | from: ${m.from} | to: ${m.to}${mine ? ' ◀ 본인 수신' : ' (참고용)'} | type: ${m.type}${m.reply_to !== undefined ? ` | ← #${m.reply_to} 응답` : ''} | ${m.ts}`);
+      lines.push(m.content);
+    }
+  } else {
+    lines.push(`[bus] 새 메시지 없음 (보드 총 ${res.totalOnBoard}건)`);
+  }
+  if (pending.length) {
     lines.push('');
-    lines.push(`--- #${m.id} | from: ${m.from} | to: ${m.to}${mine ? ' ◀ 본인 수신' : ' (참고용)'} | type: ${m.type} | ${m.ts}`);
-    lines.push(m.content);
+    lines.push(`⚠ 미응답 요청 ${pending.length}건 — 본인 대상 request 중 응답(reply_to) 미게시분. 응답 전까지 매 check 반복 노출:`);
+    for (const r of pending) {
+      const head = String(r.content || '').split('\n')[0].slice(0, 80);
+      lines.push(`  #${r.id} from ${r.from} (${r.ts}) — ${head}`);
+    }
   }
   lines.push('');
-  lines.push('처리 규칙: 수신자가 본인(또는 all)인 메시지는 작업 수행 후 post_message 로 응답(수신자=요청자). 본인이 아니면 컨텍스트로만 검토하고, 기여할 내용이 있을 때만 수신자를 지정해 자발 발언.');
+  lines.push('처리 규칙: 수신자가 본인(또는 all)인 메시지는 작업 수행 후 post_message 로 응답(수신자=요청자, reply_to=요청 id). 본인이 아니면 컨텍스트로만 검토하고, 기여할 내용이 있을 때만 수신자를 지정해 자발 발언. ⚠ 미응답 요청이 있으면 게시·응답 시점 무관, id 순으로 전부 처리할 것.');
   return lines.join('\n');
+}
+
+// ---------- transcript (회의록 마크다운 렌더) ----------
+
+// 신호 키워드 — 줄 시작 + 콜론 한정으로만 강조 (C3). 본문 중간의 단어는 강조하지 않음
+const SIGNAL_WORDS = ['ACK', 'STATUS', 'BLOCKED', 'DONE', 'AGREED', 'DISSENT', 'CONSENSUS', 'CONCEDE', 'REVIEW_PASS', 'REVIEW_FAIL', 'VERDICT', 'DISTRIBUTE'];
+const SIGNAL_RE = new RegExp(`^(${SIGNAL_WORDS.join('|')}):`);
+
+// 주입 메시지 판정 (C7) — inject 필드 있으면 필드 우선, 없으면 과거 로그용 frontmatter 휴리스틱 폴백
+function isInjectMessage(m) {
+  if (Object.prototype.hasOwnProperty.call(m, 'inject')) return m.inject === true;
+  return typeof m.content === 'string' && /^---\r?\nname\s*:/.test(m.content);
+}
+
+// content 내 최장 백틱 런보다 긴 fence 반환 — 본문에 ``` 가 있어도 감싸는 fence 가 깨지지 않게 (C3 fence 동적 처리)
+function dynamicFence(content) {
+  let max = 2; // 최소 fence 길이 3 보장
+  const re = /`+/g;
+  let m;
+  while ((m = re.exec(content)) !== null) if (m[0].length > max) max = m[0].length;
+  return '`'.repeat(max + 1);
+}
+
+// 일반 메시지 본문 렌더 — 마크다운 그대로 두고 신호 줄만 볼드(코드 fence 내부 제외) + DONE 비최종행 감지 (C3)
+function renderBody(content) {
+  const lines = String(content).split('\n');
+  const out = [];
+  let inFence = false;
+  let fenceChar = '';
+  let fenceLen = 0;
+  let lastNonEmpty = -1;
+  const doneLines = [];
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    if (line.trim()) lastNonEmpty = i;
+    const fm = line.match(/^\s{0,3}(`{3,}|~{3,})/);
+    if (fm) {
+      const mark = fm[1];
+      if (!inFence) { inFence = true; fenceChar = mark[0]; fenceLen = mark.length; }
+      else if (mark[0] === fenceChar && mark.length >= fenceLen) { inFence = false; }
+      out.push(line);
+      continue;
+    }
+    if (!inFence && SIGNAL_RE.test(line)) {
+      if (line.startsWith('DONE:')) doneLines.push(i);
+      out.push(line.replace(SIGNAL_RE, '**$1:**'));
+    } else {
+      out.push(line);
+    }
+  }
+  return { text: out.join('\n'), doneWarn: doneLines.some((i) => i !== lastNonEmpty) };
+}
+
+// 주입 메시지 발췌 (C6) — 메타 1줄 + 의제/회의 정보 류 섹션(## 헤더 기준) 추출. 추출 실패 시 안내 1줄만
+function excerptInject(content) {
+  const text = String(content);
+  const nameM = text.match(/^name\s*:\s*(.+)$/m);
+  const sections = [];
+  let cur = null;
+  for (const line of text.split('\n')) {
+    if (/^##\s/.test(line)) {
+      if (cur) { sections.push(cur.join('\n').trimEnd()); cur = null; }
+      // 발췌 섹션은 메시지 헤더(###)보다 깊게 #### 로 강등 — outline 계층 역전 방지 (qa 비블로킹 1번)
+      if (/^##\s+.*(의제|회의 정보)/.test(line)) cur = [line.replace(/^##\s/, '#### ')];
+    } else if (cur) {
+      cur.push(line);
+    }
+  }
+  if (cur) sections.push(cur.join('\n').trimEnd());
+  if (!sections.length) return '(주입 메시지 — --full 로 전문 표시)';
+  return [`(주입 메시지 발췌${nameM ? ` — name: ${nameM[1].trim()}` : ''} — 전문은 --full)`, '', sections.join('\n\n')].join('\n');
+}
+
+// board 메시지 배열 → 마크다운 회의록 (C3~C6). full=true 면 주입 메시지 전문을 동적 fence 로 감싸 표시
+function renderTranscript(board, source, full) {
+  const lines = ['# multi-round 회의록', ''];
+  lines.push(`- 원본: ${source}`);
+  lines.push(`- 메시지: ${board.length}건`);
+  if (board.length) lines.push(`- 기간: ${board[0].ts} ~ ${board[board.length - 1].ts}`);
+  for (const m of board) {
+    lines.push('');
+    lines.push(`### #${m.id} · ${m.type} · ${m.ts}`);
+    lines.push('');
+    lines.push(`${m.from} → ${m.to}${m.reply_to !== undefined ? ` · ← #${m.reply_to} 응답` : ''}`);
+    lines.push('');
+    if (isInjectMessage(m)) {
+      if (full) {
+        const fence = dynamicFence(m.content);
+        lines.push(fence);
+        lines.push(String(m.content).trimEnd());
+        lines.push(fence);
+      } else {
+        lines.push(excerptInject(m.content));
+      }
+    } else {
+      const body = renderBody(m.content);
+      lines.push(body.text.trimEnd());
+      if (body.doneWarn) {
+        lines.push('');
+        lines.push('> 주의: DONE: 신호가 본문 최종 행이 아님 — 신호 이후 내용이 누락 처리될 수 있음');
+      }
+    }
+  }
+  lines.push('');
+  return lines.join('\n');
+}
+
+// transcript 서브커맨드 (C1, C4, C5) — 입력: 세션 dir | board.jsonl 직접 | 생략(--session/env → cwd)
+function doTranscript(dir, opts) {
+  const target = opts._[0];
+  let sessionDir = null;
+  let boardFile = null;
+  if (target) {
+    let st = null;
+    try { st = fs.statSync(target); } catch (_) { fail(`transcript: 경로 없음 — ${target}`); }
+    if (st.isDirectory()) { sessionDir = target; boardFile = path.join(target, 'board.jsonl'); }
+    else { boardFile = target; } // board.jsonl 파일 직접 입력 → 출력 기본 stdout (C4)
+  } else {
+    sessionDir = dir || process.cwd(); // positional 생략 → --session/env → cwd (C5)
+    boardFile = path.join(sessionDir, 'board.jsonl');
+  }
+  if (!fs.existsSync(boardFile)) fail(`transcript: board 파일 없음 — ${boardFile}`);
+  const md = renderTranscript(readJsonlLines(boardFile), boardFile, opts.full === true);
+  const o = opts.o;
+  if (o === true) fail('transcript: -o 값 필요 (<파일 경로> 또는 -)');
+  if (o === '-' || (!o && !sessionDir)) {
+    process.stdout.write(md); // -o - 또는 파일 직접 입력 기본 → stdout
+    return;
+  }
+  const outFile = o || path.join(sessionDir, 'transcript.md'); // -o 생략 시 세션 디렉토리에 자동 저장 (C4)
+  fs.writeFileSync(outFile, md);
+  console.log(outFile); // 저장 경로 1줄 에코 (C4)
 }
 
 // ---------- MCP stdio 서버 ----------
@@ -302,13 +478,15 @@ const MCP_TOOLS = [
     name: 'post_message',
     description:
       '메시지 버스 보드에 메시지를 게시한다. 게시 즉시 발신자를 제외한 모든 참가자(Lead 포함)에게 확인 노크가 전달된다. ' +
-      '수신자(to)를 지정해도 보드는 전원에게 공개(브로드캐스트)다 — to 는 "누가 작업/응답할 차례인가"의 지정이다.',
+      '수신자(to)를 지정해도 보드는 전원에게 공개(브로드캐스트)다 — to 는 "누가 작업/응답할 차례인가"의 지정이다. ' +
+      '요청(type=request)에 응답할 때는 reply_to 에 그 요청의 메시지 id 를 반드시 지정할 것 — 미응답 요청 추적이 이 연결로 해소된다.',
     inputSchema: {
       type: 'object',
       properties: {
         to: { type: 'string', description: '수신자 참가자 이름. 전원 대상이면 "all"' },
         content: { type: 'string', description: '메시지 본문 (마크다운 가능, 길이 제한 없음)' },
         type: { type: 'string', description: '선택: request | response | comment | signal (기본 message)' },
+        reply_to: { type: 'number', description: '선택: 이 메시지가 응답하는 요청 메시지의 id. 요청에 응답할 때 지정 — 미응답 요청 큐가 이 값으로 해소됨' },
         from: { type: 'string', description: '선택: 발신자 이름 (기본 env BUS_PARTICIPANT)' },
       },
       required: ['to', 'content'],
@@ -318,7 +496,8 @@ const MCP_TOOLS = [
     name: 'check_messages',
     description:
       '버스 보드에서 본인이 아직 읽지 않은 새 메시지를 모두 가져온다. "[bus] 메시지 확인" 노크를 받으면 즉시 호출할 것. ' +
-      '수신자가 본인인 메시지는 작업 후 post_message 로 응답하고, 아니면 컨텍스트로만 검토한다.',
+      '수신자가 본인인 메시지는 작업 후 post_message 로 응답하고, 아니면 컨텍스트로만 검토한다. ' +
+      '출력의 "⚠ 미응답 요청" 섹션은 본인 대상 request 중 아직 응답하지 않은 것 — 읽음 여부와 무관하게 매번 표시되므로, 게시·응답 시점 무관 id 순으로 전부 처리하고 응답 시 reply_to 로 요청 id 를 명시할 것.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -365,9 +544,10 @@ function mcpServe(dir, selfName) {
           const args = (params && params.arguments) || {};
           let text;
           if (tool === 'post_message') {
-            const r = doPost(dir, args.from || selfName, args.to, args.content, args.type);
+            // inject 는 MCP 미노출 (Lead CLI 전용 — 페르소나 주입은 Lead 만 함)
+            const r = doPost(dir, args.from || selfName, args.to, args.content, args.type, args.reply_to);
             text =
-              `[bus] 게시 완료 #${r.posted.id} (to: ${r.posted.to})` +
+              `[bus] 게시 완료 #${r.posted.id} (to: ${r.posted.to}${r.posted.reply_to !== undefined ? `, ← #${r.posted.reply_to} 응답` : ''})` +
               `\n노크 전달: ${r.knock.knocked.join(', ') || '없음'}` +
               (r.knock.skipped.length ? `\n노크 생략: ${r.knock.skipped.join(', ')}` : '') +
               (r.knock.failed.length ? `\n노크 실패: ${r.knock.failed.join(', ')} (stale surface 의심 — registry 에 마킹됨. 메시지는 보드에 보존, 상대가 다음 check 때 수신)` : '');
@@ -409,7 +589,11 @@ function mcpServe(dir, selfName) {
 // ---------- CLI 파싱 ----------
 
 // 값을 받는 옵션 — 다음 토큰이 '--' 로 시작해도 무조건 값으로 소비 (본문이 '---' 로 시작하는 경우 등)
-const VALUE_OPTS = new Set(['session', 'from', 'to', 'type', 'content', 'name', 'surface', 'kind', 'as', 'limit', 'message-id', 'timeout', 'interval']);
+const VALUE_OPTS = new Set(['session', 'from', 'to', 'type', 'content', 'name', 'surface', 'kind', 'as', 'limit', 'message-id', 'timeout', 'interval', 'reply-to']);
+// boolean 플래그 — 값 토큰을 소비하지 않음 (뒤따르는 positional 오흡수 방지)
+const FLAG_OPTS = new Set(['json', 'inject', 'full']);
+// short 옵션 → opts 키 매핑 — 다음 토큰을 무조건 값으로 소비 ('-o -' 의 '-' 포함)
+const SHORT_OPTS = { '-o': 'o' };
 
 function parseArgs(argv) {
   const opts = { _: [] };
@@ -418,7 +602,9 @@ function parseArgs(argv) {
     if (a.startsWith('--')) {
       const key = a.slice(2);
       const next = argv[i + 1];
-      if (VALUE_OPTS.has(key)) {
+      if (FLAG_OPTS.has(key)) {
+        opts[key] = true;
+      } else if (VALUE_OPTS.has(key)) {
         if (next === undefined) { opts[key] = true; } // 값 누락 → stdin 등 호출부 분기
         else { opts[key] = next; i++; }
       } else if (next !== undefined && !next.startsWith('--')) {
@@ -426,6 +612,11 @@ function parseArgs(argv) {
       } else {
         opts[key] = true;
       }
+    } else if (Object.prototype.hasOwnProperty.call(SHORT_OPTS, a)) {
+      const key = SHORT_OPTS[a];
+      const next = argv[i + 1];
+      if (next === undefined) { opts[key] = true; } // 값 누락 → 호출부에서 fail
+      else { opts[key] = next; i++; }
     } else {
       opts._.push(a);
     }
@@ -445,18 +636,24 @@ function main() {
 사용법:
   multi-round-bus mcp                                          # stdio MCP 서버 (env MULTI_ROUND_SESSION_DIR, BUS_PARTICIPANT)
   multi-round-bus register --session <dir> --name <n> [--surface surface:N] [--kind lead|worker]
-  multi-round-bus post     --session <dir> --from <n> --to <n|all> [--type <t>] --content <본문>
-                           (--content 생략 시 stdin 에서 본문 읽음)
+  multi-round-bus post     --session <dir> --from <n> --to <n|all> [--type <t>] [--reply-to <id>] [--inject] --content <본문>
+                           (--content 생략 시 stdin 에서 본문 읽음. --reply-to: 응답 대상 요청 메시지 id 연결.
+                            --inject: 주입(페르소나/의제) 메시지 마킹 — transcript 발췌 대상. Lead CLI 전용)
   multi-round-bus check    --session <dir> --as <n> [--json]
+                           (새 메시지 + "⚠ 미응답 요청" 큐 출력 — 큐는 reply_to 응답 게시 전까지 매번 반복 노출)
   multi-round-bus participants --session <dir>
   multi-round-bus history  --session <dir> [--limit N]
   multi-round-bus watch    --session <dir> --to <n> --message-id <N> [--timeout 300] [--interval 10]
                            (수신자가 #N 이후 응답할 때까지 폴링. timeout 시 재노크 + STALLED 보고 — 데드락 워치독)
+  multi-round-bus transcript [SESSION_DIR|BOARD_JSONL] [-o <file|->] [--full]
+                           (board.jsonl → 마크다운 회의록. 세션 dir 입력 + -o 생략 시 <dir>/transcript.md 저장 + 경로 에코,
+                            board.jsonl 직접 입력 시 stdout 기본. -o -: stdout 강제. --full: 주입 메시지 전문 표시.
+                            입력 생략 시 --session/env MULTI_ROUND_SESSION_DIR → cwd 순으로 탐색)
 `);
     process.exit(0);
   }
 
-  if (!dir) fail('세션 디렉토리 필요 (--session <dir> 또는 env MULTI_ROUND_SESSION_DIR)');
+  if (!dir && cmd !== 'transcript') fail('세션 디렉토리 필요 (--session <dir> 또는 env MULTI_ROUND_SESSION_DIR)');
 
   switch (cmd) {
     case 'mcp':
@@ -470,7 +667,7 @@ function main() {
       if (content === undefined || content === true) {
         content = fs.readFileSync(0, 'utf8'); // stdin
       }
-      console.log(JSON.stringify(doPost(dir, opts.from || self, opts.to, content, opts.type)));
+      console.log(JSON.stringify(doPost(dir, opts.from || self, opts.to, content, opts.type, opts['reply-to'], opts.inject === true)));
       break;
     }
     case 'check': {
@@ -486,6 +683,9 @@ function main() {
       break;
     case 'watch':
       doWatch(dir, opts);
+      break;
+    case 'transcript':
+      doTranscript(dir, opts);
       break;
     default:
       fail(`알 수 없는 명령: ${cmd} (multi-round-bus help 참조)`);
