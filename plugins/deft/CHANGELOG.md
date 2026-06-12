@@ -4,6 +4,11 @@
 
 형식은 [Keep a Changelog](https://keepachangelog.com/ko/1.1.0/) 를 따르며, 버전 체계는 [Semantic Versioning](https://semver.org/lang/ko/) 을 사용합니다 (`claude-X.Y.Z` / `codex-X.Y.Z` 접두).
 
+## [codex-1.10.0] - 2026-06-12
+
+### Changed
+- **multi-check (Codex) — cmux 환경에서 reviewer pane 시각화 기본화**: 기존 sub-agent + headless CLI 방식은 reviewer 가 화면 없이 백그라운드로만 실행돼 "multi-agent spawn 은 pane 시각화" 원칙과 어긋남 (실사용 관찰). cmux 환경이면 reviewer 마다 pane 분할 + readiness 가드 + 출력 tee 수집(.done 마커 폴링)으로 실행 — 시각화와 결과 수집 양립. sub-agent 병렬은 cmux 외부 전략으로 재배치. pane 분할 절차 없이 rebalancing 만 있던 모순 해소.
+
 ## [claude-2.11.0] - 2026-06-12
 
 ### Added

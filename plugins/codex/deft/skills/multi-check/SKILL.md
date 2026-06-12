@@ -66,17 +66,62 @@ if ! command -v cmux-rebalancing >/dev/null 2>&1; then
 fi
 ```
 
-## 병렬 실행 전략
+## 병렬 실행 전략 — cmux 환경 여부로 분기
 
-### 기본: Codex sub-agent 병렬 실행
+```bash
+HAVE_CMUX=0
+which cmux >/dev/null 2>&1 && cmux identify >/dev/null 2>&1 && HAVE_CMUX=1
+```
 
-Codex에서 sub-agent를 사용할 수 있으면 reviewer별 one-shot 작업으로 병렬 실행한다. 이 방식이 Codex 포팅본의 기본 실행 전략이다.
+| 환경 | 실행 전략 | 시각화 |
+|---|---|---|
+| `HAVE_CMUX=1` | **cmux pane 병렬 (기본)** — reviewer 명령을 pane 쉘에서 실행, 출력을 파일로 tee | 사용자가 reviewer 진행을 pane 으로 관찰 |
+| `HAVE_CMUX=0` | Codex sub-agent 병렬 | 호스트 TUI 내 표시만 |
+
+> multi-agent spawn 은 cmux 환경에서 pane 시각화가 기본이다. headless 백그라운드 전용 실행은 cmux 외부에서만.
+
+### cmux 환경 기본: pane 병렬 실행
+
+reviewer 마다 pane 을 분할하고, 그 pane 쉘에서 headless CLI 명령을 실행해 **출력이 pane 에 보이면서 파일로도 수집**되게 한다 (1-shot 이므로 버스·양방향 통신은 불필요).
+
+```bash
+OUT_DIR=$(mktemp -d /tmp/multi-check.XXXXXX)
+
+# (1) 첫 reviewer: 우측 분할 → 직후 rebalancing 1회. 이후 reviewer: 직전 pane 아래 분할
+SPLIT=$(cmux new-split right --focus false 2>&1)
+R1=$(printf '%s' "$SPLIT" | grep -oE 'surface:[0-9]+' | head -1)
+command -v cmux-rebalancing >/dev/null 2>&1 && cmux-rebalancing
+# 두 번째부터: cmux new-split down --surface "$R1" --focus false ...
+
+# (2) pane 쉘 readiness 가드 — cmux 는 화면 렌더 시 쉘을 기동(lazy-init). 미기동 pane 에 send 하면 유실
+cmux send --surface "$R1" "touch $OUT_DIR/.ready-r1" && cmux send-key --surface "$R1" Enter
+for _ in $(seq 1 15); do [ -f "$OUT_DIR/.ready-r1" ] && break; sleep 1; done
+
+# (3) reviewer 명령 실행 — 출력 tee + 완료 마커 (명령은 한 줄로 — pane 쉘에서 \n 은 즉시 실행)
+PROMPT_FILE="$OUT_DIR/prompt.txt"   # 검토 prompt 는 파일로 저장 (줄바꿈 안전)
+cmux send --surface "$R1" "GEMINI_POLICY_ALLOW_READONLY=true gemini -p \"\$(cat $PROMPT_FILE)\" -m gemini-3-flash-preview --approval-mode plan -o text 2>&1 | tee $OUT_DIR/gemini.out; touch $OUT_DIR/gemini.done"
+cmux send-key --surface "$R1" Enter
+
+# (4) 수집 — 전 reviewer 의 .done 마커 폴링 (reviewer 당 timeout 120s, 미완료는 partial 보존 + skip)
+for _ in $(seq 1 60); do
+  ls "$OUT_DIR"/*.done >/dev/null 2>&1 && [ "$(ls $OUT_DIR/*.done | wc -l)" -ge "$REVIEWER_COUNT" ] && break
+  sleep 2
+done
+```
+
+- Codex reviewer 는 pane 에서 `"$CODEX_CLI" -a never exec --sandbox read-only -m gpt-5.5 ... | tee $OUT_DIR/codex.out; touch $OUT_DIR/codex.done` 로 동일 패턴.
+- Claude reviewer 도 동일 (`claude -p ... | tee ...`).
+- 검토 종료 후 reviewer pane 은 자동 close 하지 않는다 (관찰 보존) — 사용자 컨펌 후 `cmux close-surface`.
+
+### cmux 외부: Codex sub-agent 병렬 실행
+
+cmux 외부에서는 sub-agent 로 reviewer 별 one-shot 작업을 병렬 실행한다.
 
 - `codex-reviewer`: Codex CLI를 실행하거나 독립 Codex 관점으로 분석한다.
 - `gemini-reviewer`: Bash로 Gemini CLI를 실행하고 결과를 반환한다.
 - `claude-reviewer`: Claude CLI가 사용 가능할 때만 Bash로 실행하고 결과를 반환한다.
 
-각 reviewer에게 전달할 지시:
+각 reviewer에게 전달할 지시 (pane/sub-agent 공통):
 
 ```text
 아래 요청과 컨텍스트를 독립적으로 검토하세요.
@@ -102,7 +147,7 @@ command -v cmux-rebalancing >/dev/null 2>&1 && cmux-rebalancing
 
 ### fallback: Bash CLI 직접 실행
 
-sub-agent 실행이 불가능하면 Lead가 Bash로 각 CLI를 직접 실행한다. fallback은 기본 실행 전략이 아니라, sub-agent를 사용할 수 없는 환경에서만 사용한다. 가능한 경우 병렬로 실행하되, 출력 수집과 timeout 처리를 명확히 한다.
+pane(cmux)·sub-agent 둘 다 사용할 수 없으면 Lead가 Bash로 각 CLI를 직접 실행한다. fallback은 기본 실행 전략이 아니다. 가능한 경우 병렬로 실행하되, 출력 수집과 timeout 처리를 명확히 한다.
 
 ```bash
 # Codex reviewer는 claudex(우선) 또는 codex 중 하나라도 있으면 OK
