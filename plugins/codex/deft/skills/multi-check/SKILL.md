@@ -151,7 +151,7 @@ command -v cmux-rebalancing >/dev/null 2>&1 && cmux-rebalancing
 # 사용자 명시 비율 (예시): cmux-rebalancing 7:3
 ```
 
-> 두 번째 이후 reviewer 는 같은 우측 컬럼 안에서 **하단으로 수직 분할**되므로 좌우 비율은 유지된다. **추가 호출 불필요**. cmux 외부 실행 시 자동 skip.
+> **호출 규칙**: spawn(또는 재spawn)으로 pane 구성이 바뀔 때마다 그 spawn 묶음 직후 1회 호출 — 첫 spawn 만이 아니다. cmux 외부 실행 시 자동 skip.
 
 ### fallback: Bash CLI 직접 실행
 

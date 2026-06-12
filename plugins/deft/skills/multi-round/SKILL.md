@@ -357,7 +357,7 @@ W2_SURFACE=$(printf '%s' "$SPLIT" | grep -oE 'surface:[0-9]+' | head -1)
 command -v cmux-rebalancing >/dev/null 2>&1 && cmux-rebalancing
 ```
 
-> 두 번째 이후 워커는 같은 우측 컬럼 안에서 하단 수직 분할이므로 **좌우 비율은** 유지 — 단 순차 down 분할은 **row 높이가 1/2·1/4·1/4 로 불균등**해진다 (실측). 워커가 2명 이상이면 **모든 분할 완료 후 `cmux-rebalancing` 을 1회 더** 호출해 row 를 균등화하고, `cmux focus-pane --pane "$(cmux identify | jq -r .caller.pane_ref)"` 로 Lead focus 를 복원한다.
+> 두 번째 이후 워커는 같은 우측 컬럼 안에서 하단 수직 분할이므로 **좌우 비율은** 유지 — 단 순차 down 분할은 **row 높이가 1/2·1/4·1/4 로 불균등**해진다 (실측). 워커가 2명 이상이면 **모든 분할(재spawn 포함) 완료 후 `cmux-rebalancing` 을 1회 더** 호출해 row 를 균등화하고, `cmux focus-pane --pane "$(cmux identify | jq -r .caller.pane_ref)"` 로 Lead focus 를 복원한다.
 > ⚠️ 첫 호출 누락 시 Lead 가 2:8 처럼 축소되어 가독성 저하.
 
 **(3.5) pane 쉘 readiness 확인 (send 유실 가드 — 필수)**
@@ -598,6 +598,7 @@ Lead 의 라운드 동작:
 | `HAVE_CMUX=0` | Phase 3-C (claudex MCP conversation). 불가 시 multi-check 안내 후 중단 |
 | 노크 실패 (cmux send 에러) | 버스가 결과에 `failed` 로 보고 — 메시지는 보드에 안전하게 남아 다음 check 때 수신. Lead 는 timeout 시 수동 check |
 | 라운드 timeout (기본 300s, 노크 안 옴) | Lead 수동 `check` 1회 + 해당 워커 pane 상태 확인 → 그래도 무응답이면 skip 하고 남은 워커로 종합 |
+| 워커가 spawn 직후 사망 (바이너리 경로 오류 등) | 죽은 pane 정리(프로세스 0 확인 후 close-surface) → 재spawn → rebalancing 재호출 |
 | 한 워커 BLOCKED | 사용자에게 즉시 보고 + 결정 위임 |
 | max-round 도달 (기본 5) | Phase 5 종합 — 미합의 항목 명시 + Lead 권장안 1개 제시 |
 

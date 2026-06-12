@@ -172,7 +172,7 @@ command -v cmux-rebalancing >/dev/null 2>&1 && cmux-rebalancing
 # 사용자 명시 비율 (예시): cmux-rebalancing 7:3
 ```
 
-> 두 번째 이후 reviewer 는 같은 우측 컬럼 안에서 **하단으로 수직 분할**되므로 좌우 비율은 유지된다. **추가 호출 불필요**.
+> **호출 규칙**: spawn(또는 재spawn)으로 pane 구성이 바뀔 때마다 그 spawn 묶음 직후 1회 호출한다 — 첫 spawn 만이 아니다. reviewer 가 죽어 재spawn 한 경우 새 pane 이 생기므로 반드시 다시 호출 (실측: 재spawn 후 누락 시 비율·row 불균등 잔존).
 
 ### Phase 4: Synthesis
 
@@ -214,6 +214,7 @@ SendMessage(to: "gemini-reviewer", message: {type: "shutdown_request"})
 | Timeout (agent doesn't respond in 120s) | Synthesize with available results |
 | All CLIs fail | Compare Lead analysis against error context |
 | TeamCreate fails | Show activation guide, fallback to sequential Agent |
+| Reviewer dies right after spawn (e.g. binary path error) | Close its dead pane (`cmux top --processes` 로 프로세스 0 확인 후 `cmux close-surface`) → respawn → **rebalancing 재호출** — 죽은 pane 을 방치하면 레이아웃·식별 혼란 |
 
 ## Prompt Composition Rules
 

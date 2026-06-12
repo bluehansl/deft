@@ -4,6 +4,21 @@
 
 형식은 [Keep a Changelog](https://keepachangelog.com/ko/1.1.0/) 를 따르며, 버전 체계는 [Semantic Versioning](https://semver.org/lang/ko/) 을 사용합니다 (`claude-X.Y.Z` / `codex-X.Y.Z` 접두).
 
+## [claude-2.13.1] - 2026-06-12
+
+### Fixed
+- **keepalive 검출 갭 2건** (teammate spawn 오류 재현으로 발견):
+  - launcher 경유 세션은 ps comm 이 순수 버전명(예: "2.1.170")으로 보여 실행 중 버전 검출 누락 → 버전 패턴 매칭 추가.
+  - 보존본 없이 이미 삭제된 버전은 macOS 특성상 원본 복구 불가 → **최신 가용 버전을 그 경로 이름으로 hardlink 하는 대체 복원** 폴백 (실측: 2.1.170 세션 + 2.1.175 대체로 reviewer spawn·보고 정상).
+- **rebalancing 호출 규칙** — "첫 분할 직후 1회"가 재spawn 시나리오를 누락 (실측: 재spawn pane 비율 미적용) → "spawn/재spawn 으로 pane 구성이 바뀔 때마다 직후 1회"로 재정의 (multi-check·multi-round 양쪽).
+- **실패 pane 정리 규칙** — spawn 직후 사망한 reviewer/워커의 pane 이 잔존 (실측) → 프로세스 0 확인 후 close-surface → 재spawn → rebalancing 절차를 Error Handling 에 명시.
+- multi-check reviewer 페르소나 보고 누락 케이스 — 결과를 일반 출력으로만 내고 SendMessage 없이 끝나는 사례 (재spawn prompt 에 보고 의무 강화. 페르소나 영구 수정은 검증 후 후속).
+
+## [codex-1.12.1] - 2026-06-12
+
+### Fixed
+- multi-round·multi-check (Codex) — rebalancing 재spawn 규칙 + 실패 pane 정리 규칙 동일 반영.
+
 ## [claude-2.13.0] - 2026-06-12
 
 ### Changed

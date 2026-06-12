@@ -21,8 +21,13 @@ KEEP_MAX=2
 mkdir -p "$KEEP_DIR"
 
 # 실행 중인 claude 세션들이 사용하는 버전 (절대 정리 금지 목록)
+# 두 형태 합집합 — (a) comm 에 versions/ 풀경로가 보이는 프로세스
+#                  (b) comm 이 순수 버전명(예: "2.1.170")인 프로세스 (launcher 경유 세션의 실측 형태)
 running_versions() {
-  ps -axo comm 2>/dev/null | grep -F "$VERSIONS_DIR/" | sed "s|.*/versions/||" | sort -u
+  {
+    ps -axo comm 2>/dev/null | grep -F "$VERSIONS_DIR/" | sed "s|.*/versions/||"
+    ps -axo comm 2>/dev/null | grep -E '^[0-9]+\.[0-9]+\.[0-9]+$'
+  } | sort -u
 }
 
 if [ "${1:-run}" = "status" ]; then
@@ -49,11 +54,18 @@ for f in "$VERSIONS_DIR"/*; do
   [ -e "$KEEP_DIR/$v" ] || ln "$f" "$KEEP_DIR/$v" 2>/dev/null
 done
 
-# (2.5) 이미 늦은 케이스 경고 — 실행 중 세션의 버전이 versions/ 에도 keepalive 에도 없으면
-#       복원 불가 (원본 inode 가 이미 unlink). 해당 세션의 teammate spawn 은 실패한다.
+# (2.5) 이미 늦은 케이스 — 실행 중 세션의 버전이 versions/ 에도 keepalive 에도 없으면
+#       원본 복원 불가 (inode 가 이미 unlink, macOS 는 실행 중 바이너리 추출 불가).
+#       → 대체 복원: 최신 가용 버전을 그 경로 이름으로 hardlink — teammate spawn 이 최신 바이너리로 실행됨
+#         (마이너 버전 불일치 가능성 고지. 실측: 2.1.170 세션 + 2.1.175 대체로 spawn 정상)
+LATEST=$(ls -1 "$VERSIONS_DIR" 2>/dev/null | sort -V | tail -1)
 for v in $(running_versions); do
   if [ ! -e "$VERSIONS_DIR/$v" ] && [ ! -e "$KEEP_DIR/$v" ]; then
-    echo "WARN: 실행 중인 claude 세션(버전 $v)의 바이너리가 이미 삭제되어 복원 불가 — 그 세션의 팀 spawn 은 실패합니다. 해당 세션을 재시작(/resume)하면 현재 버전으로 재개되어 해소됩니다."
+    if [ -n "$LATEST" ] && ln "$VERSIONS_DIR/$LATEST" "$VERSIONS_DIR/$v" 2>/dev/null; then
+      echo "INFO: claude $v 바이너리를 최신($LATEST)으로 대체 복원 — 원본은 이미 삭제됨. teammate spawn 은 동작하나 부모($v)·자식($LATEST) 버전이 다를 수 있음. 완전 정합을 원하면 해당 세션 재시작(/resume) 권장."
+    else
+      echo "WARN: 실행 중인 claude 세션(버전 $v)의 바이너리가 삭제되어 복원 불가 — 그 세션의 팀 spawn 은 실패합니다. 해당 세션을 재시작(/resume)하세요."
+    fi
   fi
 done
 
