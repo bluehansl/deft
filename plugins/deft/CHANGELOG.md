@@ -4,6 +4,19 @@
 
 형식은 [Keep a Changelog](https://keepachangelog.com/ko/1.1.0/) 를 따르며, 버전 체계는 [Semantic Versioning](https://semver.org/lang/ko/) 을 사용합니다 (`claude-X.Y.Z` / `codex-X.Y.Z` 접두).
 
+## [claude-2.9.0] - 2026-06-12
+
+### Changed
+- **claudex/codex 워커 MCP 도구 승인 0회화** — `--disable tool_call_mcp_elicitation` 은 elicitation 채널만 차단하고 TUI 승인 다이얼로그는 잔존 (실측). MCP 도구 영구 신뢰 설정 부재 확인 (approval_policy·guardian_approval·서버 하위 trust 류 후보 키 전수 무효) → spawn 에 `--dangerously-bypass-approvals-and-sandbox` 기본 포함 (인스턴스 한정·회의 워커 용도 한정 — 트레이드오프 주석 명시). 승인 최소화 대안("Allow for this session" 도구당 1회)도 안내.
+
+### Notes
+- v2.8 풀사이클 재검증 완료 — inject 발췌·reply_to 체인·**레이스 자기 치유**(노크 디바운스로 누락된 추가 요청이 aged 재노크 + 미응답 큐로 회복)·워치독·transcript 자동 생성 전 항목 실전 동작 확인.
+
+## [codex-1.8.0] - 2026-06-12
+
+### Changed
+- multi-round (Codex) — Claude 측과 동일: 워커 spawn 승인 우회 + GUIDE 트러블슈팅.
+
 ## [claude-2.8.0] - 2026-06-12
 
 ### Added

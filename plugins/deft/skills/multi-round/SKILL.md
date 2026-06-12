@@ -372,8 +372,11 @@ for NAME in $("$ENGINE" mcp list --json 2>/dev/null | jq -r '.[].name' 2>/dev/nu
 done
 
 WORKER_NAME="worker1"   # 참가자 이름 (페르소나 역할 반영 권장 — 예: backend-claudex)
-# --disable tool_call_mcp_elicitation: MCP 도구 호출마다 승인 프롬프트가 뜨는 것을 방지 (이 워커 인스턴스 한정)
-WORKER_CMD="$ENGINE -m gpt-5.5 --disable tool_call_mcp_elicitation $DISABLE_ARGS -c 'mcp_servers.bus={command=\"$BUS_BIN\",args=[\"mcp\"],env={MULTI_ROUND_SESSION_DIR=\"$SESSION_DIR\",BUS_PARTICIPANT=\"$WORKER_NAME\"}}'"
+# --disable tool_call_mcp_elicitation + --dangerously-bypass-approvals-and-sandbox:
+#   claudex/codex 는 MCP 도구 영구 신뢰 설정이 없어 (config 후보 키 전수 무효 — 실측) 호출마다 승인 다이얼로그가 뜸.
+#   bypass 가 유일한 0회 승인 경로 (인스턴스 한정 — 사용자 config 무변경). 트레이드오프: 해당 워커의 명령 실행 승인·sandbox 도 해제되므로
+#   회의 워커(발언 전용) 용도에 한정할 것. 승인 최소화로 충분하면 bypass 를 빼고 첫 호출 시 "Allow for this session" 을 도구당 1회 선택 (회의당 2회).
+WORKER_CMD="$ENGINE -m gpt-5.5 --disable tool_call_mcp_elicitation --dangerously-bypass-approvals-and-sandbox $DISABLE_ARGS -c 'mcp_servers.bus={command=\"$BUS_BIN\",args=[\"mcp\"],env={MULTI_ROUND_SESSION_DIR=\"$SESSION_DIR\",BUS_PARTICIPANT=\"$WORKER_NAME\"}}'"
 cmux send --surface "$W1_SURFACE" "$WORKER_CMD"
 cmux send-key --surface "$W1_SURFACE" Enter
 ```
