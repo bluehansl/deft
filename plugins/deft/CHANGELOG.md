@@ -4,6 +4,16 @@
 
 형식은 [Keep a Changelog](https://keepachangelog.com/ko/1.1.0/) 를 따르며, 버전 체계는 [Semantic Versioning](https://semver.org/lang/ko/) 을 사용합니다 (`claude-X.Y.Z` / `codex-X.Y.Z` 접두).
 
+## [claude-2.13.0] - 2026-06-12
+
+### Changed
+- **multi-round 기본 참가자 수 = 워커 3명 (사용자 정책)** — 주제에서 보완적 페르소나 3개를 도출해 1명씩 배정 (명확하면 자동+1줄 보고, 애매하면 후보 조합 제시 후 사용자 질문 — 자동 추측 금지). 워커 이름 `worker<N>-<페르소나slug>`, 엔진은 mix 번갈아 배정. **1명 또는 4명+ 는 사용자가 명시할 때만**. GUIDE 흐름·체크박스 동기화.
+
+## [codex-1.12.0] - 2026-06-12
+
+### Changed
+- multi-round (Codex) — Claude 측과 동일: 기본 워커 3명(페르소나별) + 사용자 명시 시만 1명/4명+.
+
 ## [claude-2.12.0] - 2026-06-12
 
 ### Changed
