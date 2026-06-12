@@ -4,6 +4,11 @@
 
 형식은 [Keep a Changelog](https://keepachangelog.com/ko/1.1.0/) 를 따르며, 버전 체계는 [Semantic Versioning](https://semver.org/lang/ko/) 을 사용합니다 (`claude-X.Y.Z` / `codex-X.Y.Z` 접두).
 
+## [claude-2.15.0] - 2026-06-12
+
+### Added
+- **SessionStart keepalive hook** — 플러그인이 hook(`hooks/hooks.json`)을 포함: 세션 시작마다 `claude-bin-keepalive` 자동 실행 (1초 미만·상주물 없음). "스킬을 돌려야 보존된다"는 조건을 제거해 어떤 세션이든 teammate spawn 경로가 항상 유효 — launchd 등록 없이 도달 가능한 최대 근본화 (잔여 갭은 대체 복원 폴백이 커버). 검증 중 2.1.173 실복원 실증. README 고지 갱신.
+
 ## [claude-2.14.0] - 2026-06-12
 
 ### Added

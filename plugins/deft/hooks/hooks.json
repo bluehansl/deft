@@ -1,0 +1,17 @@
+{
+  "hooks": {
+    "SessionStart": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "KA=$(command -v claude-bin-keepalive || ls -1 \"$HOME\"/.claude/plugins/cache/bluehansl/deft/*/bin/claude-bin-keepalive 2>/dev/null | tail -1); [ -n \"$KA\" ] && bash \"$KA\" || true",
+            "timeout": 10,
+            "statusMessage": "claude 버전 바이너리 보존 (keepalive)"
+          }
+        ]
+      }
+    ]
+  }
+}
