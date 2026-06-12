@@ -4,6 +4,16 @@
 
 형식은 [Keep a Changelog](https://keepachangelog.com/ko/1.1.0/) 를 따르며, 버전 체계는 [Semantic Versioning](https://semver.org/lang/ko/) 을 사용합니다 (`claude-X.Y.Z` / `codex-X.Y.Z` 접두).
 
+## [claude-2.11.1] - 2026-06-12
+
+### Fixed
+- multi-round — 워커 2+명 순차 down 분할 시 row 높이 불균등(1/2·1/4·1/4) 실측 → 전 분할 완료 후 rebalancing 1회 추가 + Lead focus 복원 절차.
+
+## [codex-1.10.1] - 2026-06-12
+
+### Fixed
+- multi-check (Codex) pane 경로 — claudex 워커 실전 실행에서 보고된 3건 반영: 전 분할 후 rebalancing(row 균등) + Lead focus 복원, runner script 권장(quoting 안전). multi-round (Codex) 도 동일 row 균등 절차.
+
 ## [codex-1.10.0] - 2026-06-12
 
 ### Changed

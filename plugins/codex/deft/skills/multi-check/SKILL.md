@@ -111,6 +111,13 @@ done
 
 - Codex reviewer 는 pane 에서 `"$CODEX_CLI" -a never exec --sandbox read-only -m gpt-5.5 ... | tee $OUT_DIR/codex.out; touch $OUT_DIR/codex.done` 로 동일 패턴.
 - Claude reviewer 도 동일 (`claude -p ... | tee ...`).
+- **quoting 안전 (권장)**: 긴 one-line 명령의 escaping 오류를 피하려면 reviewer 별 runner script 를 생성하고 pane 에는 `sh $OUT_DIR/run-<reviewer>.sh` 한 줄만 send 한다.
+- **마무리 정렬 + focus 복원 (전 reviewer 분할 완료 후 1회)** — 순차 down 분할은 row 높이가 1/2·1/4·1/4 로 남고(실측), `--focus false` 에도 focus 가 마지막 pane 으로 이동할 수 있다:
+
+```bash
+command -v cmux-rebalancing >/dev/null 2>&1 && cmux-rebalancing   # row 균등화
+cmux focus-surface --surface "$LEAD_SURFACE" 2>/dev/null || true   # Lead focus 복원
+```
 - 검토 종료 후 reviewer pane 은 자동 close 하지 않는다 (관찰 보존) — 사용자 컨펌 후 `cmux close-surface`.
 
 ### cmux 외부: Codex sub-agent 병렬 실행

@@ -344,8 +344,8 @@ W2_SURFACE=$(printf '%s' "$SPLIT" | grep -oE 'surface:[0-9]+' | head -1)
 command -v cmux-rebalancing >/dev/null 2>&1 && cmux-rebalancing
 ```
 
-> 두 번째 이후 워커는 같은 우측 컬럼 안에서 하단 수직 분할이므로 좌우 비율 유지 — 추가 호출 불필요.
-> ⚠️ 누락 시 Lead 가 2:8 처럼 축소되어 가독성 저하.
+> 두 번째 이후 워커는 같은 우측 컬럼 안에서 하단 수직 분할이므로 **좌우 비율은** 유지 — 단 순차 down 분할은 **row 높이가 1/2·1/4·1/4 로 불균등**해진다 (실측). 워커가 2명 이상이면 **모든 분할 완료 후 `cmux-rebalancing` 을 1회 더** 호출해 row 를 균등화하고, `cmux focus-surface --surface "$LEAD_SURFACE"` 로 Lead focus 를 복원한다.
+> ⚠️ 첫 호출 누락 시 Lead 가 2:8 처럼 축소되어 가독성 저하.
 
 **(3.5) pane 쉘 readiness 확인 (send 유실 가드 — 필수)**
 
