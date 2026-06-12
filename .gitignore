@@ -7,3 +7,8 @@
 
 # 개인 파일
 *.xlsx
+
+# 프로젝트 로컬 테스트 스킬은 추적 (배포는 marketplace source=./plugins/deft 라 미포함)
+!.claude/
+.claude/*
+!.claude/skills/
