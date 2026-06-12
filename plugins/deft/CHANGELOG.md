@@ -4,6 +4,16 @@
 
 형식은 [Keep a Changelog](https://keepachangelog.com/ko/1.1.0/) 를 따르며, 버전 체계는 [Semantic Versioning](https://semver.org/lang/ko/) 을 사용합니다 (`claude-X.Y.Z` / `codex-X.Y.Z` 접두).
 
+## [claude-2.14.0] - 2026-06-12
+
+### Added
+- **README "Quick Start — 첫 실행 검증" 섹션** (multi-round 3인 회의 합의 → agent-teams 3 페르소나 팀 구현): prerequisites / 설치·확인 / 첫 실행 `/set-statusline` / 성공 기준 / 실패 시 안내 + 버전·CHANGELOG 링크(숫자 무기재) + 버전 의존 동작 도입 버전 병기 (조건 B). 기존 "## 설치" 섹션 흡수·삭제 (정보 손실 0). Day-2 Runbook 은 절차 안정화 후 후속 보류.
+
+## [codex-1.13.0] - 2026-06-12
+
+### Added
+- README (Codex) 간이 Quick Start + **CHANGELOG 단일 소스 링크 2곳** (`../../deft/CHANGELOG.md` — 회의 합의 조건 A: Codex 포팅본 변경이력 단절 해소).
+
 ## [claude-2.13.2] - 2026-06-12
 
 ### Fixed
