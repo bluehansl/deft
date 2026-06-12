@@ -4,6 +4,11 @@
 
 형식은 [Keep a Changelog](https://keepachangelog.com/ko/1.1.0/) 를 따르며, 버전 체계는 [Semantic Versioning](https://semver.org/lang/ko/) 을 사용합니다 (`claude-X.Y.Z` / `codex-X.Y.Z` 접두).
 
+## [claude-2.11.0] - 2026-06-12
+
+### Added
+- **`bin/claude-bin-keepalive` — 세션 바이너리 보존/복원 (teammate spawn 실패 예방)**: 오래된 세션에서 Claude Code 자동 업데이트가 세션 버전 바이너리(`~/.local/share/claude/versions/<ver>`)를 삭제하면 multi-check·agent-teams 의 팀 spawn 이 `env: ...: No such file or directory` 로 실패하는 문제 (실사용 보고). 스킬 실행 시 hardlink 보존(추가 디스크 0, inode 점유는 실행 중 버전 + 최신 2개 유지) + 삭제 시 복원 + 이미 복원 불가한 세션 검출·경고(재시작 안내). 두 스킬 preflight 에 표준 호출 1줄 + README 고지. Claude 전용 (Codex 측은 teammate spawn 미사용).
+
 ## [claude-2.10.0] - 2026-06-12
 
 ### Changed

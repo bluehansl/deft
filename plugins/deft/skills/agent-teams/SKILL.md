@@ -39,6 +39,14 @@ if ! command -v cmux-rebalancing >/dev/null 2>&1; then
     echo "WARN: cmux-rebalancing 미설치 + plugin 동봉본 없음 — pane 비율 자동 조정 비활성"
   fi
 fi
+
+# 세션 바이너리 keepalive — 오래된 세션에서 자동 업데이트로 세션 버전 바이너리가 삭제되면
+# teammate spawn 이 "env: .../versions/<ver>: No such file or directory" 로 실패. 보존·복원으로 예방.
+if ! command -v claude-bin-keepalive >/dev/null 2>&1; then
+  SRC=$(ls -1 ~/.claude/plugins/cache/bluehansl/deft/*/bin/claude-bin-keepalive 2>/dev/null | tail -1)
+  [ -n "$SRC" ] && mkdir -p ~/.local/bin && cp "$SRC" ~/.local/bin/ && chmod +x ~/.local/bin/claude-bin-keepalive
+fi
+command -v claude-bin-keepalive >/dev/null 2>&1 && claude-bin-keepalive
 ```
 
 > **`cmux-rebalancing`**: 팀원 spawn 후 Lead 와 팀원 컬럼 비율을 정책대로 재조정하는 헬퍼. 모든 팀원 spawn 직후 자동 호출 (§2-2 끝).

@@ -1,0 +1,71 @@
+#!/bin/bash
+# claude-bin-keepalive — Claude Code 버전 바이너리 보존/복원 (teammate spawn 실패 예방)
+#
+# 문제: teammate spawn 은 Lead 세션과 같은 버전의 바이너리(~/.local/share/claude/versions/<ver>)를
+#       실행하는데, 세션이 오래 떠 있는 동안 자동 업데이트가 구버전을 삭제하면
+#       "env: .../versions/<ver>: No such file or directory" 로 spawn 이 실패한다.
+# 예방: (1) 스킬 실행 시점의 versions/* 를 hardlink 로 보존 (동일 볼륨 — 추가 디스크 0.
+#           단, 원본 삭제 후에도 inode 를 잡아두므로 보존 개수만큼 점유 지속 → 정리 정책 必)
+#       (2) 팀 spawn 전 호출 시, 원경로가 사라진 보존 버전을 hardlink 로 복원
+#       (3) 정리: "실행 중인 세션이 사용하는 버전"은 무조건 보존, 그 외는 최신 KEEP_MAX 개만 유지
+#
+# 사용: claude-bin-keepalive          # restore → preserve → prune (스킬 Phase 0 표준 호출)
+#       claude-bin-keepalive status   # 보존 현황 출력
+
+set -u
+VERSIONS_DIR="$HOME/.local/share/claude/versions"
+KEEP_DIR="$HOME/.claude/plugin-data/deft/bin-keepalive"
+KEEP_MAX=2
+
+[ -d "$VERSIONS_DIR" ] || exit 0   # 버전 관리형 설치가 아니면 해당 없음
+mkdir -p "$KEEP_DIR"
+
+# 실행 중인 claude 세션들이 사용하는 버전 (절대 정리 금지 목록)
+running_versions() {
+  ps -axo comm 2>/dev/null | grep -F "$VERSIONS_DIR/" | sed "s|.*/versions/||" | sort -u
+}
+
+if [ "${1:-run}" = "status" ]; then
+  echo "versions/: $(ls -1 "$VERSIONS_DIR" 2>/dev/null | sort -V | tr '\n' ' ')"
+  echo "keepalive: $(ls -1 "$KEEP_DIR" 2>/dev/null | sort -V | tr '\n' ' ')"
+  echo "실행 중 세션 버전: $(running_versions | tr '\n' ' ')"
+  exit 0
+fi
+
+# (1) restore — 보존본이 있는데 원경로가 사라진 버전을 복원 (spawn 경로 생존 보장)
+for f in "$KEEP_DIR"/*; do
+  [ -f "$f" ] || continue
+  v=$(basename "$f")
+  if [ ! -e "$VERSIONS_DIR/$v" ]; then
+    ln "$f" "$VERSIONS_DIR/$v" 2>/dev/null \
+      && echo "INFO: claude $v 바이너리 복원 — 자동 업데이트로 삭제돼 있었음 (teammate spawn 보호)"
+  fi
+done
+
+# (2) preserve — 현재 versions/* 를 hardlink 보존
+for f in "$VERSIONS_DIR"/*; do
+  [ -f "$f" ] || continue
+  v=$(basename "$f")
+  [ -e "$KEEP_DIR/$v" ] || ln "$f" "$KEEP_DIR/$v" 2>/dev/null
+done
+
+# (2.5) 이미 늦은 케이스 경고 — 실행 중 세션의 버전이 versions/ 에도 keepalive 에도 없으면
+#       복원 불가 (원본 inode 가 이미 unlink). 해당 세션의 teammate spawn 은 실패한다.
+for v in $(running_versions); do
+  if [ ! -e "$VERSIONS_DIR/$v" ] && [ ! -e "$KEEP_DIR/$v" ]; then
+    echo "WARN: 실행 중인 claude 세션(버전 $v)의 바이너리가 이미 삭제되어 복원 불가 — 그 세션의 팀 spawn 은 실패합니다. 해당 세션을 재시작(/resume)하면 현재 버전으로 재개되어 해소됩니다."
+  fi
+done
+
+# (3) prune — 실행 중 버전 제외, 최신 KEEP_MAX 개만 유지 (inode 점유 누적 방지)
+RUNNING=$(running_versions)
+CANDIDATES=$(ls -1 "$KEEP_DIR" 2>/dev/null | sort -V)
+KEEPABLE=$(echo "$CANDIDATES" | grep -v -F -x -f <(echo "$RUNNING") 2>/dev/null || echo "$CANDIDATES")
+TOTAL=$(echo "$KEEPABLE" | grep -c . || true)
+DEL=$((TOTAL - KEEP_MAX))
+if [ "$DEL" -gt 0 ]; then
+  echo "$KEEPABLE" | head -n "$DEL" | while read -r v; do
+    [ -n "$v" ] && rm -f "$KEEP_DIR/$v"
+  done
+fi
+exit 0
