@@ -354,7 +354,9 @@ cat > "$SESSION_DIR/mcp-$WORKER_NAME.json" <<EOF
 EOF
 # --allowedTools: 버스 도구 사전 허용 — 누락 시 don't ask 등 제한 모드에서 post 가 자동 거부되어
 #                "수신만 되고 발신 불가" 반쪽 참가자가 됨 (실측 — 회의 데드락의 직접 원인)
-WORKER_CMD="claude --model claude-fable-5 --strict-mcp-config --mcp-config $SESSION_DIR/mcp-$WORKER_NAME.json --allowedTools mcp__bus__check_messages,mcp__bus__post_message,mcp__bus__list_participants"
+# --dangerously-skip-permissions: 승인 프롬프트 0회 (claudex 의 bypass 에 대응 — 회의 워커 한정).
+#   --allowedTools 는 skip 미적용 환경 폴백 겸 이중 안전으로 유지.
+WORKER_CMD="claude --model claude-fable-5 --dangerously-skip-permissions --strict-mcp-config --mcp-config $SESSION_DIR/mcp-$WORKER_NAME.json --allowedTools mcp__bus__check_messages,mcp__bus__post_message,mcp__bus__list_participants"
 cmux send --surface "$W1_SURFACE" "$WORKER_CMD"
 cmux send-key --surface "$W1_SURFACE" Enter
 ```

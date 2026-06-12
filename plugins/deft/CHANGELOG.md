@@ -4,6 +4,17 @@
 
 형식은 [Keep a Changelog](https://keepachangelog.com/ko/1.1.0/) 를 따르며, 버전 체계는 [Semantic Versioning](https://semver.org/lang/ko/) 을 사용합니다 (`claude-X.Y.Z` / `codex-X.Y.Z` 접두).
 
+## [claude-2.10.0] - 2026-06-12
+
+### Changed
+- **claude 워커도 승인 0회화** — spawn 에 `--dangerously-skip-permissions` 추가 (claudex 의 bypass 에 대응, 인스턴스 한정). `--allowedTools` 는 skip 미적용 환경 폴백 겸 유지.
+- **README 권한 모드 고지** — 워커 spawn 권한 모드(claudex bypass / claude skip-permissions)와 트레이드오프·해제 방법을 사용자 노출 문서 마지막에 명시.
+
+## [codex-1.9.0] - 2026-06-12
+
+### Changed
+- multi-round (Codex) — Claude 측과 동일: claude 워커 skip-permissions + README 권한 모드 고지.
+
 ## [claude-2.9.0] - 2026-06-12
 
 ### Changed

@@ -61,3 +61,11 @@ deft 플러그인의 모든 스킬은 사용자 데이터(세션·메타·hooks 
 ## 마이그레이션 (개별 플러그인 → deft 통합)
 
 기존 `multi-check` / `session-relocate` / `set-statusline` 3개 Codex 플러그인이 단일 `deft` 로 통합되었다. 스킬명은 유지되고 네임스페이스만 `deft` 로 통일. 네임스페이스 변경 = breaking → `codex-1.0.0`. 기존 사용자는 구 3개 제거 후 `deft` 재설치.
+## 워커 권한 모드 고지 (multi-round)
+
+multi-round 회의 워커는 **승인 프롬프트 없이** 동작하도록 다음 모드로 spawn 된다 (해당 워커 인스턴스 한정 — 사용자 환경 설정 무변경):
+
+- **claudex/codex 워커**: `--dangerously-bypass-approvals-and-sandbox`
+- **claude 워커**: `--dangerously-skip-permissions`
+
+두 모드 모두 해당 워커의 도구 호출 승인·sandbox 를 해제한다. **회의(발언 전용) 워커 용도에 한정**해 사용하며, 민감한 작업 디렉토리에서 회의를 열 때 원치 않으면 SKILL 의 spawn 명령에서 해당 플래그를 제거하고 도구별 "Allow for this session" 승인(회의당 2회)으로 진행할 수 있다.
