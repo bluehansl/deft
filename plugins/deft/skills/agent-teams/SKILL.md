@@ -67,6 +67,7 @@ command -v claude-bin-keepalive >/dev/null 2>&1 && claude-bin-keepalive
 | **nested team 불가** | 팀원이 그 안에서 다시 팀을 spawn할 수 없다 | 팀 구성은 Lead가 한 번에 결정 |
 | **in-process teammate resume 불가** | 세션 재시작 시 팀원이 자동 복구되지 않음 → 새 team-name으로 다시 spawn 필요 | **work-id 영속 설계(§3)가 보완** — 같은 work-id로 `work.md`·`<role>.md` 연속 |
 | **task status lag** | `TaskList` 갱신이 지연될 수 있음 | 팀원 idle/완료를 성급히 단정하지 않음 |
+| **팀 네임스페이스 전역 공유** | `~/.claude/teams/`·`~/.claude/tasks/` 는 모든 세션 공유 — 같은 work-id 작업을 두 세션이 동시에 열면 team-name 충돌 (메시지 교차·정리 오발) | 한 작업은 한 세션 원칙. 충돌 의심 시 team-name 에 시각 suffix. **정리(TeamDelete/shutdown/rm) 전 본 세션 생성분인지 확인** — 프로세스 `--parent-session-id` 또는 생성 시점 대조. "이름이 같다 ≠ 내 것" |
 
 ---
 

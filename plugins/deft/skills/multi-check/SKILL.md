@@ -64,11 +64,14 @@ Important: The Claude CLI agent and Lead (Claude) are the same model but run in 
 
 #### Preferred: Agent Teams (parallel execution)
 
-Try creating a team first:
+Try creating a team first. **Team name MUST be unique per run** — `~/.claude/teams/` is a global namespace shared by ALL sessions. A fixed name ("multi-check") collides when two sessions run this skill concurrently: workers get cross-delivered messages and one session's cleanup destroys the other's team (실측 사고 — 타 세션이 동명 팀을 잔재로 오인해 shutdown + 디렉토리 삭제).
 
 ```
-TeamCreate(team_name: "multi-check", description: "AI multi-check")
+# suffix: 현재 시각 기반 (예: multi-check-143052)
+TeamCreate(team_name: "multi-check-<HHMMSS>", description: "AI multi-check")
 ```
+
+All subsequent `Agent(team_name: ...)` / cleanup calls use the same suffixed name.
 
 If TeamCreate fails (Agent Teams not enabled):
 1. Display: "Agent Teams requires `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1` in your settings.json env. Would you like me to enable it?"
@@ -83,7 +86,7 @@ Agent(
   prompt: "<composed prompt with context>",
   name: "codex-reviewer",
   subagent_type: "codex-reviewer",
-  team_name: "multi-check",
+  team_name: "multi-check-<HHMMSS>",
   model: "haiku",
   mode: "dontAsk"
 )
@@ -96,7 +99,7 @@ Agent(
   prompt: "<composed prompt with context>",
   name: "claude-reviewer",
   subagent_type: "claude-reviewer",
-  team_name: "multi-check",
+  team_name: "multi-check-<HHMMSS>",
   model: "haiku",
   mode: "dontAsk"
 )
@@ -109,7 +112,7 @@ Agent(
   prompt: "<composed prompt with context>",
   name: "gemini-reviewer",
   subagent_type: "gemini-reviewer",
-  team_name: "multi-check",
+  team_name: "multi-check-<HHMMSS>",
   model: "haiku",
   mode: "dontAsk"
 )
@@ -197,6 +200,8 @@ After receiving all results, synthesize in this format:
 ```
 
 ### Phase 5: Cleanup
+
+**Cleanup safety — 소유 확인 필수**: shutdown/TeamDelete 는 파괴 행위다. 본 세션이 이번 실행에서 생성한 팀·팀원에게만 보낸다. 다른 이름(또는 suffix 가 다른 팀)의 워커가 메시지를 보내와도 "잔재"로 단정하지 말 것 — `-N` 접미 워커는 "다른 리드가 같은 이름으로 spawn" 신호일 수 있다 (프로세스의 `--parent-session-id` 로 소속 확인 가능).
 
 After output, send shutdown to teammates:
 ```

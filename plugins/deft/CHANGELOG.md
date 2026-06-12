@@ -4,6 +4,19 @@
 
 형식은 [Keep a Changelog](https://keepachangelog.com/ko/1.1.0/) 를 따르며, 버전 체계는 [Semantic Versioning](https://semver.org/lang/ko/) 을 사용합니다 (`claude-X.Y.Z` / `codex-X.Y.Z` 접두).
 
+## [claude-2.13.2] - 2026-06-12
+
+### Fixed
+- **세션 간 팀 충돌 방지 (실사고 — 크로스 세션 인시던트)**: `~/.claude/teams/` 는 전역 공유 네임스페이스인데 multi-check 가 고정 팀명("multi-check")을 사용 → 두 세션 동시 실행 시 워커 메시지 교차 + 타 세션이 동명 팀을 잔재로 오인해 shutdown·디렉토리 삭제하는 사고 발생. 조치:
+  - multi-check 팀명을 실행별 유니크(`multi-check-<HHMMSS>`)로.
+  - 정리(shutdown/TeamDelete) 전 **소유 확인 필수** 가드 — `-N` 접미 워커는 "타 리드 spawn" 신호, `--parent-session-id` 로 소속 확인. agent-teams 제약 표에도 "한 작업 한 세션 + 이름 동일 ≠ 소유" 명시.
+- 정정: claude-2.13.1 의 "reviewer 보고 누락 케이스"는 오진 — 실원인은 위 크로스 세션 shutdown 이 보고 전에 도착한 것. 보고 규약(SendMessage 의무·보고 후 자체 종료 허용) 자체는 유익하므로 유지.
+
+## [codex-1.12.2] - 2026-06-12
+
+### Fixed
+- (버전 동기화 — Codex 측 스킬 변경 없음. multi-check Codex 포팅본은 teammate 팀 미사용이라 본 충돌 비해당)
+
 ## [claude-2.13.1] - 2026-06-12
 
 ### Fixed
