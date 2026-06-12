@@ -116,9 +116,10 @@ done
 
 ```bash
 command -v cmux-rebalancing >/dev/null 2>&1 && cmux-rebalancing   # row 균등화
-cmux focus-surface --surface "$LEAD_SURFACE" 2>/dev/null || true   # Lead focus 복원
+LEAD_PANE=$(cmux identify 2>/dev/null | jq -r '.caller.pane_ref')
+cmux focus-pane --pane "$LEAD_PANE" 2>/dev/null || true   # Lead focus 복원 (focus-surface 명령은 없음 — focus-pane 이 정답)
 ```
-- 검토 종료 후 reviewer pane 은 자동 close 하지 않는다 (관찰 보존) — 사용자 컨펌 후 `cmux close-surface`.
+- **결과 수집·취합 완료 후 reviewer pane 을 닫는다** (`cmux close-surface --surface surface:N`) — 출력은 tee 파일로 보존되므로 관찰 손실 없음. 닫은 뒤 `cmux-rebalancing` 1회로 레이아웃 복원.
 
 ### cmux 외부: Codex sub-agent 병렬 실행
 

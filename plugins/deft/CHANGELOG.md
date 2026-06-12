@@ -4,6 +4,19 @@
 
 형식은 [Keep a Changelog](https://keepachangelog.com/ko/1.1.0/) 를 따르며, 버전 체계는 [Semantic Versioning](https://semver.org/lang/ko/) 을 사용합니다 (`claude-X.Y.Z` / `codex-X.Y.Z` 접두).
 
+## [claude-2.12.0] - 2026-06-12
+
+### Changed
+- **pane 수명 정책 변경 (사용자 정책)** — pane 분할로 진행한 작업은 **완료 후 pane 을 닫는다**: multi-round 워커 pane 은 회의 종료(Phase 5) 시, 기록은 board.jsonl·transcript.md 보존. 닫은 뒤 rebalancing 1회로 레이아웃 복원. (구 "관찰 보존 — 사용자 컨펌 후 닫기" 대체)
+
+### Fixed
+- 존재하지 않는 `cmux focus-surface` 명령 → `cmux focus-pane --pane <caller pane>` 정정 (실측 — focus 복원 절차).
+
+## [codex-1.11.0] - 2026-06-12
+
+### Changed
+- multi-check·multi-round (Codex) — Claude 측과 동일: 완료 후 pane 자동 close (reviewer 출력은 tee 파일 보존) + focus-pane 정정. cmux=pane / 외부=백그라운드 분기 정책 Claude 와 동일함을 확인.
+
 ## [claude-2.11.1] - 2026-06-12
 
 ### Fixed

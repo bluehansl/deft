@@ -344,7 +344,7 @@ W2_SURFACE=$(printf '%s' "$SPLIT" | grep -oE 'surface:[0-9]+' | head -1)
 command -v cmux-rebalancing >/dev/null 2>&1 && cmux-rebalancing
 ```
 
-> 두 번째 이후 워커는 같은 우측 컬럼 안에서 하단 수직 분할이므로 **좌우 비율은** 유지 — 단 순차 down 분할은 **row 높이가 1/2·1/4·1/4 로 불균등**해진다 (실측). 워커가 2명 이상이면 **모든 분할 완료 후 `cmux-rebalancing` 을 1회 더** 호출해 row 를 균등화하고, `cmux focus-surface --surface "$LEAD_SURFACE"` 로 Lead focus 를 복원한다.
+> 두 번째 이후 워커는 같은 우측 컬럼 안에서 하단 수직 분할이므로 **좌우 비율은** 유지 — 단 순차 down 분할은 **row 높이가 1/2·1/4·1/4 로 불균등**해진다 (실측). 워커가 2명 이상이면 **모든 분할 완료 후 `cmux-rebalancing` 을 1회 더** 호출해 row 를 균등화하고, `cmux focus-pane --pane "$(cmux identify | jq -r .caller.pane_ref)"` 로 Lead focus 를 복원한다.
 > ⚠️ 첫 호출 누락 시 Lead 가 2:8 처럼 축소되어 가독성 저하.
 
 **(3.5) pane 쉘 readiness 확인 (send 유실 가드 — 필수)**
@@ -557,7 +557,7 @@ Lead 의 라운드 동작:
 #### 5-B. 정리 (워커 + pane)
 
 - 종료 알림 게시: `"$BUS_BIN" post --session "$SESSION_DIR" --from lead --to all --type signal --content "VERDICT: 회의 종료. 참여 감사합니다."` (워커들이 마지막 노크로 종료 인지)
-- 워커 pane 은 자동 close 안 함 (관찰 보존). 사용자에게 "워커 pane 닫을까요?" 컨펌 후 `cmux close-surface --surface surface:N`
+- **회의 종료 후 워커 pane 을 닫는다** (`cmux close-surface --surface surface:N`) — 회의록은 board.jsonl·transcript.md 로 보존되므로 관찰 손실 없음. 닫은 뒤 `cmux-rebalancing` 1회로 레이아웃 복원.
 - 버스 MCP 서버 프로세스는 각 워커 TUI 의 자식 — pane 종료 시 함께 정리됨. 잔존 확인: `pgrep -f "multi-round-bus mcp"`
 - 3-C 경로의 conversation 은 별도 종료 명령 없음 (다음 사용 시 새 conversationId)
 
