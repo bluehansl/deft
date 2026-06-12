@@ -239,6 +239,46 @@ function doHistory(dir, limit) {
   return limit ? board.slice(-limit) : board;
 }
 
+function sleepMs(ms) {
+  const buf = new SharedArrayBuffer(4);
+  Atomics.wait(new Int32Array(buf), 0, 0, ms);
+}
+
+// 데드락 워치독 — 수신자가 응답할 때까지 폴링, timeout 시 재노크 + STALLED 보고.
+// Lead 가 post 후 백그라운드로 실행 (run_in_background / `&`). 종료 자체가 Lead 를 깨우는 신호.
+function doWatch(dir, opts) {
+  const to = opts.to;
+  const afterId = parseInt(opts['message-id'] || '0', 10);
+  const timeoutMs = (parseInt(opts.timeout || '300', 10)) * 1000;
+  const intervalMs = (parseInt(opts.interval || '10', 10)) * 1000;
+  if (!to) fail('watch: --to <참가자 이름> 필수');
+  const F = busFiles(dir);
+  const deadline = Date.now() + timeoutMs;
+
+  for (;;) {
+    const board = readBoard(dir);
+    const reply = board.find((m) => m.from === to && m.id > afterId);
+    if (reply) {
+      console.log(`RESPONDED: ${to} 가 #${reply.id} (${reply.type}) 게시 — 정상`);
+      return;
+    }
+    if (Date.now() >= deadline) break;
+    sleepMs(Math.min(intervalMs, Math.max(0, deadline - Date.now())));
+  }
+  // timeout — 재노크 1회 시도 후 STALLED 보고
+  const participants = readJson(F.participants, {});
+  const cursors = readJson(F.cursors, {});
+  const info = participants[to] || {};
+  const reknocked = info.surface ? cmuxKnock(info.surface) : false;
+  console.log(
+    `STALLED: ${to} 가 #${afterId} 이후 ${Math.round(timeoutMs / 1000)}s 무응답 ` +
+    `(읽음 커서: ${cursors[to] !== undefined ? '#' + cursors[to] : '없음 — check 자체가 안 됨'}` +
+    `${info.lastKnockFailedAt ? ', stale surface 의심' : ''}). ` +
+    `재노크 ${reknocked ? '전송됨' : '실패'}. 해당 pane 의 권한 모드·프롬프트 상태를 점검하세요.`
+  );
+  process.exitCode = 1;
+}
+
 // check 결과를 워커/Lead 가 읽기 좋은 텍스트로
 function renderCheck(res) {
   if (!res.newMessages.length) return `[bus] 새 메시지 없음 (보드 총 ${res.totalOnBoard}건)`;
@@ -369,7 +409,7 @@ function mcpServe(dir, selfName) {
 // ---------- CLI 파싱 ----------
 
 // 값을 받는 옵션 — 다음 토큰이 '--' 로 시작해도 무조건 값으로 소비 (본문이 '---' 로 시작하는 경우 등)
-const VALUE_OPTS = new Set(['session', 'from', 'to', 'type', 'content', 'name', 'surface', 'kind', 'as', 'limit']);
+const VALUE_OPTS = new Set(['session', 'from', 'to', 'type', 'content', 'name', 'surface', 'kind', 'as', 'limit', 'message-id', 'timeout', 'interval']);
 
 function parseArgs(argv) {
   const opts = { _: [] };
@@ -410,6 +450,8 @@ function main() {
   multi-round-bus check    --session <dir> --as <n> [--json]
   multi-round-bus participants --session <dir>
   multi-round-bus history  --session <dir> [--limit N]
+  multi-round-bus watch    --session <dir> --to <n> --message-id <N> [--timeout 300] [--interval 10]
+                           (수신자가 #N 이후 응답할 때까지 폴링. timeout 시 재노크 + STALLED 보고 — 데드락 워치독)
 `);
     process.exit(0);
   }
@@ -441,6 +483,9 @@ function main() {
       break;
     case 'history':
       console.log(JSON.stringify(doHistory(dir, opts.limit ? parseInt(opts.limit, 10) : 0), null, 2));
+      break;
+    case 'watch':
+      doWatch(dir, opts);
       break;
     default:
       fail(`알 수 없는 명령: ${cmd} (multi-round-bus help 참조)`);

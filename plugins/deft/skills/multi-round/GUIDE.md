@@ -260,6 +260,8 @@ multi-round skill 내부에 다음 가드가 강제됩니다.
 | 워커가 노크를 받고도 보드를 안 읽음 | 부트 prompt 의 버스 지침 누락 | 워커 pane 에 "check_messages 를 호출해 새 메시지를 확인하세요" 직접 입력 (1회 교정 — 이후 학습됨) | §5-1 |
 | 워커가 버스 도구 호출 시 승인 프롬프트가 뜸 / 호출이 취소됨 | MCP 도구 호출 승인 elicitation (claudex/codex 기본 동작) | spawn 명령의 `--disable tool_call_mcp_elicitation` 포함 확인. 이미 뜬 프롬프트는 워커 pane 에서 1회 승인 | §Phase 3-A (4) |
 | 분할 직후 send 한 명령이 사라짐 (워커 미기동) | cmux lazy-init — surface 가 화면에 렌더될 때 쉘 기동 | cmux 창을 화면에 보이게 한 뒤 readiness 마커 가드(§Phase 3-A (3.5)) 통과 후 재전송 | §Phase 3-A (3.5) |
+| 워커가 보드는 읽는데 발언(post)을 못 함 — 회의 정지 | 워커 pane 이 don't ask 등 제한 권한 모드 — 버스 도구가 allowlist 에 없어 자동 거부 | claude 워커 spawn 에 `--allowedTools mcp__bus__*` 3종 포함 확인 (스킬 기본). 이미 떠 있는 pane 은 shift+tab 으로 모드 전환 후 노크 재전송 | §Phase 3-A (4) |
+| 워커 무응답인데 Lead 가 모름 (조용한 데드락) | Lead 는 노크로만 깨어남 — 아무도 post 안 하면 정지 | post 직후 `multi-round-bus watch` 백그라운드 워치독 (스킬 기본 절차) — timeout 시 재노크 + STALLED 진단 | §Phase 4-A |
 | Lead surface 캡처 실패 (LEAD_SURFACE 빈값) | `cmux identify`가 caller surface 못 잡음 | 환경 변수 `CMUX_SURFACE_ID` 확인. 없으면 사용자가 직접 surface id 제공 | §6 가드 #5 |
 | 워커 응답이 와도 Lead가 다음 라운드로 못 넘어감 | 워커 응답 마지막 줄에 `DONE:` 센티넬 누락 | 다음 라운드 prompt에 "마지막 줄 `DONE:` 강제" 재주입 | §5-2 라운드 자동화 |
 | (3-B 폴백 한정) prompt 조기 제출됨 (절반만 들어감) | `cmux send`가 `\n`을 Enter로 해석 | prompt를 파일로 저장 → 워커에게 "Read <경로>" 안내 (skill 자동 처리). 버스 경로에선 발생하지 않음 | §6 가드 #3 |

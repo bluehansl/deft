@@ -349,7 +349,9 @@ claude CLI 워커 (config 파일 방식 — 세션 디렉토리에 생성):
 cat > "$SESSION_DIR/mcp-$WORKER_NAME.json" <<EOF
 {"mcpServers":{"bus":{"type":"stdio","command":"$BUS_BIN","args":["mcp"],"env":{"MULTI_ROUND_SESSION_DIR":"$SESSION_DIR","BUS_PARTICIPANT":"$WORKER_NAME"}}}}
 EOF
-WORKER_CMD="claude --model claude-fable-5 --strict-mcp-config --mcp-config $SESSION_DIR/mcp-$WORKER_NAME.json"
+# --allowedTools: 버스 도구 사전 허용 — 누락 시 don't ask 등 제한 모드에서 post 가 자동 거부되어
+#                "수신만 되고 발신 불가" 반쪽 참가자가 됨 (실측 — 회의 데드락의 직접 원인)
+WORKER_CMD="claude --model claude-fable-5 --strict-mcp-config --mcp-config $SESSION_DIR/mcp-$WORKER_NAME.json --allowedTools mcp__bus__check_messages,mcp__bus__post_message,mcp__bus__list_participants"
 cmux send --surface "$W1_SURFACE" "$WORKER_CMD"
 cmux send-key --surface "$W1_SURFACE" Enter
 ```
@@ -432,7 +434,15 @@ Lead 의 라운드 동작:
 "$BUS_BIN" post --session "$SESSION_DIR" --from lead --to "$NEXT_WORKER" --type request --content "..."
 ```
 
-- **폴링 불필요**: 워커 응답 post 가 Lead 를 노크로 깨운다. 단 **안전망**으로 라운드당 timeout(기본 300s)을 두고, 노크가 안 오면 1회 수동 `check` + 해당 워커 pane 상태 확인.
+- **폴링 불필요**: 워커 응답 post 가 Lead 를 노크로 깨운다.
+- **데드락 워치독 (필수)**: Lead 는 응답을 기다리는 post 직후 워치독을 백그라운드로 심는다 — Lead 는 노크로만 깨어나므로, 워커가 막히면(권한 거부·crash·무한 대기) 아무도 post 하지 않아 회의가 조용히 정지하는 구조적 공백을 메운다:
+
+```bash
+# run_in_background (또는 `&`) 로 실행 — 종료 자체가 Lead 를 깨우는 신호
+"$BUS_BIN" watch --session "$SESSION_DIR" --to "$NEXT_WORKER" --message-id <방금 post 한 id> --timeout 300
+# RESPONDED → 정상 (노크와 함께 도착). STALLED → 수신자 무응답: 재노크 자동 1회 + 커서 진단 출력
+#   → Lead 는 해당 pane 의 권한 모드·프롬프트 상태를 점검하고 사용자에게 보고
+```
 - 본문은 길이·줄바꿈 제한 없음 (보드 경유) — 3-B 의 sanitize 패턴은 버스 경로에선 불필요.
 - 3-C 경로는 `claudex.codex-reply` 호출 응답이 곧 라운드 응답 (노크 불필요).
 

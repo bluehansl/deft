@@ -4,6 +4,20 @@
 
 형식은 [Keep a Changelog](https://keepachangelog.com/ko/1.1.0/) 를 따르며, 버전 체계는 [Semantic Versioning](https://semver.org/lang/ko/) 을 사용합니다 (`claude-X.Y.Z` / `codex-X.Y.Z` 접두).
 
+## [claude-2.7.0] - 2026-06-12
+
+### Added
+- **`multi-round-bus watch` 서브커맨드 — 데드락 워치독**: Lead 는 노크로만 깨어나므로 워커가 막히면(권한 거부·crash) 회의가 조용히 정지하는 구조적 공백 발견 (3인 회의 실측). post 후 백그라운드로 watch 를 심으면 수신자 응답 시 RESPONDED, timeout(기본 300s) 시 자동 재노크 1회 + 읽음 커서 진단 포함 STALLED 보고 — 종료 자체가 Lead 를 깨우는 신호. SKILL Phase 4 필수 절차로 명시.
+
+### Fixed
+- **claude CLI 워커 발신 차단** — don't ask 등 제한 권한 모드에서 버스 도구가 allowlist 에 없어 post 가 자동 거부, "수신만 되고 발신 불가" 반쪽 참가자가 되는 문제 (실측 — 회의 데드락의 직접 원인). spawn 명령에 `--allowedTools mcp__bus__check_messages,mcp__bus__post_message,mcp__bus__list_participants` 표준 포함.
+- GUIDE 트러블슈팅 2건 추가 (발신 차단 / 조용한 데드락).
+
+## [codex-1.6.0] - 2026-06-12
+
+### Added
+- multi-round (Codex) — Claude 측과 동일: watch 워치독 (`bin/multi-round-bus` 동기화), claude 워커 `--allowedTools`, 트러블슈팅 2건.
+
 ## [claude-2.6.0] - 2026-06-11
 
 ### Added
