@@ -47,8 +47,17 @@ if ! command -v claude-bin-keepalive >/dev/null 2>&1; then
   SRC=$(ls -1 ~/.claude/plugins/cache/bluehansl/deft/*/bin/claude-bin-keepalive 2>/dev/null | tail -1)
   [ -n "$SRC" ] && mkdir -p ~/.local/bin && cp "$SRC" ~/.local/bin/ && chmod +x ~/.local/bin/claude-bin-keepalive
 fi
-command -v claude-bin-keepalive >/dev/null 2>&1 && claude-bin-keepalive
+# deft 공용 모델 ID 헬퍼(deft-model) 설치 — 모델 차단·버전업 시 단일 관리 지점
+if ! command -v deft-model >/dev/null 2>&1; then
+  SRC=$(ls -1 ~/.claude/plugins/cache/bluehansl/deft/*/bin/deft-model 2>/dev/null | tail -1)
+  [ -n "$SRC" ] && mkdir -p ~/.local/bin && cp "$SRC" ~/.local/bin/ && chmod +x ~/.local/bin/deft-model
+fi
+if command -v claude-bin-keepalive >/dev/null 2>&1; then
+  claude-bin-keepalive || echo "STOP_TEAM_SPAWN: 세션 바이너리 복원 불가(KEEPALIVE_HARDFAIL) — 이 세션의 teammate spawn 은 반드시 실패한다."
+fi
 ```
+
+**preflight 게이트 (필수)**: 위 출력에 `STOP_TEAM_SPAWN`(또는 `KEEPALIVE_HARDFAIL`)이 보이면, Phase 3 의 Agent Teams(TeamCreate/Agent) 를 **실행하지 말 것**. 대신 사용자에게 "이 세션은 자동 업데이트로 Claude Code 바이너리가 삭제됐습니다. `cmux claude-teams`(또는 `/resume`)로 세션을 재시작한 뒤 다시 시도하세요"를 안내하고 중단한다. (재시작하면 살아있는 최신 버전으로 재개되어 해소됨.)
 
 Note: Codex reviewer uses `claudex` if installed (preferred), otherwise falls back to `codex`. Command flags are identical; only the entrypoint differs.
 
@@ -95,7 +104,7 @@ Agent(
 Claude reviewer (only if claude CLI is available) — Independent Claude session:
 ```
 Agent(
-  description: "Run Claude CLI analysis (Claude Fable 5, independent session)",
+  description: "Run Claude CLI analysis (Claude Opus, independent session)",
   prompt: "<composed prompt with context>",
   name: "claude-reviewer",
   subagent_type: "claude-reviewer",
@@ -138,7 +147,7 @@ Agent(
 Claude reviewer (only if claude CLI is available):
 ```
 Agent(
-  description: "Run Claude CLI analysis (Claude Fable 5, independent session)",
+  description: "Run Claude CLI analysis (Claude Opus, independent session)",
   prompt: "<composed prompt>",
   name: "claude-reviewer",
   subagent_type: "claude-reviewer",

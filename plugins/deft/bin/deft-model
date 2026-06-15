@@ -1,0 +1,24 @@
+#!/bin/bash
+# deft-model — deft 스킬 공용 모델 ID의 단일 관리 지점 (Single Source of Truth)
+#
+# 목적: multi-check / multi-round / agent-teams 가 worker·reviewer·teammate 를 띄울 때
+#       쓰는 모델 ID 를 한 곳에서 결정한다. 모델 차단·버전업 시 이 파일(또는 환경변수)만
+#       고치면 전 스킬에 반영되어, 여러 파일을 일일이 수정하다 누락할 위험이 사라진다.
+#
+# 사용: deft-model claude   # Claude 계열 모델 ID (기본 opus)
+#       deft-model codex    # Codex 계열 모델 ID (기본 gpt-5.5)
+#
+# 오버라이드: 환경변수 DEFT_CLAUDE_MODEL / DEFT_CODEX_MODEL 가 있으면 그 값을 우선 사용.
+#
+# 이력:
+#   - 2026-06: Claude Fable 5(`claude-fable-5`) 가 사용 불가로 확인되어 기본값을 opus 로 운용.
+#     Fable 복구 시 아래 CLAUDE_DEFAULT 를 claude-fable-5 로 되돌리면 전 스킬이 자동 복귀.
+
+CLAUDE_DEFAULT="opus"        # ← Claude 계열 기본 모델. Fable 복구 시 여기만 수정.
+CODEX_DEFAULT="gpt-5.5"      # ← Codex 계열 기본 모델.
+
+case "${1:-claude}" in
+  claude) echo "${DEFT_CLAUDE_MODEL:-$CLAUDE_DEFAULT}" ;;
+  codex)  echo "${DEFT_CODEX_MODEL:-$CODEX_DEFAULT}" ;;
+  *)      echo "${DEFT_CLAUDE_MODEL:-$CLAUDE_DEFAULT}" ;;
+esac

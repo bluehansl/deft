@@ -231,6 +231,13 @@ if ! command -v cmux-rebalancing >/dev/null 2>&1; then
     echo "WARN: cmux-rebalancing 미설치 + plugin 동봉본 없음 — pane 비율 자동 조정 비활성"
   fi
 fi
+
+# deft 공용 모델 ID 헬퍼(deft-model) 설치 — 모델 차단·버전업 시 단일 관리 지점
+if ! command -v deft-model >/dev/null 2>&1; then
+  SRC=$(ls -1 ~/.codex/plugins/cache/bluehansl-codex/deft/*/bin/deft-model 2>/dev/null | tail -1)
+  [ -z "$SRC" ] && SRC=$(ls -1 ~/.claude/plugins/cache/bluehansl/deft/*/bin/deft-model 2>/dev/null | tail -1)
+  [ -n "$SRC" ] && mkdir -p ~/.local/bin && cp "$SRC" ~/.local/bin/deft-model && chmod +x ~/.local/bin/deft-model
+fi
 ```
 
 **핵심**:
@@ -375,7 +382,7 @@ EOF
 #                "수신만 되고 발신 불가" 반쪽 참가자가 됨 (실측 — 회의 데드락의 직접 원인)
 # --dangerously-skip-permissions: 승인 프롬프트 0회 (claudex 의 bypass 에 대응 — 회의 워커 한정).
 #   --allowedTools 는 skip 미적용 환경 폴백 겸 이중 안전으로 유지.
-WORKER_CMD="claude --model claude-fable-5 --dangerously-skip-permissions --strict-mcp-config --mcp-config $SESSION_DIR/mcp-$WORKER_NAME.json --allowedTools mcp__bus__check_messages,mcp__bus__post_message,mcp__bus__list_participants"
+WORKER_CMD="claude --model "$(deft-model claude 2>/dev/null||echo opus)" --dangerously-skip-permissions --strict-mcp-config --mcp-config $SESSION_DIR/mcp-$WORKER_NAME.json --allowedTools mcp__bus__check_messages,mcp__bus__post_message,mcp__bus__list_participants"
 cmux send --surface "$W1_SURFACE" "$WORKER_CMD"
 cmux send-key --surface "$W1_SURFACE" Enter
 ```
@@ -419,7 +426,7 @@ EOF
 
 버스 불가 시 구형 경로 — pane TUI 에 직접 prompt 주입 + 화면 캡처로 응답 수집.
 
-- TUI 기동: `claudex -m gpt-5.5 -c mcp_servers={}` (claudex 없으면 codex, 그것도 없으면 `claude --model claude-fable-5`)
+- TUI 기동: `claudex -m gpt-5.5 -c mcp_servers={}` (claudex 없으면 codex, 그것도 없으면 `claude --model "$(deft-model claude 2>/dev/null||echo opus)"`)
 - prompt 주입 시 **줄바꿈 sanitize 필수**: `PROMPT_SAFE=$(tr '\n' ' ' < file)` 후 `cmux send` + `cmux send-key Enter` (`\n` 은 Enter 로 해석되어 조기 제출됨)
 - 긴 prompt 는 `$SESSION_DIR/round<N>-<worker>.md` 저장 후 "Read <경로>" 한 줄만 send
 - 응답 감지 2단: ① `capture-pane --scrollback` 에서 `DONE:` 센티넬 grep ② idle-stable 폴링 (20줄 캡처 동일 반복 시 완료 간주, 8초 간격 최대 30회)
@@ -511,7 +518,7 @@ Lead 의 라운드 동작:
 
 ### 회의 정보
 - 모드: {consult|dialogue|collaborate|debate}
-- 참가자: {Codex(gpt-5.5), Claudex(GPT-5.5), Claude(Fable 5), ...}
+- 참가자: {Codex(gpt-5.5), Claudex(GPT-5.5), Claude(Opus), ...}
 - 진행 라운드: {N/M}
 - 종료 사유: {CONSENSUS 도달 | max-round | 사용자 조기 종료}
 - 실행 경로: {3-A 버스 | 3-B send/capture | 3-C MCP conversation}

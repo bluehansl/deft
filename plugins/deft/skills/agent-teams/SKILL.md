@@ -7,7 +7,7 @@ description: 'Claude Code 내장 팀 기능으로 다중 Claude 에이전트 팀
 
 Claude Code **내장 팀 기능**(`TeamCreate` + `Agent` + `SendMessage` + `Task*`)으로 다중 Claude 에이전트 팀을 구성·운영하는 skill. Lead(팀장 겸 기획)가 역할별 팀원(backendDev/frontendDev/qa 등)을 spawn해 분석→구현→검증을 분담하고, 단계 게이트·페르소나·영속 작업노트로 일관성과 연속성을 보장한다.
 
-> **팀원 모델**: 모두 **Claude Fable 5 (`claude-fable-5`)** — 동질 시각, 컨벤션 강제 일관. Agent tool 호출 시 alias `fable` (§4-3).
+> **팀원 모델**: 모두 **Claude Opus (`opus`)** — 동질 시각, 컨벤션 강제 일관. Agent tool 호출 시 alias `opus` (§4-3).
 
 > 본 skill은 **자기완결적**이다. 운영에 필요한 모든 규약(팀 구성·페르소나·작업 흐름·통신·파일 구조·회의 모드)이 이 패키지(SKILL.md + `agents/*.md` + `GUIDE.md`) 안에 들어있다. 외부 `AGENTS.md` 참조 없이 이 skill만으로 팀을 운영할 수 있다. 단, **프로젝트별 코드 컨벤션**(예: 특정 프레임워크 패턴)은 각 프로젝트의 `AGENTS.md`/`CLAUDE.md`가 소유하며, 페르소나는 "본인 cwd 프로젝트의 컨벤션을 준수"로 일반 참조한다(§7-3).
 
@@ -46,8 +46,17 @@ if ! command -v claude-bin-keepalive >/dev/null 2>&1; then
   SRC=$(ls -1 ~/.claude/plugins/cache/bluehansl/deft/*/bin/claude-bin-keepalive 2>/dev/null | tail -1)
   [ -n "$SRC" ] && mkdir -p ~/.local/bin && cp "$SRC" ~/.local/bin/ && chmod +x ~/.local/bin/claude-bin-keepalive
 fi
-command -v claude-bin-keepalive >/dev/null 2>&1 && claude-bin-keepalive
+# deft 공용 모델 ID 헬퍼(deft-model) 설치 — 모델 차단·버전업 시 단일 관리 지점
+if ! command -v deft-model >/dev/null 2>&1; then
+  SRC=$(ls -1 ~/.claude/plugins/cache/bluehansl/deft/*/bin/deft-model 2>/dev/null | tail -1)
+  [ -n "$SRC" ] && mkdir -p ~/.local/bin && cp "$SRC" ~/.local/bin/ && chmod +x ~/.local/bin/deft-model
+fi
+if command -v claude-bin-keepalive >/dev/null 2>&1; then
+  claude-bin-keepalive || echo "STOP_TEAM_SPAWN: 세션 바이너리 복원 불가(KEEPALIVE_HARDFAIL) — 이 세션의 teammate spawn 은 반드시 실패한다."
+fi
 ```
+
+**preflight 게이트 (필수)**: 위 출력에 `STOP_TEAM_SPAWN`(또는 `KEEPALIVE_HARDFAIL`)이 보이면, 팀 spawn(TeamCreate/Agent) 를 **실행하지 말 것**. 대신 사용자에게 "이 세션은 자동 업데이트로 Claude Code 바이너리가 삭제됐습니다. `cmux claude-teams`(또는 `/resume`)로 세션을 재시작한 뒤 다시 시도하세요"를 안내하고 중단한다. (work-id 영속 설계로 연속성은 유지됨.)
 
 > **`cmux-rebalancing`**: 팀원 spawn 후 Lead 와 팀원 컬럼 비율을 정책대로 재조정하는 헬퍼. 모든 팀원 spawn 직후 자동 호출 (§2-2 끝).
 
@@ -275,14 +284,14 @@ work-id를 **어떤 규칙으로 만들지**는 특정 값(예: 티켓번호)을
 
 #### Agent 도구 호출 인자
 
-팀원 모두 **Claude Fable 5 (`claude-fable-5`)** — Agent tool 호출 시 alias `fable`. enum 제약(`sonnet`/`opus`/`haiku`/`fable`)으로 구체 모델 ID 는 인자에 직접 지정 불가.
+팀원 모두 **Claude Opus (`opus`)** — Agent tool 호출 시 alias `opus`. enum 제약(`sonnet`/`opus`/`haiku`/`opus`)으로 구체 모델 ID 는 인자에 직접 지정 불가.
 
 ```text
 Agent(
   team_name: "<work-id 기반 team-name>",
   name: "<role>",                    # backendDev / frontendDev / qa 등
   subagent_type: "claude",
-  model: "fable",                    # ← 모든 팀원 공통
+  model: "opus",                    # ← 모든 팀원 공통
   description: "<역할 한 줄 요약>",
   prompt: "<아래 task instruction 본문>"
 )

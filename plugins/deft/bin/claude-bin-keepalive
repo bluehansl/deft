@@ -59,12 +59,14 @@ done
 #       → 대체 복원: 최신 가용 버전을 그 경로 이름으로 hardlink — teammate spawn 이 최신 바이너리로 실행됨
 #         (마이너 버전 불일치 가능성 고지. 실측: 2.1.170 세션 + 2.1.175 대체로 spawn 정상)
 LATEST=$(ls -1 "$VERSIONS_DIR" 2>/dev/null | sort -V | tail -1)
+HARDFAIL=0   # 대체 복원조차 불가 → 팀 spawn 확정 실패 신호 (호출측 preflight 게이트용)
 for v in $(running_versions); do
   if [ ! -e "$VERSIONS_DIR/$v" ] && [ ! -e "$KEEP_DIR/$v" ]; then
     if [ -n "$LATEST" ] && ln "$VERSIONS_DIR/$LATEST" "$VERSIONS_DIR/$v" 2>/dev/null; then
       echo "INFO: claude $v 바이너리를 최신($LATEST)으로 대체 복원 — 원본은 이미 삭제됨. teammate spawn 은 동작하나 부모($v)·자식($LATEST) 버전이 다를 수 있음. 완전 정합을 원하면 해당 세션 재시작(/resume) 권장."
     else
-      echo "WARN: 실행 중인 claude 세션(버전 $v)의 바이너리가 삭제되어 복원 불가 — 그 세션의 팀 spawn 은 실패합니다. 해당 세션을 재시작(/resume)하세요."
+      echo "KEEPALIVE_HARDFAIL: 실행 중인 claude 세션(버전 $v)의 바이너리가 삭제되어 복원 불가 — 그 세션의 팀 spawn 은 반드시 실패합니다. 해당 세션을 재시작(/resume)하세요."
+      HARDFAIL=1
     fi
   fi
 done
@@ -80,4 +82,6 @@ if [ "$DEL" -gt 0 ]; then
     [ -n "$v" ] && rm -f "$KEEP_DIR/$v"
   done
 fi
+# hard-fail(복원 불가) 시 비정상 종료 → 호출측이 팀 spawn 진입을 차단하는 신호
+[ "${HARDFAIL:-0}" = 1 ] && exit 3
 exit 0

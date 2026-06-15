@@ -4,6 +4,15 @@
 
 형식은 [Keep a Changelog](https://keepachangelog.com/ko/1.1.0/) 를 따르며, 버전 체계는 [Semantic Versioning](https://semver.org/lang/ko/) 을 사용합니다 (`claude-X.Y.Z` / `codex-X.Y.Z` 접두).
 
+## [claude-2.16.0] / [codex-1.14.0] - 2026-06-15
+
+### Changed
+- **모델 ID 단일 관리(`bin/deft-model`) 도입** — multi-check / multi-round / agent-teams 에 흩어진 `claude-fable-5` 16곳을 `deft-model` 헬퍼 참조(실행 CLI)와 `opus` 리터럴(Agent Teams enum 인자)로 일원화. 모델 차단·버전업 시 `deft-model` 한 곳(또는 `DEFT_CLAUDE_MODEL` 환경변수)만 고치면 전 스킬에 반영 — 다중 파일 수정 누락 위험 제거. 헬퍼 미설치 시 `opus` fallback 내장(`$(deft-model claude 2>/dev/null||echo opus)`). 세 스킬 Phase 0 에 `deft-model` 자동 설치 블록 추가.
+- **Claude Fable 5 사용 불가 대응 → 기본 모델 opus 운용** — `claude --model claude-fable-5` 가 실호출에서 "It may not exist or you may not have access" 로 확인됨(2026-06, opus 는 정상). 전 스킬의 Claude 워커·리뷰어·팀원 모델을 opus 로 전환. Fable 복구 시 `deft-model` 의 `CLAUDE_DEFAULT` 한 줄로 자동 복귀.
+
+### Added
+- **세션 바이너리 keepalive hard-fail preflight 게이트** — `claude-bin-keepalive` 가 복원·대체복원 모두 불가한 경우 `exit 3` + `KEEPALIVE_HARDFAIL` 마커 출력. multi-check / agent-teams SKILL.md Phase 0 가 이를 받아 `STOP_TEAM_SPAWN` 시 팀 spawn(TeamCreate/Agent)을 진입하지 않고 사용자에게 세션 재시작(`cmux claude-teams`/`/resume`)을 안내·중단한다. 이미 바이너리가 삭제된 구버전 세션이 raw `env: ...: No such file or directory` 를 노출하던 문제(실사용 보고) 방어.
+
 ## [claude-2.15.0] - 2026-06-12
 
 ### Added

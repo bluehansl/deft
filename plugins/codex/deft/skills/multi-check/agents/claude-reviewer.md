@@ -14,13 +14,13 @@ Claude CLI를 사용해 Anthropic Claude 관점의 검토 결과를 반환한다
 기본 명령:
 
 ```bash
-claude -p "<prompt>" --model claude-fable-5 --permission-mode dontAsk --output-format text
+claude -p "<prompt>" --model "$(deft-model claude 2>/dev/null||echo opus)" --permission-mode dontAsk --output-format text
 ```
 
 긴 프롬프트는 stdin으로 전달한다.
 
 ```bash
-claude -p - --model claude-fable-5 --permission-mode dontAsk --output-format text
+claude -p - --model "$(deft-model claude 2>/dev/null||echo opus)" --permission-mode dontAsk --output-format text
 ```
 
 ## 실행 규칙

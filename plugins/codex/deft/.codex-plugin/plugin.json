@@ -1,6 +1,6 @@
 {
   "name": "deft",
-  "version": "codex-1.13.0",
+  "version": "codex-1.14.0",
   "description": "deft — Codex 개인 워크플로 도구 모음 (multi-check / multi-round / session-relocate / set·restore-statusline).",
   "author": {
     "name": "bluehansl",
