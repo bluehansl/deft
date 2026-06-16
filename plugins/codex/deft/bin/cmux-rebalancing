@@ -18,8 +18,28 @@ POLICY = {2: [0.6, 0.4], 3: [0.4, 0.3, 0.3], 4: [0.25, 0.25, 0.25, 0.25]}
 SETTLE = 0.2  # 연속 resize 디바운스 회피용 간격(초)
 
 
+def _resolve_cmux_bin():
+    """cmux 실행 파일 경로 해석. PATH 가 누락된 서브셸 컨텍스트(일부 도구 실행 환경)에서도
+    동작하도록 cmux 가 주입하는 env 힌트를 우선 사용하고, 없으면 PATH·표준 설치 경로 순으로 fallback."""
+    import shutil
+    for key in ("CMUX_BUNDLED_CLI_PATH", "CMUX_CLAUDE_TEAMS_CMUX_BIN", "CMUX_BIN"):
+        v = os.environ.get(key)
+        if v and os.path.exists(v):
+            return v
+    found = shutil.which("cmux")
+    if found:
+        return found
+    for cand in ("/Applications/cmux.app/Contents/Resources/bin/cmux",):
+        if os.path.exists(cand):
+            return cand
+    return "cmux"  # 최후 fallback — PATH 에 있길 기대
+
+
+CMUX_BIN = _resolve_cmux_bin()
+
+
 def cmux(*args):
-    r = subprocess.run(["cmux", *args], capture_output=True, text=True, env=ENV)
+    r = subprocess.run([CMUX_BIN, *args], capture_output=True, text=True, env=ENV)
     return r.stdout.strip()
 
 

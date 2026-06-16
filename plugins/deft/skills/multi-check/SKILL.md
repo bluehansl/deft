@@ -57,7 +57,7 @@ if command -v claude-bin-keepalive >/dev/null 2>&1; then
 fi
 ```
 
-**preflight 게이트 (필수)**: 위 출력에 `STOP_TEAM_SPAWN`(또는 `KEEPALIVE_HARDFAIL`)이 보이면, Phase 3 의 Agent Teams(TeamCreate/Agent) 를 **실행하지 말 것**. 대신 사용자에게 "이 세션은 자동 업데이트로 Claude Code 바이너리가 삭제됐습니다. `cmux claude-teams`(또는 `/resume`)로 세션을 재시작한 뒤 다시 시도하세요"를 안내하고 중단한다. (재시작하면 살아있는 최신 버전으로 재개되어 해소됨.)
+**preflight 게이트 (필수)**: 위 출력에 `STOP_TEAM_SPAWN`(또는 `KEEPALIVE_HARDFAIL`)이 보이면, Phase 3 의 리뷰어 `Agent` spawn 을 **실행하지 말 것**. 대신 사용자에게 "이 세션은 자동 업데이트로 Claude Code 바이너리가 삭제됐습니다. `cmux claude-teams`(또는 `/resume`)로 세션을 재시작한 뒤 다시 시도하세요"를 안내하고 중단한다. (재시작하면 살아있는 최신 버전으로 재개되어 해소됨.)
 
 Note: Codex reviewer uses `claudex` if installed (preferred), otherwise falls back to `codex`. Command flags are identical; only the entrypoint differs.
 
@@ -71,104 +71,62 @@ Important: The Claude CLI agent and Lead (Claude) are the same model but run in 
 
 ### Phase 3: Agent Spawn
 
-#### Preferred: Agent Teams (parallel execution)
+#### 리뷰어는 fan-out 서브에이전트 (팀 생성 불요)
 
-Try creating a team first. **Team name MUST be unique per run** — `~/.claude/teams/` is a global namespace shared by ALL sessions. A fixed name ("multi-check") collides when two sessions run this skill concurrently: workers get cross-delivered messages and one session's cleanup destroys the other's team (실측 사고 — 타 세션이 동명 팀을 잔재로 오인해 shutdown + 디렉토리 삭제).
+multi-check 리뷰어(Codex/Claude/Gemini)는 **서로 대화하지 않고 각자 결과만 보고**한다 → 팀(상호대화)이 아니라 **fan-out 서브에이전트** 패턴이다. 과거의 `TeamCreate` 호출은 폐지됐고 불필요하다. 현행 Claude Code는 첫 `Agent` spawn 시 팀(`session-<id>`)이 암묵 생성되며, 리뷰어는 그 안에서 1-shot 으로 동작 후 보고한다. **세션마다 팀이 자동 분리**되므로 과거의 동명-팀 충돌 문제도 없다.
 
+**페르소나 주입 (보존 필수 — SSOT)**: 각 리뷰어의 실행 규약(CLI 선택·명령·플래그·SendMessage 보고)은 본 skill 패키지의 `agents/<reviewer>.md` 가 단일 진실 소스다. **Lead 는 spawn 전에 해당 파일을 Read 해 그 전문을 spawn prompt 에 인라인**한다 — 리뷰어가 plugin cache 경로를 직접 찾을 필요 없이 페르소나가 그대로 주입된다.
+
+```bash
+PERSONA_DIR=$(ls -d ~/.claude/plugins/marketplaces/bluehansl/plugins/deft/skills/multi-check/agents \
+                    ~/.claude/plugins/cache/bluehansl/deft/*/skills/multi-check/agents 2>/dev/null | head -1)
+# 인라인 대상: $PERSONA_DIR/{codex,claude,gemini}-reviewer.md
 ```
-# suffix: 현재 시각 기반 (예: multi-check-143052)
-TeamCreate(team_name: "multi-check-<HHMMSS>", description: "AI multi-check")
-```
 
-All subsequent `Agent(team_name: ...)` / cleanup calls use the same suffixed name.
+> **왜 인라인 + `subagent_type:"claude"` 인가**: 과거엔 `subagent_type:"codex-reviewer"` 로 페르소나를 붙였으나, 이 커스텀 타입은 현행 빌드의 등록된 subagent 타입이 아니다(스킬 하위 `agents/` 는 표준 등록 경로가 아님 → 해석 안 됨). 그래서 범용 `subagent_type:"claude"` + 페르소나 prompt 인라인으로 전환한다 — **페르소나 내용은 그대로 보존**된다.
 
-If TeamCreate fails (Agent Teams not enabled):
-1. Display: "Agent Teams requires `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1` in your settings.json env. Would you like me to enable it?"
-2. If user declines, fall back to sequential Agent spawn (see below)
+사용 가능한 CLI(Phase 2)별로 **한 메시지에 병렬** spawn 한다 (`run_in_background: true`):
 
-On success, spawn agents in **a single message** (parallel):
-
-Codex reviewer (only if codex is available) — GPT-5.5, reasoning: xhigh:
+Codex reviewer (claudex/codex 있을 때) — GPT-5.5, xhigh:
 ```
 Agent(
   description: "Run Codex CLI analysis (GPT-5.5, xhigh reasoning)",
-  prompt: "<composed prompt with context>",
   name: "codex-reviewer",
-  subagent_type: "codex-reviewer",
-  team_name: "multi-check-<HHMMSS>",
-  model: "haiku",
-  mode: "dontAsk"
+  subagent_type: "claude",            # 범용. 페르소나는 prompt 인라인으로 주입
+  model: "haiku",                     # 얇은 래퍼(CLI 실행·중계만). ※ 생략 시 fable(차단)로 떠 실패 — 반드시 명시
+  mode: "dontAsk",
+  run_in_background: true,
+  prompt: "<$PERSONA_DIR/codex-reviewer.md 전문 인라인>\n\n---\n[검토 대상]\n<composed prompt with context>"
 )
 ```
 
-Claude reviewer (only if claude CLI is available) — Independent Claude session:
+Claude reviewer (claude CLI 있을 때) — 독립 Claude 세션:
 ```
 Agent(
-  description: "Run Claude CLI analysis (Claude Opus, independent session)",
-  prompt: "<composed prompt with context>",
+  description: "Run Claude CLI analysis (independent Claude session)",
   name: "claude-reviewer",
-  subagent_type: "claude-reviewer",
-  team_name: "multi-check-<HHMMSS>",
+  subagent_type: "claude",
   model: "haiku",
-  mode: "dontAsk"
+  mode: "dontAsk",
+  run_in_background: true,
+  prompt: "<$PERSONA_DIR/claude-reviewer.md 전문 인라인>\n\n---\n[검토 대상]\n<composed prompt with context>"
 )
 ```
 
-Gemini reviewer (only if gemini is available) — Gemini 3 Flash Preview:
+Gemini reviewer (gemini 있을 때) — Gemini 3 Flash Preview:
 ```
 Agent(
   description: "Run Gemini CLI analysis (Gemini 3 Flash Preview)",
-  prompt: "<composed prompt with context>",
   name: "gemini-reviewer",
-  subagent_type: "gemini-reviewer",
-  team_name: "multi-check-<HHMMSS>",
-  model: "haiku",
-  mode: "dontAsk"
-)
-```
-
-#### Fallback: Sequential Agent spawn
-
-If Teams is not available, spawn agents sequentially with `run_in_background: true`:
-
-Codex reviewer (only if codex is available):
-```
-Agent(
-  description: "Run Codex CLI analysis (GPT-5.5, xhigh reasoning)",
-  prompt: "<composed prompt>",
-  name: "codex-reviewer",
-  subagent_type: "codex-reviewer",
+  subagent_type: "claude",
   model: "haiku",
   mode: "dontAsk",
-  run_in_background: true
+  run_in_background: true,
+  prompt: "<$PERSONA_DIR/gemini-reviewer.md 전문 인라인>\n\n---\n[검토 대상]\n<composed prompt with context>"
 )
 ```
 
-Claude reviewer (only if claude CLI is available):
-```
-Agent(
-  description: "Run Claude CLI analysis (Claude Opus, independent session)",
-  prompt: "<composed prompt>",
-  name: "claude-reviewer",
-  subagent_type: "claude-reviewer",
-  model: "haiku",
-  mode: "dontAsk",
-  run_in_background: true
-)
-```
-
-Gemini reviewer (only if gemini is available):
-```
-Agent(
-  description: "Run Gemini CLI analysis (Gemini 3 Flash Preview)",
-  prompt: "<composed prompt>",
-  name: "gemini-reviewer",
-  subagent_type: "gemini-reviewer",
-  model: "haiku",
-  mode: "dontAsk",
-  run_in_background: true
-)
-```
+> **`team_name` 인자는 넣지 않는다**(deprecated/무시). 리뷰어는 named 서브에이전트로 결과를 `SendMessage(to:"team-lead")` 로 보고하고(각 `agents/<reviewer>.md` 보고 규약), 1-shot 완료 후 자체 종료한다(Phase 5 shutdown 은 안전망).
 
 #### Lead (Claude) Analysis
 
@@ -210,7 +168,7 @@ After receiving all results, synthesize in this format:
 
 ### Phase 5: Cleanup
 
-**Cleanup safety — 소유 확인 필수**: shutdown/TeamDelete 는 파괴 행위다. 본 세션이 이번 실행에서 생성한 팀·팀원에게만 보낸다. 다른 이름(또는 suffix 가 다른 팀)의 워커가 메시지를 보내와도 "잔재"로 단정하지 말 것 — `-N` 접미 워커는 "다른 리드가 같은 이름으로 spawn" 신호일 수 있다 (프로세스의 `--parent-session-id` 로 소속 확인 가능).
+**Cleanup safety — 소유 확인 필수**: shutdown 은 파괴 행위다(`TeamDelete` 도구는 폐지 — 팀은 세션 종료 시 자동 삭제). 본 세션이 이번 실행에서 spawn 한 리뷰어에게만 보낸다. 리뷰어는 1-shot 으로 보고 후 자체 종료하므로 shutdown 은 **안전망**이다. 다른 세션(`session-*`)의 워커가 메시지를 보내와도 "잔재"로 단정하지 말 것 — 프로세스의 `--parent-session-id` 로 본 세션 소속을 확인할 수 있다.
 
 After output, send shutdown to teammates:
 ```
@@ -227,7 +185,7 @@ SendMessage(to: "gemini-reviewer", message: {type: "shutdown_request"})
 | API error (ModelNotFoundError, etc.) | Skip that model, note in results |
 | Timeout (agent doesn't respond in 120s) | Synthesize with available results |
 | All CLIs fail | Compare Lead analysis against error context |
-| TeamCreate fails | Show activation guide, fallback to sequential Agent |
+| 리뷰어가 spawn 직후 무응답 | `model` 미지정 시 팀원이 `fable`(차단)로 떠 조용히 실패 — `model:"haiku"` 명시를 확인. 그래도 무응답이면 해당 모델 skip 후 진행 |
 | Reviewer dies right after spawn (e.g. binary path error) | Close its dead pane (`cmux top --processes` 로 프로세스 0 확인 후 `cmux close-surface`) → respawn → **rebalancing 재호출** — 죽은 pane 을 방치하면 레이아웃·식별 혼란 |
 
 ## Prompt Composition Rules

@@ -4,6 +4,21 @@
 
 형식은 [Keep a Changelog](https://keepachangelog.com/ko/1.1.0/) 를 따르며, 버전 체계는 [Semantic Versioning](https://semver.org/lang/ko/) 을 사용합니다 (`claude-X.Y.Z` / `codex-X.Y.Z` 접두).
 
+## [claude-2.17.0] / [codex-1.14.3] - 2026-06-16
+
+### Changed
+- **Agent Teams API 마이그레이션: `TeamCreate`/`TeamDelete` 폐지 → 암묵적 팀** (현행 Claude Code v2.1.17x 가 명시적 팀 생성/삭제 도구를 폐지하고 첫 `Agent` spawn 시 `session-<id>` 팀을 자동 생성·세션 종료 시 자동 삭제하는 모델로 전환 — 공식 문서 + probe 실측 확인). 영향:
+  - **agent-teams** (claude): SKILL/GUIDE 전반의 `TeamCreate`/`team_name` 제거, Agent 템플릿에서 `team_name` 인자 삭제(`model:"opus"` 유지), §0-3 한계·§2 도구표·§3 데이터경로를 "세션 자동 팀" 기준으로 갱신, 정리는 `SendMessage` shutdown_request 기준. **페르소나 prompt-Read 주입·역할 테이블·`agents/*.md` 는 무변경(보존)**.
+  - **multi-check** (claude): 깨진 `TeamCreate`-preferred 경로 제거, 리뷰어를 **fan-out 서브에이전트 단일 경로**(`run_in_background`, `team_name` 없음)로 통일.
+- **multi-check 리뷰어 서브에이전트 등록 정비**: `subagent_type:"codex-reviewer"`(스킬 하위 `agents/` 는 표준 등록 경로가 아니라 현행 빌드에서 미해석) → **`subagent_type:"claude"` + 페르소나 prompt 인라인**(Lead 가 `agents/<reviewer>.md` 를 Read 해 spawn prompt 에 주입). 페르소나 내용은 그대로 보존.
+
+### Added
+- **agent-teams §7-5 `/workflows` 오프로드 패턴** — Lead/팀원이 대규모·결정론적 fan-out 을 Claude Code Workflow 도구로 오프로드 가능(probe 실측: 팀원도 Workflow 사용 가능, Lead workflow ↔ 활성 팀 동시 동작, 워크플로 서브에이전트는 cmux 팀 pane 미생성). 팀의 양방향 대화와 직교하는 보조 수단.
+- **트랩 명문화** — ① 팀원 `model` 미지정 시 차단된 `fable` 기본값으로 떠 조용히 실패 → `model` 필수 명시(공식: 팀원은 Lead 모델 미상속). ② 팀원 보고는 `to="team-lead"`(`"main"` 불가). ③ resume 시 in-process 팀원 비복원(work-id 영속 설계로 보완).
+
+### Fixed
+- **`cmux-rebalancing` cmux 바이너리 미발견** (claude + codex bin 동기) — `subprocess.run(["cmux", ...])` 가 PATH 누락 서브셸 컨텍스트에서 `FileNotFoundError: 'cmux'` 로 실패(팀원 spawn 후 rebalancing 누락 사례). `CMUX_BUNDLED_CLI_PATH`/`CMUX_CLAUDE_TEAMS_CMUX_BIN` env 힌트 → PATH → 표준 설치경로 순으로 cmux 경로를 해석하도록 보강.
+
 ## [claude-2.16.2] - 2026-06-16
 
 ### Fixed

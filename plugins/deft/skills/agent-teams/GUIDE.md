@@ -10,7 +10,7 @@ SKILL.md의 규약을 **실전 시나리오**로 풀어쓴 보조 문서. 처음
 
 - [ ] `cmux claude-teams` 환경에서 실행 중인가? (아니면 §0-2 — 단일 Claude degrade 또는 재시작 권장)
 - [ ] `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1` 활성 + Claude Code **v2.1.32 이상**인가?
-- [ ] `TeamCreate`/`Agent`/`SendMessage`/`Task*` 도구를 쓸 수 있는가?
+- [ ] `Agent`/`SendMessage`/`Task*` 도구를 쓸 수 있는가? (팀은 첫 `Agent` spawn 시 암묵적 자동 생성 — 별도 `TeamCreate` 불요/폐지)
 - [ ] work-id 저장 경로 `~/.claude/plugin-data/deft/agent-teams/<work-id>/` 에 접근 가능한가?
 - [ ] (cmux claude-teams 일 때) 팀원 pane 자동 분할이 동작하는가?
 - [ ] `cmux-rebalancing` 헬퍼가 PATH 에 있는가? 없으면 skill 첫 실행 시 plugin 동봉본이 `~/.local/bin/` 으로 자동 설치됨. 팀원 spawn 후 Lead/팀원 pane 비율 재조정에 사용 (cmux 환경 한정)
@@ -68,19 +68,19 @@ SKILL.md의 규약을 **실전 시나리오**로 풀어쓴 보조 문서. 처음
    ★ 사용자 승인
 ```
 
-### A-4. 팀 생성 + spawn
+### A-4. 팀원 spawn (팀은 암묵적 자동 생성)
 
 ```
-TeamCreate(team_name="PAY-321", description="환불 기능 추가")
-  → ~/.claude/teams/PAY-321/ + ~/.claude/tasks/PAY-321/ 자동 생성
-work.md ## META "현재 team-name: PAY-321" 기록
+# TeamCreate 불요(폐지) — 첫 Agent spawn 시 ~/.claude/teams/session-<id>/ 가 자동 생성됨
+# config.json 의 name(session-<id>) 을 확인해 work.md ## META "현재 team-name" 에 기록
 
-Agent(team_name="PAY-321", name="backendDev", subagent_type="general-purpose",
+Agent(name="backendDev", subagent_type="claude", model="opus",
       prompt=<§4-3 템플릿 + agents/backendDev.md 경로 + work-id=PAY-321>)
-Agent(... name="frontendDev" ...)
-Agent(... name="qa" ...)
+Agent(name="frontendDev", subagent_type="claude", model="opus", ...)
+Agent(name="qa", subagent_type="claude", model="opus", ...)
+# team_name 인자는 넣지 않는다(deprecated/무시). model:"opus" 필수 — 미지정 시 fable(차단)로 떠서 실패.
 ```
-> `cmux claude-teams` 환경이라 pane 분할은 자동(§2-2). Lead는 cmux 명령 호출 불필요.
+> `cmux claude-teams` 환경이라 pane 분할은 자동(§2-2). Lead는 cmux 명령 호출 불필요. 첫 팀원 분할 직후 `cmux-rebalancing` 1회(§2-3).
 
 ### A-5. 구현 사이클
 

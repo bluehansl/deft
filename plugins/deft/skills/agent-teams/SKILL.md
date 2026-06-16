@@ -5,7 +5,9 @@ description: 'Claude Code 내장 팀 기능으로 다중 Claude 에이전트 팀
 
 # Agent Teams Skill
 
-Claude Code **내장 팀 기능**(`TeamCreate` + `Agent` + `SendMessage` + `Task*`)으로 다중 Claude 에이전트 팀을 구성·운영하는 skill. Lead(팀장 겸 기획)가 역할별 팀원(backendDev/frontendDev/qa 등)을 spawn해 분석→구현→검증을 분담하고, 단계 게이트·페르소나·영속 작업노트로 일관성과 연속성을 보장한다.
+Claude Code **내장 팀 기능**(`Agent` + `SendMessage` + `Task*` — 팀은 첫 `Agent` spawn 시 **암묵적으로 자동 생성**)으로 다중 Claude 에이전트 팀을 구성·운영하는 skill. Lead(팀장 겸 기획)가 역할별 팀원(backendDev/frontendDev/qa 등)을 spawn해 분석→구현→검증을 분담하고, 단계 게이트·페르소나·영속 작업노트로 일관성과 연속성을 보장한다.
+
+> **팀 모델(현행 Claude Code)**: 과거의 명시적 `TeamCreate`/`TeamDelete` 도구는 폐지됐다. 현재는 첫 `Agent` spawn 시 `~/.claude/teams/session-<id>/` 팀이 **자동 생성**되고 **세션 종료 시 자동 삭제**된다(공식 문서 동작). `Agent` 의 `team_name` 인자는 deprecated(무시됨). 팀원 통신·정리 메커니즘(`SendMessage`·shutdown)은 그대로다.
 
 > **팀원 모델**: 모두 **Claude Opus (`opus`)** — 동질 시각, 컨벤션 강제 일관. Agent tool 호출 시 alias `opus` (§4-3).
 
@@ -20,7 +22,7 @@ Claude Code **내장 팀 기능**(`TeamCreate` + `Agent` + `SendMessage` + `Task
 ### 0-1. 활성 조건
 
 - 환경 변수 `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1` (실험 기능 — 기본 비활성)
-- Claude Code **v2.1.32 이상**
+- Claude Code **v2.1.32 이상** (현행 빌드는 **암묵적 팀 모델** — `TeamCreate` 도구 없이 첫 `Agent` spawn 으로 팀 자동 생성)
 - teammate가 활성화된 하니스에서 실행 (`cmux claude-teams`)
 
 ```bash
@@ -56,7 +58,7 @@ if command -v claude-bin-keepalive >/dev/null 2>&1; then
 fi
 ```
 
-**preflight 게이트 (필수)**: 위 출력에 `STOP_TEAM_SPAWN`(또는 `KEEPALIVE_HARDFAIL`)이 보이면, 팀 spawn(TeamCreate/Agent) 를 **실행하지 말 것**. 대신 사용자에게 "이 세션은 자동 업데이트로 Claude Code 바이너리가 삭제됐습니다. `cmux claude-teams`(또는 `/resume`)로 세션을 재시작한 뒤 다시 시도하세요"를 안내하고 중단한다. (work-id 영속 설계로 연속성은 유지됨.)
+**preflight 게이트 (필수)**: 위 출력에 `STOP_TEAM_SPAWN`(또는 `KEEPALIVE_HARDFAIL`)이 보이면, 팀 spawn(`Agent`) 을 **실행하지 말 것**. 대신 사용자에게 "이 세션은 자동 업데이트로 Claude Code 바이너리가 삭제됐습니다. `cmux claude-teams`(또는 `/resume`)로 세션을 재시작한 뒤 다시 시도하세요"를 안내하고 중단한다. (work-id 영속 설계로 연속성은 유지됨.)
 
 > **`cmux-rebalancing`**: 팀원 spawn 후 Lead 와 팀원 컬럼 비율을 정책대로 재조정하는 헬퍼. 모든 팀원 spawn 직후 자동 호출 (§2-2 끝).
 
@@ -66,17 +68,17 @@ fi
 
 - **기본: 단일 Claude 모드로 degrade** — 팀 spawn을 skip하고 Lead 단독으로 §4 단계 게이트를 진행한다. 의견 토론·합의가 목적이면 `deft:multi-round`를 권유한다.
 - **권장 안내: `cmux claude-teams` 재시작** — 팀 운영·시각화가 필요하면 사용자에게 재시작을 권한다.
-- 사용자가 "시각화 없이 그냥 팀으로" 명시 요청한 경우에만, pane 분할 없이 `TeamCreate`/`Agent`를 진행하되 **"시각화 비활성" 상태임을 사용자에게 명시 보고**한다.
+- 사용자가 "시각화 없이 그냥 팀으로" 명시 요청한 경우에만, pane 분할 없이 `Agent` spawn을 진행하되 **"시각화 비활성" 상태임을 사용자에게 명시 보고**한다.
 
 ### 0-3. 운영 제약 (limitation)
 
 | 제약 | 의미 | 대응 |
 |---|---|---|
 | **한 lead = 한 team** | 한 Lead가 동시에 여러 팀을 운영할 수 없다 | 작업을 한 팀 단위로 정리 |
-| **nested team 불가** | 팀원이 그 안에서 다시 팀을 spawn할 수 없다 | 팀 구성은 Lead가 한 번에 결정 |
-| **in-process teammate resume 불가** | 세션 재시작 시 팀원이 자동 복구되지 않음 → 새 team-name으로 다시 spawn 필요 | **work-id 영속 설계(§3)가 보완** — 같은 work-id로 `work.md`·`<role>.md` 연속 |
+| **nested team 불가** | 팀원이 그 안에서 다시 **팀/팀원**을 spawn할 수 없다 | 팀 구성은 Lead가 한 번에 결정. **단 `/workflows`(결정론 fan-out)는 팀원도 사용 가능** — 워크플로 서브에이전트는 '팀원'이 아니라 격리 서브에이전트라 중첩-팀 금지에 안 걸림(실측 확인, §7-5) |
+| **in-process teammate resume 불가** | 세션 재시작 시 팀원이 자동 복구되지 않음 → 새 세션 팀(`session-<id>`)으로 다시 spawn 필요 (공식 문서 명시 한계) | **work-id 영속 설계(§3)가 보완** — 같은 work-id로 `work.md`·`<role>.md` 연속 |
 | **task status lag** | `TaskList` 갱신이 지연될 수 있음 | 팀원 idle/완료를 성급히 단정하지 않음 |
-| **팀 네임스페이스 전역 공유** | `~/.claude/teams/`·`~/.claude/tasks/` 는 모든 세션 공유 — 같은 work-id 작업을 두 세션이 동시에 열면 team-name 충돌 (메시지 교차·정리 오발) | 한 작업은 한 세션 원칙. 충돌 의심 시 team-name 에 시각 suffix. **정리(TeamDelete/shutdown/rm) 전 본 세션 생성분인지 확인** — 프로세스 `--parent-session-id` 또는 생성 시점 대조. "이름이 같다 ≠ 내 것" |
+| **팀은 세션별 자동 생성·삭제** | `~/.claude/teams/session-<id>/` 는 **세션마다 자동 생성, 세션 종료 시 자동 삭제**(공식 동작). 세션별로 분리되어 과거의 team-name 충돌 문제는 자연 회피됨 | 정리는 **팀원 shutdown(SendMessage shutdown_request) → Lead 정리 요청** 순. 다른 세션(`session-*`)의 팀원에게 shutdown 보내지 않도록 본 세션 소속(`--parent-session-id`)인지 확인. "이름이 같다 ≠ 내 것" |
 
 ---
 
@@ -115,13 +117,13 @@ fi
 
 ## 2. 핵심 동작 원리 (내장 도구 기반)
 
-본 skill은 Claude Code 내장 도구 4종으로만 동작한다.
+본 skill은 Claude Code 내장 도구 3종 + 암묵적 팀으로 동작한다.
 
 | 도구 | 역할 |
 |---|---|
-| `TeamCreate` | 팀 + 공유 task list 생성 (`~/.claude/teams/<team-name>/`, `~/.claude/tasks/<team-name>/`) |
-| `Agent` (`team_name`+`name`) | 팀원 spawn (역할별 페르소나 주입) |
-| `SendMessage` | 팀원↔Lead, 팀원↔팀원 직접 통신 |
+| **(암묵적 팀)** | 첫 `Agent` spawn 시 `~/.claude/teams/session-<id>/` + `~/.claude/tasks/session-<id>/` **자동 생성**. 세션 종료 시 자동 삭제. 별도 생성 호출 불필요 |
+| `Agent` (`name`, `model:"opus"`) | 팀원 spawn (역할별 페르소나 주입). **`team_name` 인자는 deprecated(무시됨) — 넣지 않는다** |
+| `SendMessage` | 팀원↔Lead, 팀원↔팀원 직접 통신 + 종료(shutdown_request) |
 | `Task*` (TaskCreate/Update/List) | 작업 분배·진행 추적 (공유 task list) |
 
 ### 2-1. 자동 메시지 전달 — 폴링 불필요
@@ -130,7 +132,7 @@ fi
 
 ### 2-2. cmux pane 분할 — 자동
 
-사용자는 Claude Code를 `cmux claude-teams`로 실행한다. 이 환경에서 `TeamCreate`+`Agent` spawn은 **cmux pane 분할까지 자동 처리**된다. Lead가 별도 분할 명령을 호출할 필요 없다. (cmux 외부 실행 시는 §0-2 fallback)
+사용자는 Claude Code를 `cmux claude-teams`로 실행한다. 이 환경에서 `Agent` spawn은 **cmux pane 분할까지 자동 처리**된다. Lead가 별도 분할 명령을 호출할 필요 없다. (cmux 외부 실행 시는 §0-2 fallback)
 
 ### 2-3. 첫 팀원 pane 분할 직후 비율 재조정 (Lead 직접 호출, 1회)
 
@@ -154,8 +156,8 @@ command -v cmux-rebalancing >/dev/null 2>&1 && cmux-rebalancing
 
 | 영역 | 경로 | 소유 | 성격 |
 |---|---|---|---|
-| **Claude Code 내장** | `~/.claude/teams/<team-name>/config.json` | Claude Code | TeamCreate 자동 관리. **위치·키는 Claude Code가 정한다**(이전 불가) |
-| | `~/.claude/tasks/<team-name>/` | Claude Code | Task* 자동 관리 (이전 불가) |
+| **Claude Code 내장** | `~/.claude/teams/session-<id>/config.json` | Claude Code | 암묵적 팀 자동 관리. **위치·키는 Claude Code가 정한다**(이전 불가). **세션 종료 시 자동 삭제** |
+| | `~/.claude/tasks/session-<id>/` | Claude Code | Task* 자동 관리 (이전 불가) |
 | **스킬 작업 데이터** | `~/.claude/plugin-data/deft/agent-teams/` | **본 skill** | **영속 작업노트.** plugin update에도 안전 |
 
 > ⚠️ 작업 데이터를 **plugin cache**(`~/.claude/plugins/cache/.../skills/agent-teams/`)에 두면 안 된다. cache는 version-locked·자동 관리 영역이라 plugin update 시 새 version으로 교체되며 **데이터가 소실**된다. 작업 데이터는 반드시 `~/.claude/plugin-data/deft/agent-teams/` 하위에 둔다.
@@ -164,10 +166,10 @@ command -v cmux-rebalancing >/dev/null 2>&1 && cmux-rebalancing
 
 `work-id`는 **하나의 작업을 세션·팀과 무관하게 식별하는 영속 키**다. 내장 `team-name`(매 세션 새로 지어질 수 있는 휘발 키)과 **분리**한다.
 
-- **team-name** (내장): Claude Code가 관리. 매번 새로 지어도 무방.
+- **team-name** (내장): Claude Code가 `session-<id>` 로 자동 관리. 세션마다 새로 생성되고 세션 종료 시 삭제됨.
 - **work-id** (스킬 통제): 사용자가 부여하는 영속 키. **같은 작업이면 같은 work-id 재사용** → 같은 작업노트를 물어 연속성 유지.
 
-→ 사용자가 팀을 **몇 번을 새로 띄우든, team-name이 무엇이든, 같은 work-id만 대면** 같은 작업노트(`work.md`)를 이어받는다. 내장 `TeamCreate`의 team-name 재사용 동작에 의존하지 않으므로 견고하다. (§0-3의 "in-process teammate resume 불가" 한계를 이 설계가 보완)
+→ 사용자가 팀을 **몇 번을 새로 띄우든, team-name이 무엇이든, 같은 work-id만 대면** 같은 작업노트(`work.md`)를 이어받는다. 내장 팀이 세션마다 새 `session-<id>` 로 생기고 세션 종료 시 사라져도(공식 동작), work-id만 같으면 작업노트를 이어받으므로 견고하다. (§0-3의 "in-process teammate resume 불가" 한계를 이 설계가 보완)
 
 ### 3-3. work-id 명명 규약 — 최초 1회 결정 + 영속 저장 (deft 플러그인 공통)
 
@@ -284,17 +286,17 @@ work-id를 **어떤 규칙으로 만들지**는 특정 값(예: 티켓번호)을
 
 #### Agent 도구 호출 인자
 
-팀원 모두 **Claude Opus (`opus`)** — Agent tool 호출 시 alias `opus`. enum 제약(`sonnet`/`opus`/`haiku`/`opus`)으로 구체 모델 ID 는 인자에 직접 지정 불가.
+팀원 모두 **Claude Opus (`opus`)**. **`model:"opus"` 명시 필수** — 미지정 시 팀원이 **차단된 `fable` 기본값**으로 떠서 조용히 실패한다(실측 확인). 팀원은 Lead의 모델을 상속하지 않는다(공식 문서). enum: `sonnet`/`opus`/`haiku`/`fable`.
 
 ```text
 Agent(
-  team_name: "<work-id 기반 team-name>",
-  name: "<role>",                    # backendDev / frontendDev / qa 등
-  subagent_type: "claude",
-  model: "opus",                    # ← 모든 팀원 공통
+  name: "<role>",                    # backendDev / frontendDev / qa 등 — SendMessage 호출 키
+  subagent_type: "claude",           # 범용. 페르소나는 prompt 본문의 agents/<role>.md Read 로 주입(아래)
+  model: "opus",                     # ← 필수. 미지정 시 fable(차단)로 떠서 실패
   description: "<역할 한 줄 요약>",
   prompt: "<아래 task instruction 본문>"
 )
+# team_name 인자는 넣지 않는다(deprecated/무시). 팀은 첫 spawn 시 session-<id> 로 자동 생성된다.
 ```
 
 #### task instruction 본문
@@ -505,6 +507,19 @@ Lead가 work.md `## 협의사항`에 종합할 때 출처를 줄 단위로 `@{ro
 
 같은 작업 내 단계별로 다른 도구 허용. 예: 분석·Plan은 단일 Claude → 구현은 Agent Teams 3인 → 의사결정 토론은 multi-round. 도구 전환해도 work.md 체크리스트는 유지(writer는 항상 Lead). `## META 도구` 필드에 기록.
 
+### 7-5. `/workflows` 대규모 fan-out 오프로드 (선택)
+
+Lead 또는 **팀원**은 경계가 분명한 **대규모·결정론적 fan-out 작업**을 Claude Code의 `/workflows`(Workflow 도구)로 오프로드할 수 있다. 팀의 양방향 대화(SendMessage)와는 **직교**하는 별개 수단이다.
+
+- **언제**: "이 변경의 호출부 50곳 병렬 감사", "N개 파일을 같은 규칙으로 변환", "주장 다건 독립 검증" 등 — 항목이 많고 서로 대화가 불필요한 작업.
+- **왜 팀과 잘 맞나 (실측 확인)**:
+  - 팀원도 Workflow 사용 가능 — 중첩-팀 금지에 안 걸림(워크플로 에이전트는 '팀원'이 아니라 격리 서브에이전트).
+  - Lead가 활성 팀과 **동시에** Workflow 실행 가능.
+  - 워크플로 서브에이전트는 **cmux 팀 pane을 만들지 않음** → 대화형 팀 pane을 안 어지럽히고 fan-out.
+  - 중간 결과가 스크립트 변수에 머물러 **Lead 컨텍스트 절약**(구조화된 결과만 회수).
+- **무엇이 아닌가**: Workflow 에이전트는 **서로 대화하지 않는다**. 팀원 간 양방향 협의가 필요한 일은 Workflow가 아니라 팀(SendMessage)·`multi-round` 다.
+- **주의**: Workflow 는 사용자 명시 opt-in 이 필요한 무거운 도구. 팀 작업 중 자동 남발 금지 — 대규모 fan-out 이 실제로 이득일 때만 사용 보고 후 실행.
+
 ---
 
 ## 8. 회의 모드 & 페어/Trio 패턴
@@ -577,7 +592,7 @@ Lead가 work.md `## 협의사항`에 종합할 때 출처를 줄 단위로 `@{ro
 3. work-id 확정 → <work-id>/work.md 로드(있으면 이어서) 또는 생성 (§3-4)
 4. 요건분석 + 영향도 → ★ 사용자 컨펌 (§4)
 5. Plan + work.md 작업계획 체크리스트 → ★ 사용자 승인
-6. TeamCreate → Agent로 팀원 spawn (§4-3 템플릿, agents/<role>.md 페르소나)
+6. Agent로 팀원 spawn — 팀은 암묵적 자동 생성(별도 TeamCreate 불요) (§4-3 템플릿, agents/<role>.md 페르소나)
 7. 팀원: Plan 보고 → Lead 승인 → 구현 → <role>.md 갱신 → DONE
 8. Lead: git diff 검증 → work.md [O] → ★ 각 단계 사용자 컨펌
 9. 검증·리뷰 → 결과 보고. 팀원 idle 유지(자동 종료 X)
