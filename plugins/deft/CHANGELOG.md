@@ -4,6 +4,11 @@
 
 형식은 [Keep a Changelog](https://keepachangelog.com/ko/1.1.0/) 를 따르며, 버전 체계는 [Semantic Versioning](https://semver.org/lang/ko/) 을 사용합니다 (`claude-X.Y.Z` / `codex-X.Y.Z` 접두).
 
+## [codex-1.14.1] - 2026-06-16
+
+### Fixed
+- **`deft-model` 헬퍼 codex측 미러** — `bin/deft-model`이 claude측(`plugins/deft/bin/`)에만 있고 codex측(`plugins/codex/deft/bin/`)에 없어, codex 환경에서 모델 중앙관리(`DEFT_CLAUDE_MODEL` override)가 적용되지 않던 갭 (deft-test L1 동기화 검증에서 발견). codex측 `deft-model` 추가로 양측 동기화. 당장은 CLI fallback(`$(deft-model claude 2>/dev/null||echo opus)`)으로 opus 동작했으나, Fable 복구 시 codex측도 한 줄 수정으로 자동 복귀하도록 보장.
+
 ## [claude-2.16.0] / [codex-1.14.0] - 2026-06-15
 
 ### Changed
