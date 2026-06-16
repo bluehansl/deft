@@ -4,6 +4,11 @@
 
 형식은 [Keep a Changelog](https://keepachangelog.com/ko/1.1.0/) 를 따르며, 버전 체계는 [Semantic Versioning](https://semver.org/lang/ko/) 을 사용합니다 (`claude-X.Y.Z` / `codex-X.Y.Z` 접두).
 
+## [claude-2.16.2] - 2026-06-16
+
+### Fixed
+- **plugin.json `hooks` 필드 중복 로드 에러** (실사용 발견 — `/plugin` 관리화면 "1 error") — `manifest.hooks: "./hooks/hooks.json"` 가 **Claude Code 가 자동 로드하는 표준 hooks 파일**을 명시 참조해 "Duplicate hooks file detected" 로드 에러를 유발(2.15.0 SessionStart hook 도입 이후 상존). 표준 `hooks/hooks.json` 은 자동 로드되므로 manifest.hooks 는 *추가* hook 파일만 참조해야 함 → `hooks` 필드 제거. SessionStart keepalive hook 동작은 자동 로드로 그대로 유지(영향 없음).
+
 ## [claude-2.16.1] / [codex-1.14.2] - 2026-06-16
 
 ### Fixed
