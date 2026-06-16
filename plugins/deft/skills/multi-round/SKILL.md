@@ -226,8 +226,8 @@ echo "cmux 환경: $([ "$HAVE_CMUX" -eq 1 ] && echo YES || echo NO)"
 HAVE_BUS=0
 if command -v node >/dev/null 2>&1; then
   if ! command -v multi-round-bus >/dev/null 2>&1; then
-    SRC=$(ls -1 ~/.claude/plugins/cache/bluehansl/deft/*/bin/multi-round-bus 2>/dev/null | tail -1)
-    [ -z "$SRC" ] && SRC=$(ls -1 ~/.codex/plugins/cache/bluehansl/deft/*/bin/multi-round-bus 2>/dev/null | tail -1)
+    SRC=$(ls -1 ~/.claude/plugins/cache/bluehansl/deft/*/bin/multi-round-bus 2>/dev/null | sort -V | tail -1)
+    [ -z "$SRC" ] && SRC=$(ls -1 ~/.codex/plugins/cache/bluehansl/deft/*/bin/multi-round-bus 2>/dev/null | sort -V | tail -1)
     if [ -n "$SRC" ]; then
       mkdir -p ~/.local/bin && cp "$SRC" ~/.local/bin/multi-round-bus && chmod +x ~/.local/bin/multi-round-bus
       echo "INFO: multi-round-bus 자동 설치 완료 (~/.local/bin/)"
@@ -242,8 +242,8 @@ echo "메시지 버스: $([ "$HAVE_BUS" -eq 1 ] && echo "YES ($BUS_BIN)" || echo
 
 # D. cmux-rebalancing 헬퍼 설치 확인 — 미설치 시 plugin 동봉본으로 자동 설치
 if ! command -v cmux-rebalancing >/dev/null 2>&1; then
-  SRC=$(ls -1 ~/.claude/plugins/cache/bluehansl/deft/*/bin/cmux-rebalancing 2>/dev/null | tail -1)
-  [ -z "$SRC" ] && SRC=$(ls -1 ~/.codex/plugins/cache/bluehansl/deft/*/bin/cmux-rebalancing 2>/dev/null | tail -1)
+  SRC=$(ls -1 ~/.claude/plugins/cache/bluehansl/deft/*/bin/cmux-rebalancing 2>/dev/null | sort -V | tail -1)
+  [ -z "$SRC" ] && SRC=$(ls -1 ~/.codex/plugins/cache/bluehansl/deft/*/bin/cmux-rebalancing 2>/dev/null | sort -V | tail -1)
   if [ -n "$SRC" ]; then
     mkdir -p ~/.local/bin && cp "$SRC" ~/.local/bin/cmux-rebalancing && chmod +x ~/.local/bin/cmux-rebalancing
     echo "INFO: cmux-rebalancing 자동 설치 완료 (~/.local/bin/)"
@@ -254,8 +254,8 @@ fi
 
 # E. deft 공용 모델 ID 헬퍼(deft-model) 설치 — 모델 차단·버전업 시 단일 관리 지점
 if ! command -v deft-model >/dev/null 2>&1; then
-  SRC=$(ls -1 ~/.claude/plugins/cache/bluehansl/deft/*/bin/deft-model 2>/dev/null | tail -1)
-  [ -z "$SRC" ] && SRC=$(ls -1 ~/.codex/plugins/cache/bluehansl-codex/deft/*/bin/deft-model 2>/dev/null | tail -1)
+  SRC=$(ls -1 ~/.claude/plugins/cache/bluehansl/deft/*/bin/deft-model 2>/dev/null | sort -V | tail -1)
+  [ -z "$SRC" ] && SRC=$(ls -1 ~/.codex/plugins/cache/bluehansl-codex/deft/*/bin/deft-model 2>/dev/null | sort -V | tail -1)
   [ -n "$SRC" ] && mkdir -p ~/.local/bin && cp "$SRC" ~/.local/bin/deft-model && chmod +x ~/.local/bin/deft-model
 fi
 ```
@@ -382,6 +382,9 @@ for _ in $(seq 1 15); do [ -f "$SESSION_DIR/.ready-$WORKER_NAME" ] && break; sle
 **(4) 워커 TUI 기동 — 버스 MCP 인라인 주입**
 
 claudex/codex 워커:
+
+> ⚠️ **codex 워커 업데이트 프롬프트 (실측 — deft-test L4)**: 진짜 `codex`(claudex 아님)는 첫 기동 시 "Update available" 버전 업데이트 프롬프트를 띄워 회의 시작 전 정지할 수 있다 (claudex 는 자체 최신이라 안 뜸). spawn·readiness 확인 후 해당 프롬프트가 감지되면 `cmux send --surface "$SURF" "3"` + `cmux send-key --surface "$SURF" Enter` (3 = skip until next version) 로 넘긴다. 사전에 `codex update` 로 최신화해 두면 예방된다.
+
 ```bash
 # ⚠️ -c mcp_servers.* 인라인은 기존 등록 서버에 **병합**된다 (교체 아님 — 실측 확인).
 #    격리를 위해 사용자 config 의 기존 서버들을 enabled=false 로 명시 비활성.

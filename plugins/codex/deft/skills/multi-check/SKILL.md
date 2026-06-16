@@ -57,8 +57,8 @@ reviewer spawn 후 pane 비율을 재조정하는 `cmux-rebalancing` 헬퍼가 P
 
 ```bash
 if ! command -v cmux-rebalancing >/dev/null 2>&1; then
-  SRC=$(ls -1 ~/.codex/plugins/cache/bluehansl-codex/deft/*/bin/cmux-rebalancing 2>/dev/null | tail -1)
-  [ -z "$SRC" ] && SRC=$(ls -1 ~/.claude/plugins/cache/bluehansl/deft/*/bin/cmux-rebalancing 2>/dev/null | tail -1)
+  SRC=$(ls -1 ~/.codex/plugins/cache/bluehansl-codex/deft/*/bin/cmux-rebalancing 2>/dev/null | sort -V | tail -1)
+  [ -z "$SRC" ] && SRC=$(ls -1 ~/.claude/plugins/cache/bluehansl/deft/*/bin/cmux-rebalancing 2>/dev/null | sort -V | tail -1)
   if [ -n "$SRC" ]; then
     mkdir -p ~/.local/bin && cp "$SRC" ~/.local/bin/cmux-rebalancing && chmod +x ~/.local/bin/cmux-rebalancing
     echo "INFO: cmux-rebalancing 자동 설치 완료 (~/.local/bin/)"

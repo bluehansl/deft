@@ -4,6 +4,14 @@
 
 형식은 [Keep a Changelog](https://keepachangelog.com/ko/1.1.0/) 를 따르며, 버전 체계는 [Semantic Versioning](https://semver.org/lang/ko/) 을 사용합니다 (`claude-X.Y.Z` / `codex-X.Y.Z` 접두).
 
+## [claude-2.16.1] / [codex-1.14.2] - 2026-06-16
+
+### Fixed
+- **헬퍼 자동설치 캐시 선택 `sort -V` 누락** (deft-test L4 실전에서 발견) — multi-round/multi-check/agent-teams Phase 0 의 헬퍼 설치 블록이 `ls 캐시/*/bin/<helper> | tail -1` 로 캐시본을 골라, 버전 디렉토리가 누적된 환경(claude-2.0.0~2.16.0 등)에서 **사전순 마지막**(예: `2.8.0` > `2.16.0`)을 잡아 옛 헬퍼를 설치할 위험. 21곳 전부 `| sort -V | tail -1` 로 정정해 항상 최신 캐시본 선택.
+
+### Added
+- **codex 워커 업데이트 프롬프트 대응 노트** (multi-round, deft-test L4 발견) — 진짜 codex 워커 첫 기동 시 "Update available" 프롬프트로 회의 시작 전 정지하는 현상(claudex 는 자체 최신이라 무관). spawn·readiness 후 `3`(skip until next version) 전송 또는 사전 `codex update` 권장을 SKILL 에 명시.
+
 ## [codex-1.14.1] - 2026-06-16
 
 ### Fixed
