@@ -4,6 +4,18 @@
 
 형식은 [Keep a Changelog](https://keepachangelog.com/ko/1.1.0/) 를 따르며, 버전 체계는 [Semantic Versioning](https://semver.org/lang/ko/) 을 사용합니다 (`claude-X.Y.Z` / `codex-X.Y.Z` 접두).
 
+## [claude-2.21.0] - 2026-06-17
+
+> Claude 측만 변경 (codex multi-check 은 페르소나 미참조라 무관 → `codex-1.15.1` 유지).
+
+### Added
+- **리뷰어 실행 헬퍼 `bin/deft-review` 신설** — `deft-review <codex|claude|gemini> [prompt]`(prompt 생략 시 stdin). 리뷰어 CLI 호출의 **CLI 선택(claudex→codex 폴백)·실행 플래그·모델·추론수준을 한 곳에 캡슐화**한다. `deft-model` 과 동일한 SSOT 사상.
+
+### Changed
+- **리뷰어 페르소나 3종에서 raw bash 블록 제거 (사용자 UX 요청)** — haiku 래퍼 리뷰어의 spawn 프롬프트(=대화형 pane 에 노출되는 지시문)에 `if command -v claudex…fi` / `"$CODEX_CLI" -a never exec …` 같은 **구현 코드가 그대로 노출**되던 것을, `deft-review <engine>` **한 줄 prose** 로 대체. 그 코드는 실행 코드가 아니라 haiku 에게 주는 지시문이라(haiku 가 자기 Bash 도구로 실제 실행) 화면 노출이 불필요했음. 폴백(헬퍼 미설치)만 1줄로 축약 유지.
+- **부수 효과(속도·비용)**: 페르소나 프롬프트가 짧아져 haiku 가 첫 Bash 호출까지 읽을 양이 줄어듦 → 리뷰어 첫 동작 지연·토큰 비용 소폭 감소.
+- multi-check Phase 2 preflight 에 `deft-review` 자동설치 추가(`cmux-rebalancing`/`deft-model` 과 동일 패턴).
+
 ## [claude-2.20.0] - 2026-06-17
 
 > Claude 측만 변경 (codex multi-check 은 인라인 프롬프트라 페르소나 파일 미참조 + close-surface 모델 → 무관, `codex-1.15.1` 유지).

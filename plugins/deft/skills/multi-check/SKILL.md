@@ -52,6 +52,12 @@ if ! command -v deft-model >/dev/null 2>&1; then
   SRC=$(ls -1 ~/.claude/plugins/cache/bluehansl/deft/*/bin/deft-model 2>/dev/null | sort -V | tail -1)
   [ -n "$SRC" ] && mkdir -p ~/.local/bin && cp "$SRC" ~/.local/bin/ && chmod +x ~/.local/bin/deft-model
 fi
+# deft 리뷰어 실행 헬퍼(deft-review) 설치 — 리뷰어 CLI 호출(선택·플래그·모델)을 캡슐화해
+# 페르소나/pane 에 raw bash 노출 제거 + 구현 SSOT. 리뷰어가 `deft-review <engine>` 한 줄로 실행.
+if ! command -v deft-review >/dev/null 2>&1; then
+  SRC=$(ls -1 ~/.claude/plugins/cache/bluehansl/deft/*/bin/deft-review 2>/dev/null | sort -V | tail -1)
+  [ -n "$SRC" ] && mkdir -p ~/.local/bin && cp "$SRC" ~/.local/bin/ && chmod +x ~/.local/bin/deft-review
+fi
 if command -v claude-bin-keepalive >/dev/null 2>&1; then
   claude-bin-keepalive || echo "STOP_TEAM_SPAWN: 세션 바이너리 복원 불가(KEEPALIVE_HARDFAIL) — 이 세션의 teammate spawn 은 반드시 실패한다."
 fi
