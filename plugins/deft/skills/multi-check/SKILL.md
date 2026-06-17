@@ -33,6 +33,11 @@ Before spawning agents, check which CLIs are available:
 which claude 2>/dev/null && echo "CLAUDE_OK" || echo "CLAUDE_NOT_FOUND"
 which gemini 2>/dev/null && echo "GEMINI_OK" || echo "GEMINI_NOT_FOUND"
 
+# Codex-family reviewer 표시 이름 — 실제 사용 CLI 반영(claudex 우선). pane/@agent 이름이 실제 실행 CLI 와
+# 일치하도록(사용자 혼동 방지: "@codex-reviewer 인데 실제론 claudex" 문제 해소).
+CODEX_REVIEWER_NAME=$(command -v claudex >/dev/null 2>&1 && echo claudex-reviewer || echo codex-reviewer)
+echo "Codex-family reviewer 이름: $CODEX_REVIEWER_NAME"
+
 # cmux-rebalancing 헬퍼 설치 확인 — 미설치 시 plugin 동봉본으로 자동 설치
 if ! command -v cmux-rebalancing >/dev/null 2>&1; then
   SRC=$(ls -1 ~/.claude/plugins/cache/bluehansl/deft/*/bin/cmux-rebalancing 2>/dev/null | sort -V | tail -1)
@@ -102,8 +107,8 @@ PERSONA_DIR=~/.claude/plugins/marketplaces/bluehansl/plugins/deft/skills/multi-c
 
 **spawn 순서 (Agent-tool — spawn 과 함께 rebalance 워처 발사)**: `Agent` 툴은 spawn 1회가 **pane 생성 + AI 기동을 원자적으로** 수행하고, cmux claude-teams 가 pane 배치를 **자동 처리**한다(스킬이 분할 방향·대상을 제어할 수 없음 — multi-round 와 달리 `cmux new-split` 을 직접 쓰지 못함). 그리고 **각 spawn 마다 Lead pane 이 다시 찌부러진다**(cmux 가 Lead 기준으로 재분할 — 실측). rebalancing 은 pane geometry 만 정렬하는 **독립·비동기** 작업이라 reviewer 의 headless CLI 작업과 무관하게 호출할 수 있다 → **spawn 묶음과 같은 메시지에서 `cmux-rebalance-watch` 를 백그라운드로 띄워, panes 가 다 생겨 settle 되는 즉시 1회 rebalance** 시킨다(§Post-spawn).
 
-1. spawn **직전(=panes 생성 전)** 에 다음 2개를 캡처: `LEAD_REF=$(cmux identify | jq -r .caller.pane_ref)` (focus 복원용) + `BASE=$(tmux list-panes -a -F '#{pane_id}' | wc -l | tr -d ' ')` (워처 baseline용). ⚠️ **BASE 는 반드시 spawn 전에 캡처**한다 — 워처가 자기 시작 시점에 baseline 을 잡으면 이미 panes 가 생성된 뒤라 값이 부풀려져 "증가" 감지가 영원히 안 돼 cap 까지 헛돈다(실측 버그).
-2. **사용 가능한 reviewer 전부 + rebalance 워처를 한 메시지에 함께 발사** — reviewer 는 `Agent`(병렬), 워처는 `cmux-rebalance-watch "$LEAD_REF" "$BASE"` 를 **`run_in_background: true` Bash** 로 같은 메시지에. 워처가 panes 가 **BASE 보다 늘어 settle 되는 즉시** `cmux-rebalancing`(컬럼 60:40 + row 균등) + Lead focus 복원을 1회 실행한다(§Post-spawn).
+1. spawn **직전(=panes 생성 전)** 에 캡처: `LEAD_REF=$(cmux identify | jq -r .caller.pane_ref)` (focus 복원용) + `BASE=$(tmux list-panes -a -F '#{pane_id}' | wc -l | tr -d ' ')` (baseline) + 이번에 spawn 할 reviewer 수 `N` → `EXPECTED=$((BASE+N))` (목표 최종 pane 수). ⚠️ **BASE/EXPECTED 는 반드시 spawn 전에 캡처**한다 — 워처가 자기 시작 시점에 baseline 을 잡으면 이미 panes 가 생성된 뒤라 값이 부풀려져 감지가 영원히 안 돼 cap 까지 헛돈다(실측 버그).
+2. **사용 가능한 reviewer 전부 + rebalance 워처를 한 메시지에 함께 발사** — reviewer 는 `Agent`(병렬), 워처는 `cmux-rebalance-watch "$LEAD_REF" "$BASE" "$EXPECTED"` 를 **`run_in_background: true` Bash** 로 같은 메시지에. 워처가 panes 가 **EXPECTED 에 도달하는 즉시**(=모든 reviewer pane 등장 — panes 는 한꺼번에가 아니라 하나씩 순차 등장하므로 EXPECTED 도달이 가장 정확한 신호) `cmux-rebalancing`(컬럼 60:40 + row 균등) + Lead focus 복원을 1회 실행한다(§Post-spawn).
 
 각 reviewer 의 `Agent` 인자 템플릿 (사용 가능한 CLI 만, `run_in_background: true`):
 
@@ -111,7 +116,7 @@ Codex reviewer (claudex/codex 있을 때) — GPT-5.5, xhigh:
 ```
 Agent(
   description: "Run Codex CLI analysis (GPT-5.5, xhigh reasoning)",
-  name: "codex-reviewer",
+  name: "<$CODEX_REVIEWER_NAME>",     # claudex 있으면 claudex-reviewer, 없으면 codex-reviewer (실제 CLI 반영)
   subagent_type: "claude",            # 범용. 페르소나는 prompt 인라인으로 주입
   model: "haiku",                     # 얇은 래퍼(CLI 실행·중계만). ※ 생략 시 fable(차단)로 떠 실패 — 반드시 명시
   mode: "dontAsk",
@@ -160,8 +165,9 @@ While agents are working, the Lead performs its own analysis on the same questio
 # spawn 직전(panes 생성 전)에 캡처:
 LEAD_REF=$(cmux identify | jq -r .caller.pane_ref)
 BASE=$(tmux list-panes -a -F '#{pane_id}' | wc -l | tr -d ' ')
-# spawn 메시지에 reviewer Agent 들과 함께 포함 (run_in_background) — BASE 를 반드시 인자로 전달
-Bash(run_in_background: true): cmux-rebalance-watch "$LEAD_REF" "$BASE"
+EXPECTED=$((BASE + N))   # N = 이번에 spawn 하는 reviewer 수
+# spawn 메시지에 reviewer Agent 들과 함께 포함 (run_in_background) — BASE·EXPECTED 인자 전달
+Bash(run_in_background: true): cmux-rebalance-watch "$LEAD_REF" "$BASE" "$EXPECTED"
 ```
 
 > **왜 워처인가 (타이밍 당김)**: 종전엔 "전부 spawn **반환** 후 Lead 가 별도 턴에서 `cmux-rebalancing` 수동 호출"이라, ① `Agent` 툴 반환 지연 ② Lead 턴 생성 지연이 끼어 rebalance 가 **haiku 부팅·shell 실행 이후**로 한참 늦게 떴다(사용자 실측). rebalance 는 pane geometry 만 필요하므로, 워처를 spawn 과 동시에 띄우면 **panes 생성 직후(가장 이른 시점)** 정렬된다.
@@ -221,7 +227,7 @@ SendMessage(to: "<아직 shutdown_request 안 보낸 리뷰어>", message: {type
 **② 종료 검증 + 강제 폴백** (자가종료 안 한 리뷰어만 — 소유권 안전) — haiku 래퍼 리뷰어가 간혹 `shutdown_request` 를 prose("종료합니다")로만 응답하고 `shutdown_response` 를 **호출하지 않아 프로세스·pane 이 잔존**하는 경우가 있다(실측 — multi-check 마지막 pane 미닫힘·다음 스킬로의 잔존 직접 원인). graceful 유예 후에도 살아있으면 **본 세션 그 리뷰어 프로세스만** 직접 종료한다:
 ```bash
 TEAM_NAME="session-<id>"      # Lead 가 spawn 결과(@session-<id>)에서 획득 — 본 세션 팀
-for R in codex-reviewer claude-reviewer gemini-reviewer; do
+for R in "$CODEX_REVIEWER_NAME" claude-reviewer gemini-reviewer; do   # 실제 spawn 한 이름(접미 -N 포함) 기준
   # graceful 자가종료를 ~8초 대기. ⚠️ 앵커는 반드시 "--agent-id $R@$TEAM_NAME" (단일 토큰)
   #   — 전역 "--agent-name $R" 은 타 세션 동명 리뷰어/prefix(qa-sql 류)까지 매칭해 오판한다(false-negative).
   for _ in $(seq 1 8); do
@@ -239,7 +245,7 @@ done
 CFG=~/.claude/teams/$TEAM_NAME/config.json
 EXIST=$(tmux list-panes -a -F '#{pane_id}' 2>/dev/null)   # 현재 존재하는 pane id 집합
 # ⚠️ 본 세션 CFG 멤버 tmuxPaneId 만. 전체 tmux 순회·다른 세션 CFG·와일드카드 절대 금지.
-for R in codex-reviewer claude-reviewer gemini-reviewer; do
+for R in "$CODEX_REVIEWER_NAME" claude-reviewer gemini-reviewer; do   # 실제 spawn 한 이름(접미 -N 포함) 기준
   PANEID=$(python3 -c "import json;d=json.load(open('$CFG'));print(next((m.get('tmuxPaneId','') for m in d['members'] if m['name']=='$R'),''))" 2>/dev/null)
   if [ -n "$PANEID" ] \
      && ! pgrep -f -- "--agent-id $R@$TEAM_NAME" >/dev/null 2>&1 \

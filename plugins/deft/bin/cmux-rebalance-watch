@@ -7,8 +7,11 @@
 #   rebalance 는 pane geometry 만 필요하므로, 이 워처를 **spawn 과 같은 메시지에서 run_in_background 로**
 #   띄우면 panes 가 생겨 settle 되는 즉시(=가장 이른 시점) rebalance + Lead focus 복원이 실행된다.
 #
-# 사용: cmux-rebalance-watch [LEAD_PANE_REF] [BASELINE_PANE_COUNT]
+# 사용: cmux-rebalance-watch [LEAD_PANE_REF] [BASELINE_PANE_COUNT] [EXPECTED_PANE_COUNT]
 #   - LEAD_PANE_REF: focus 복원 대상(예 pane:5). 생략 시 시작 시점 cmux identify 로 자동 감지.
+#   - EXPECTED_PANE_COUNT: **목표 최종 pane 수**(= BASELINE + spawn 수). 권장 — panes 는 한꺼번에가 아니라
+#       **하나씩 순차 등장**(실측)하므로, 이 값에 도달하는 순간 발사하면 ① 중간 조기발사(일부 pane 만 보고 rebalance)
+#       방지 ② 불필요한 안정대기(~1s) 제거 로 가장 정확/빠르다. 미전달 시 BASELINE+안정화로 폴백.
 #   - BASELINE_PANE_COUNT: **스폰 전** pane 수. ⚠️ 반드시 skill 이 spawn **이전**에 캡처해 넘긴다.
 #       워처는 spawn 과 같은 메시지에서 발사돼 보통 **panes 가 이미 생성된 뒤** 시작되므로,
 #       워처가 자기 시작 시점에 baseline 을 잡으면 그 값이 이미 부풀려져(=현재 pane 수)
@@ -30,16 +33,21 @@ count_panes() { tmux list-panes -a -F '#{pane_id}' 2>/dev/null | wc -l | tr -d '
 
 # baseline: 외부 주입(스폰 전 값) 우선. 미전달 시에만 자기 시작 시점 값(부정확 — 폴백).
 BASE="${2:-}"
+EXPECTED="${3:-}"     # 목표 최종 pane 수(= BASE + spawn 수). 가장 정확한 종료 신호.
 if [ -z "$BASE" ]; then BASE="$(count_panes)"; [ -z "$BASE" ] && BASE=0; HAVE_BASE=0; else HAVE_BASE=1; fi
 prev=-1; stable=0
 for i in $(seq 1 80); do          # 최대 ~24s (0.3s * 80)
   n="$(count_panes)"; [ -z "$n" ] && n=0
   if [ "$n" = "$prev" ]; then stable=$((stable+1)); else stable=0; fi
-  if [ "$HAVE_BASE" -eq 1 ]; then
-    # 정상 경로: 스폰 전 baseline 보다 늘고(>BASE) 연속 3회(~0.9s) 안정 = 전부 생성 완료 → 발사
+  # 우선순위: EXPECTED 도달(순차 등장에 가장 정확·빠름) > BASE+안정 > 안정만
+  if [ -n "$EXPECTED" ]; then
+    # 목표 pane 수 도달 = 모든 pane 등장 → 즉시 발사(조기발사·불필요 안정대기 없음)
+    if [ "$n" -ge "$EXPECTED" ]; then break; fi
+  elif [ "$HAVE_BASE" -eq 1 ]; then
+    # 폴백: 스폰 전 baseline 보다 늘고(>BASE) 연속 3회(~0.9s) 안정 = 전부 생성 완료 → 발사
     if [ "$n" -gt "$BASE" ] && [ "$stable" -ge 3 ]; then break; fi
   else
-    # 폴백(baseline 미주입): 증가 요건 없이 안정화만 — 단 spawn 시작 전 조기발사 방지 위해 최소 5회 경과 후
+    # 폴백(baseline·expected 둘 다 미주입): 증가 요건 없이 안정화만 — 조기발사 방지 위해 최소 5회 경과 후
     if [ "$i" -ge 5 ] && [ "$stable" -ge 3 ]; then break; fi
   fi
   prev="$n"

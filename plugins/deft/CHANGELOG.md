@@ -4,6 +4,17 @@
 
 형식은 [Keep a Changelog](https://keepachangelog.com/ko/1.1.0/) 를 따르며, 버전 체계는 [Semantic Versioning](https://semver.org/lang/ko/) 을 사용합니다 (`claude-X.Y.Z` / `codex-X.Y.Z` 접두).
 
+## [claude-2.22.2] - 2026-06-17
+
+> 모두 사용자 실측 피드백 반영. Claude 측만 변경 → `codex-1.15.1` 유지.
+
+### Fixed
+- **리뷰어 보고가 `summary` 누락으로 실패하던 버그** — 리뷰어 페르소나가 `SendMessage(to:"team-lead", message:"<문자열>")` 로 보고하는데, SendMessage 는 **message 가 문자열이면 `summary` 필수** → 누락 시 `Error: summary is required when message is a string` 로 보고 실패(실측: gemini 리뷰어). 게다가 보고 실패로 리뷰어가 stuck → shutdown_request 정상 응답 못 함 → 강제폴백 SIGTERM → **orphan pane** 까지 연쇄. → 페르소나 3종 보고 규약에 `summary:"<engine> 검토 결과"` **필수 명시**.
+- **`cmux-rebalance-watch` 가 순차 등장하는 pane 을 다 못 기다리거나 안정대기 ~1s 를 낭비하던 문제** — panes 는 한꺼번에가 아니라 **하나씩 순차 등장**(사용자 실측). 종전 "BASE 초과 + 3회 안정"은 ① 인터-pane 간격이 안정창(~0.9s)보다 크면 일부 pane 만 보고 조기발사 위험, ② 이미 다 떠 있어도 안정대기 ~1s 소요. → **목표 최종 pane 수 `EXPECTED`(= BASE + spawn 수)를 워처 3번째 인자로 주입**, `n >= EXPECTED` 도달 즉시 발사(조기발사·불필요 안정대기 제거). multi-check Phase 3 + agent-teams §2-3 에 EXPECTED 캡처·전달 반영.
+
+### Changed
+- **Codex-family reviewer 표시 이름이 실제 CLI 반영** — claudex 를 쓰는데 `@codex-reviewer` 로 떠 혼동(사용자 지적). → multi-check 가 spawn 시 `command -v claudex` 로 판정해 **claudex 사용 시 `@claudex-reviewer`, 없으면 `@codex-reviewer`** 로 명명(`CODEX_REVIEWER_NAME`). Phase 5 정리 루프도 해당 변수 사용.
+
 ## [claude-2.22.1] - 2026-06-17
 
 ### Fixed

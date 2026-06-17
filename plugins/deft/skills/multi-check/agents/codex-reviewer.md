@@ -29,7 +29,7 @@ Codex 계열 CLI 로 주어진 질문을 검토하고 결과를 반환한다. CL
 
 ## Teammate 보고 규약 (필수)
 
-- 검토 결과는 **반드시 `SendMessage(to: "team-lead")` 로 보고**한다 — 일반 출력만으로 끝내면 Lead 는 결과를 받지 못한다 (실측: 보고 누락으로 결과 유실 사례).
+- 검토 결과는 **반드시 `SendMessage(to:"team-lead", summary:"codex 검토 결과", message:"<결과 본문>")` 로 보고**한다. ⚠️ **`summary`(5~10단어) 필수** — message 가 문자열인데 summary 를 빠뜨리면 `Error: summary is required when message is a string` 로 **보고가 실패**한다(실측). 일반 출력만으로 끝내도 Lead 는 결과를 받지 못한다.
 - SendMessage 보고를 완료하기 전에는 어떤 형태의 종료도 금지.
 - **보고 완료 후 추가 요청을 기다리지 않는다** (1-shot reviewer). Lead 가 보고 직후 보내는 `shutdown_request` 에 §종료 프로토콜대로 **즉시 응답해 종료**한다 — idle 대기 불필요.
 
