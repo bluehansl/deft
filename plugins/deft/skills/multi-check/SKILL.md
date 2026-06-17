@@ -178,24 +178,50 @@ After receiving all results, synthesize in this format:
 - 본 세션 team config(`~/.claude/teams/session-<id>/config.json`) 등록 멤버만 대상.
 - **전체 tmux pane 순회·와일드카드 kill 금지.** 다른 이름/접미(`-N`)·다른 session-id 워커가 메시지를 보내와도 "잔재"로 단정 금지(`--parent-session-id` 로 소속 확인).
 
-**① graceful 종료** — 결과 취합 후, 본 세션이 spawn 한 리뷰어에게만:
+**① graceful 종료 요청** — 결과 취합 후, 본 세션이 spawn 한 리뷰어에게만:
 ```
 SendMessage(to: "codex-reviewer", message: {type: "shutdown_request"})
 SendMessage(to: "claude-reviewer", message: {type: "shutdown_request"})
 SendMessage(to: "gemini-reviewer", message: {type: "shutdown_request"})
 ```
-(리뷰어는 1-shot — 보고 후 자체 종료, shutdown 은 안전망. graceful 종료는 느릴 수 있음 — 공식 "Shutdown can be slow".)
+리뷰어 페르소나(`agents/<reviewer>.md` §종료 프로토콜)는 이 요청을 받으면 `shutdown_response{approve:true}` 를 호출해 정상 종료하고, cmux 가 그 pane 을 자동으로 닫는다. graceful 종료는 느릴 수 있음(공식 "Shutdown can be slow").
 
-**② orphan pane 정리 (세션은 끝났는데 pane 이 안 닫힌 경우)** — cmux `close-surface` 는 orphan 을 못 닫는다. **본 세션 team config 의 tmuxPaneId 로만** tmux 백엔드에서 직접 닫는다:
+**② 종료 검증 + 강제 폴백** (자가종료 안 한 리뷰어만 — 소유권 안전) — haiku 래퍼 리뷰어가 간혹 `shutdown_request` 를 prose("종료합니다")로만 응답하고 `shutdown_response` 를 **호출하지 않아 프로세스·pane 이 잔존**하는 경우가 있다(실측 — multi-check 마지막 pane 미닫힘·다음 스킬로의 잔존 직접 원인). graceful 유예 후에도 살아있으면 **본 세션 그 리뷰어 프로세스만** 직접 종료한다:
 ```bash
-TEAM_NAME="session-<id>"     # Lead 가 spawn 결과(@session-<id>)에서 획득 — 본 세션 팀
+TEAM_NAME="session-<id>"      # Lead 가 spawn 결과(@session-<id>)에서 획득 — 본 세션 팀
+for R in codex-reviewer claude-reviewer gemini-reviewer; do
+  # graceful 자가종료를 ~8초 대기. ⚠️ 앵커는 반드시 "--agent-id $R@$TEAM_NAME" (단일 토큰)
+  #   — 전역 "--agent-name $R" 은 타 세션 동명 리뷰어/prefix(qa-sql 류)까지 매칭해 오판한다(false-negative).
+  for _ in $(seq 1 8); do
+    pgrep -f -- "--agent-id $R@$TEAM_NAME" >/dev/null 2>&1 || break
+    sleep 1
+  done
+  # 유예 후에도 생존 = 프로토콜 무시 → 본 세션 그 프로세스만 SIGTERM (cmux 가 pane 자동 close)
+  PID=$(pgrep -f -- "--agent-id $R@$TEAM_NAME" 2>/dev/null)
+  [ -n "$PID" ] && kill $PID 2>/dev/null && echo "INFO: lingering $R 강제 종료 (pid $PID)"
+done
+```
+
+**③ orphan pane 정리** (프로세스는 죽었는데 pane 만 남은 경우) — cmux `close-surface` 는 orphan 을 못 닫으므로 tmux 백엔드로 직접 닫는다. **본 세션 team config 의 tmuxPaneId 로만**, 그 pane 이 아직 존재하고 프로세스가 죽은 것만:
+```bash
 CFG=~/.claude/teams/$TEAM_NAME/config.json
-# ⚠️ 반드시 본 세션 CFG 의 멤버 tmuxPaneId 만 사용. 전체 tmux 순회·다른 세션 CFG 절대 금지.
+EXIST=$(tmux list-panes -a -F '#{pane_id}' 2>/dev/null)   # 현재 존재하는 pane id 집합
+# ⚠️ 본 세션 CFG 멤버 tmuxPaneId 만. 전체 tmux 순회·다른 세션 CFG·와일드카드 절대 금지.
 for R in codex-reviewer claude-reviewer gemini-reviewer; do
   PANEID=$(python3 -c "import json;d=json.load(open('$CFG'));print(next((m.get('tmuxPaneId','') for m in d['members'] if m['name']=='$R'),''))" 2>/dev/null)
-  # 프로세스는 죽었는데 pane 만 남은 orphan 만 정리
-  [ -n "$PANEID" ] && ! pgrep -f -- "--agent-name $R" >/dev/null 2>&1 && tmux kill-pane -t "$PANEID" 2>/dev/null
+  if [ -n "$PANEID" ] \
+     && ! pgrep -f -- "--agent-id $R@$TEAM_NAME" >/dev/null 2>&1 \
+     && printf '%s\n' "$EXIST" | grep -qx "$PANEID"; then
+    tmux kill-pane -t "$PANEID" 2>/dev/null
+  fi
 done
+```
+> ⚠️ cmux 환경의 `tmux` 는 호환 shim 이라 `#{pane_dead}`/`#{pane_pid}` 는 **빈 값**을 반환한다(실측) — pane 생사 판정에 쓸 수 없다. 그래서 ②/③ 는 그 포맷에 의존하지 않고 **세션앵커 `pgrep`(프로세스 생사) + `tmux list-panes`(pane 존재) + `kill-pane`(shim 지원 확인됨)** 으로만 판정한다.
+
+**④ 레이아웃 복원** — 리뷰어 pane 이 다 닫힌 뒤, 남은 Lead 레이아웃을 정렬하고 focus 를 Lead 로 복원한다(다음 스킬·후속 작업이 깔끔한 단일 pane 에서 시작되도록):
+```bash
+command -v cmux-rebalancing >/dev/null 2>&1 && cmux-rebalancing
+cmux focus-pane --pane "$(cmux identify | jq -r .caller.pane_ref)" 2>/dev/null
 ```
 
 ## Error Handling

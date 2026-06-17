@@ -4,6 +4,20 @@
 
 형식은 [Keep a Changelog](https://keepachangelog.com/ko/1.1.0/) 를 따르며, 버전 체계는 [Semantic Versioning](https://semver.org/lang/ko/) 을 사용합니다 (`claude-X.Y.Z` / `codex-X.Y.Z` 접두).
 
+## [claude-2.19.0] - 2026-06-17
+
+> Claude 측만 변경 (codex multi-check 은 `cmux close-surface` + 추적 surface 모델이라 본 건과 무관 → `codex-1.15.1` 유지, §1-2 독립 bump).
+
+### Fixed
+- **multi-check 마지막 리뷰어 pane 미닫힘 (다음 스킬로 잔존)** — multi-check 가 끝나고 multi-round 가 시작되는 시점에도 `codex-reviewer` pane 이 닫히지 않고 남는 현상(사용자 스크린샷 제보). 근본 원인 2건:
+  - **(A) 페르소나에 종료 프로토콜 부재** — haiku 래퍼 리뷰어가 Lead 의 `shutdown_request` 를 일반 채팅으로 보고 **"종료합니다" prose 만 출력**, `shutdown_response{approve:true}` 를 호출하지 않아 프로세스가 안 죽고 pane 잔존. → `agents/{codex,claude,gemini}-reviewer.md` 에 **§종료 프로토콜** 추가: `shutdown_request` 수신 시 prose 금지, `SendMessage(message:{type:"shutdown_response",request_id,approve:true})` **호출 의무** 명시.
+  - **(B) Lead 정리에 검증·강제 폴백 부재** — Phase 5 ① 이 `shutdown_request` 만 보내고 자가종료를 신뢰해 넘어감. → **② 종료 검증 + 강제 폴백** 신설: graceful 유예(~8초) 후에도 살아있는 **본 세션 그 리뷰어 프로세스만** SIGTERM(cmux 가 pane 자동 close), 이어 **③ orphan pane sweep**(프로세스 죽음 + pane 잔존만), **④ 레이아웃 복원**(`cmux-rebalancing` + Lead focus 복원)으로 다음 스킬이 깔끔한 단일 pane 에서 시작되도록.
+- **정리 소유권 pgrep 전역매칭 결함 (agent-teams §9-1 / multi-check Phase 5)** — orphan 판정의 `pgrep -f -- "--agent-name $N"` 이 **호스트 전역·비앵커 substring** 이라 ① 타 세션 동명 팀원이 살아있으면 본 세션 orphan 을 "생존"으로 오판(false-negative — 미정리 + "정리완료" 오보고), ② `qa-sql`/`backendDev-sql` 등 prefix 충돌. → **세션+이름 단일토큰 앵커 `pgrep -f -- "--agent-id $N@$TEAM_NAME"`** 로 교체(agent-teams 팀 검증에서 발견). cmdline 에 `--agent-id <name>@session-<id>` 인접 실재 확인.
+
+### Added
+- **agent-teams §9-1 teardown 레이아웃 복원** — 팀원 pane close 후 `cmux-rebalancing` + Lead focus 복원 추가(multi-round §5-B 와 동일 패턴). 부분 종료가 흔한 agent-teams 에서 빈 행 흡수·focus 튐 정리(기존엔 누락 — 자매 스킬과 비대칭).
+- **cmux `tmux` 호환 shim 동작 명문화 (실측)** — cmux 환경의 `tmux` 는 일부 서브커맨드만 번역하는 shim 으로, **`#{pane_dead}`/`#{pane_pid}` 는 빈 값 반환**(pane 생사 판정 불가). 반면 `kill-pane`·`list-panes -F '#{pane_id}'` 는 지원. 그래서 정리 로직은 그 포맷에 의존하지 않고 **세션앵커 `pgrep`(프로세스 생사) + `tmux list-panes`(pane 존재) + `kill-pane`** 만 사용하도록 SKILL 에 캐비엇 명시. (팀원이 제안한 `#{pane_dead}` 기반 수정안을 환경 실측으로 반증해 채택하지 않음.)
+
 ## [claude-2.18.1] / [codex-1.15.1] - 2026-06-17
 
 ### Fixed
