@@ -60,7 +60,7 @@ fi
 
 **preflight 게이트 (필수)**: 위 출력에 `STOP_TEAM_SPAWN`(또는 `KEEPALIVE_HARDFAIL`)이 보이면, 팀 spawn(`Agent`) 을 **실행하지 말 것**. 대신 사용자에게 "이 세션은 자동 업데이트로 Claude Code 바이너리가 삭제됐습니다. `cmux claude-teams`(또는 `/resume`)로 세션을 재시작한 뒤 다시 시도하세요"를 안내하고 중단한다. (work-id 영속 설계로 연속성은 유지됨.)
 
-> **`cmux-rebalancing`**: Lead 와 팀원 컬럼 비율을 정책대로 재조정하는 헬퍼. **첫 팀원 spawn 직후(컬럼 확정) + 전체 spawn 후(row 균등화)** 호출 (§2-3).
+> **`cmux-rebalancing`**: Lead 와 팀원 컬럼 비율을 정책대로 재조정하는 헬퍼. **전체 팀원 spawn 후 1회** 호출 (§2-3).
 
 ### 0-2. cmux 외부 실행 시 (fallback)
 
@@ -134,14 +134,12 @@ fi
 
 사용자는 Claude Code를 `cmux claude-teams`로 실행한다. 이 환경에서 `Agent` spawn은 **cmux pane 분할까지 자동 처리**된다. Lead가 별도 분할 명령을 호출할 필요 없다. (cmux 외부 실행 시는 §0-2 fallback)
 
-### 2-3. pane 비율 재조정 — Option 1 (① 첫 spawn 후 컬럼 확정 → ② 전체 spawn 후 row 균등화)
+### 2-3. pane 비율 재조정 — 전체 spawn 후 단일 rebalance
 
-`Agent` 툴은 spawn 1회가 **pane 생성 + 팀원 기동을 원자적으로** 수행한다(빈 pane 만 먼저 못 만듦 — pane·AI 분리 불가). 그래서 팀원을 **순서대로** 띄워 "찌부러진 비율" 노출을 최소화한다:
+`Agent` 툴은 spawn 1회가 **pane 생성 + 팀원 기동을 원자적으로** 수행하고, cmux claude-teams 가 pane 을 **자동 배치**한다(스킬이 분할 제어 불가 — multi-round 처럼 `cmux new-split` 을 직접 호출하지 못함). 그리고 **각 spawn 마다 Lead pane 이 다시 찌부러진다**(cmux 가 Lead 기준 재분할 — 실측). 따라서 중간 rebalance 는 다음 spawn 에 덮어써져 무효 → **모든 팀원을 spawn 한 뒤 1회만 rebalance** 한다. rebalancing 은 pane geometry 만 정렬하는 **독립·비동기** 작업이라 팀원 작업과 무관하게 호출할 수 있다:
 
-1. **① 첫 팀원 1명만 먼저 spawn** → 우측 컬럼 pane 1개 생성.
-2. **② pane 확인 후 `cmux-rebalancing` 1회** → 좌 Lead 60% / 우 팀원 40% **컬럼 비율 확정**.
-3. **③ 나머지 팀원 spawn** → 이미 확정된 우측 40% 컬럼 **안에서만 수직 스택**되어 좌우 비율 유지.
-4. **④ 모든 팀원 spawn 후 `cmux-rebalancing` 1회 더** → 우측 컬럼 **row 높이 균등화**(순차 down 분할은 row 가 1/2·1/4·1/4 로 불균등 — 실측).
+1. **팀원 전부 spawn** (병렬 가능하면 한 메시지에).
+2. **모든 spawn 이 반환된 뒤(=pane 다 생성됨) `cmux-rebalancing` 1회** → 컬럼 60:40 + 우측 row 균등화가 함께 정렬됨.
 
 ```bash
 # Lead pane 에서 직접 실행 — 좌→우: 2컬럼=60:40 / 3컬럼=40:30:30 / 4컬럼=25:25:25:25 / 5+=균등
@@ -149,9 +147,7 @@ command -v cmux-rebalancing >/dev/null 2>&1 && cmux-rebalancing
 # 사용자 명시 비율 (예시): cmux-rebalancing 7:3
 ```
 
-> 두 번째 이후 팀원은 같은 우측 컬럼 안에서 **하단으로 수직 분할**되므로 좌우 비율은 유지된다 — 단 **row 높이는 불균등**해지므로 ④의 마지막 1회로 균등화한다.
-
-⚠️ 첫 spawn 직후(②) 호출 누락 시 Lead pane 가독성 저하. 재spawn(죽은 팀원 교체)으로 pane 이 바뀌면 그 직후 다시 호출. cmux 외부 실행 (§0-2 fallback) 시 자동 skip.
+⚠️ **중간(첫 spawn 후) rebalance 는 무의미** — Agent-tool spawn 은 매번 Lead pane 을 재차 찌부러뜨려 다음 spawn 이 이전 rebalance 를 덮어쓴다(실측: 60%→26%→복원). 그래서 "전부 spawn 후 1회"가 유일하게 유효하다. 재spawn(죽은 팀원 교체)으로 pane 이 바뀌면 그 직후 다시 1회. cmux 외부 실행 (§0-2 fallback) 시 자동 skip.
 
 ---
 

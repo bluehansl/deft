@@ -4,6 +4,12 @@
 
 형식은 [Keep a Changelog](https://keepachangelog.com/ko/1.1.0/) 를 따르며, 버전 체계는 [Semantic Versioning](https://semver.org/lang/ko/) 을 사용합니다 (`claude-X.Y.Z` / `codex-X.Y.Z` 접두).
 
+## [claude-2.18.1] / [codex-1.15.1] - 2026-06-17
+
+### Fixed
+- **multi-round pane down-split 플래그 오류 (`--pane` → `--surface`)** — `cmux new-split` 의 올바른 플래그는 `--surface`(또는 `--panel`)인데 multi-round(claude+codex)가 `--pane "<prev>"` 를 써서 2번째 이후 워커 pane 분할이 **"not_found" 로 실패**(워커가 우측 컬럼에 안 쌓임 — 실측). 캡처한 `W*_SURFACE` 로 `--surface "$W1_SURFACE"` 호출하도록 수정. **우측 pane 을 아래로 분할하면 컬럼 비율(60:40)이 유지**됨을 실측 확인.
+- **rebalancing 타이밍 정정 (multi-check/agent-teams)** — 직전 2.18.0 의 "Option 1(첫 spawn→rebalance→나머지)"은 무효였음: Agent-tool spawn 은 cmux 가 Lead 기준으로 재분할해 **매 spawn 마다 Lead pane 이 다시 찌부러지고**(실측 60%→26%→복원), 중간 rebalance 가 다음 spawn 에 덮어써짐. → **"전부 spawn 후 단일 rebalance 1회"**로 정정. rebalancing 은 pane geometry 만 정렬하는 **독립·비동기** 작업이라 AI headless 작업과 무관하게 호출 가능. (cmux-split 기반 multi-round/codex multi-check 은 down-split 이 비율을 유지하므로 해당 없음 — Agent-tool 한정 현상.)
+
 ## [claude-2.18.0] / [codex-1.15.0] - 2026-06-17
 
 ### Changed

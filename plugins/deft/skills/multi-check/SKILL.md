@@ -85,12 +85,10 @@ PERSONA_DIR=$(ls -d ~/.claude/plugins/marketplaces/bluehansl/plugins/deft/skills
 
 > **왜 인라인 + `subagent_type:"claude"` 인가**: 과거엔 `subagent_type:"codex-reviewer"` 로 페르소나를 붙였으나, 이 커스텀 타입은 현행 빌드의 등록된 subagent 타입이 아니다(스킬 하위 `agents/` 는 표준 등록 경로가 아님 → 해석 안 됨). 그래서 범용 `subagent_type:"claude"` + 페르소나 prompt 인라인으로 전환한다 — **페르소나 내용은 그대로 보존**된다.
 
-**spawn 순서 (Option 1 — 이른 밸런싱, pane UI 최적)**: `Agent` 툴은 spawn 1회가 **pane 생성 + AI 기동을 원자적으로** 수행한다(빈 pane 만 먼저 만들 수 없음 — pane 과 AI 분리 불가). 그래서 다음 순서로 진행해 "찌부러진 비율" 노출을 최소화한다:
+**spawn 순서 (Agent-tool — 전부 spawn 후 단일 rebalance)**: `Agent` 툴은 spawn 1회가 **pane 생성 + AI 기동을 원자적으로** 수행하고, cmux claude-teams 가 pane 배치를 **자동 처리**한다(스킬이 분할 방향·대상을 제어할 수 없음 — multi-round 와 달리 `cmux new-split` 을 직접 쓰지 못함). 그리고 **각 spawn 마다 Lead pane 이 다시 찌부러진다**(cmux 가 Lead 기준으로 재분할 — 실측). 따라서 중간 rebalance 는 다음 spawn 에 덮어써져 무효 → **모든 reviewer 를 spawn 한 뒤 1회만 rebalance** 한다. rebalancing 은 pane geometry 만 정렬하는 **독립·비동기** 작업이라 reviewer 의 headless CLI 작업과 무관하게 호출할 수 있다(찌부러진 상태는 spawn 동안 잠깐 보였다가 1회 rebalance 로 정리됨).
 
-1. **① 첫 reviewer 1명만 먼저 spawn** (사용 가능한 CLI 중 하나) → 우측 컬럼 pane 1개 생성.
-2. **② pane 분할 확인 후 `cmux-rebalancing` 1회** → 좌 Lead 60% / 우 reviewer 40% **컬럼 비율 확정** (§Post-spawn).
-3. **③ 나머지 reviewer 를 한 메시지에 병렬 spawn** → 이미 40% 로 확정된 우측 컬럼 **안에서만 수직 스택**되므로 좌우 비율이 흔들리지 않는다.
-4. **④ 모든 spawn 완료 후 `cmux-rebalancing` 1회 더** → 우측 컬럼 row 높이 균등화(§Post-spawn).
+1. **사용 가능한 reviewer 전부를 한 메시지에 병렬 spawn**.
+2. **모든 spawn 이 반환된 뒤(=pane 다 생성됨) `cmux-rebalancing` 1회** → 컬럼 60:40 + 우측 row 균등화가 함께 정렬됨(§Post-spawn).
 
 각 reviewer 의 `Agent` 인자 템플릿 (사용 가능한 CLI 만, `run_in_background: true`):
 
@@ -139,9 +137,9 @@ Agent(
 
 While agents are working, the Lead performs its own analysis on the same question.
 
-#### Post-spawn: 비율 재조정 (① 첫 spawn 직후 컬럼 확정 → ② 전체 spawn 후 row 균등화)
+#### Post-spawn: 비율 재조정 (전체 spawn 후 단일 1회)
 
-**rebalancing 은 2회**: **① 첫 reviewer spawn 직후**(우측 pane 1개 생성 확인) → 좌 Lead 60% / 우 reviewer 40% **컬럼 비율 확정**(이후 spawn 은 이 우측 컬럼 안에서만 분할되므로 좌우 비율 유지). **② 모든 reviewer spawn 완료 후** 1회 더 → 우측 컬럼의 **row 높이 균등화**(순차 수직 분할은 row 가 1/2·1/4·1/4 로 불균등해지므로 — 실측).
+**rebalancing 은 1회** — 모든 reviewer spawn 이 반환된 뒤(=pane 다 생성됨) Lead 가 `cmux-rebalancing` 을 1회 호출하면 컬럼(60:40)과 우측 row 가 함께 정렬된다. ⚠️ **중간(첫 spawn 후) 호출은 무의미** — Agent-tool spawn 은 매번 Lead pane 을 재차 찌부러뜨려 다음 spawn 이 이전 rebalance 를 덮어쓴다(실측: 60%→26%→복원). 그래서 "전부 spawn 후 1회"가 유일하게 유효한 시점이다. 재spawn(죽은 reviewer 교체)으로 pane 이 바뀌면 그 직후 다시 1회.
 
 ```bash
 # Lead pane 에서 직접 실행 — 좌→우: 2컬럼=60:40 / 3컬럼=40:30:30 / 4컬럼=25:25:25:25 / 5+=균등

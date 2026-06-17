@@ -321,11 +321,12 @@ multi-round 워커는 `cmux new-split`(빈 pane) + pane 안 CLI 실행 모델이
 
 첫 워커는 우측 분할(새 컬럼), 이후 워커는 직전 워커 pane 기준 아래 분할 — **워커 수만큼 반복해 W1..Wn_SURFACE 를 모두 확보**:
 ```bash
-SPLIT=$(cmux new-split right --focus false 2>&1)                       # W1 (우측 새 컬럼)
+SPLIT=$(cmux new-split right --focus false 2>&1)                          # W1 (우측 새 컬럼)
 W1_SURFACE=$(printf '%s' "$SPLIT" | grep -oE 'surface:[0-9]+' | head -1)
-SPLIT=$(cmux new-split down --pane "<W1_pane>" --focus false 2>&1)     # W2 (W1 아래)
+SPLIT=$(cmux new-split down --surface "$W1_SURFACE" --focus false 2>&1)   # W2 (W1 아래로)
 W2_SURFACE=$(printf '%s' "$SPLIT" | grep -oE 'surface:[0-9]+' | head -1)
-# ... Wn 까지 반복 (직전 워커 pane 아래로). 이 단계에서는 CLI 를 아직 띄우지 않는다(빈 pane 만).
+# ... Wn 까지 반복 (직전 워커의 W*_SURFACE 아래로). 이 단계에서는 CLI 를 아직 띄우지 않는다(빈 pane 만).
+# ⚠️ 플래그는 **--surface** (또는 --panel). `--pane` 은 존재하지 않아 "not_found" 로 분할 실패 → 워커가 컬럼에 안 쌓임. 우측 pane 을 아래로 분할하면 컬럼 비율(60:40)이 유지된다(실측).
 ```
 
 **(3) 전체 분할 확인 후 비율 재조정 (컬럼 + row 한 번에, 1회)**
