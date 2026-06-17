@@ -143,13 +143,17 @@ fi
 
 `Agent` 툴은 spawn 1회가 **pane 생성 + 팀원 기동을 원자적으로** 수행하고, cmux claude-teams 가 pane 을 **자동 배치**한다(스킬이 분할 제어 불가 — multi-round 처럼 `cmux new-split` 을 직접 호출하지 못함). 그리고 **각 spawn 마다 Lead pane 이 다시 찌부러진다**(cmux 가 Lead 기준 재분할 — 실측). rebalancing 은 pane geometry 만 정렬하는 **독립·비동기** 작업이라 팀원 작업과 무관하게 호출할 수 있다 → **spawn 묶음과 같은 메시지에서 `cmux-rebalance-watch` 를 백그라운드로 띄워, panes 가 다 생겨 settle 되는 즉시 1회 rebalance** 시킨다.
 
-1. spawn 직전 Lead pane ref 캡처: `LEAD_REF=$(cmux identify | jq -r .caller.pane_ref)`.
-2. **팀원 전부 + rebalance 워처를 한 메시지에 함께 발사** — 팀원은 `Agent`(병렬), 워처는 `cmux-rebalance-watch "$LEAD_REF"` 를 **`run_in_background: true` Bash** 로. 워처가 panes settle 즉시 `cmux-rebalancing`(컬럼 60:40 + row 균등) + Lead focus 복원을 1회 실행한다.
+1. spawn **직전(=panes 생성 전)** 에 2개 캡처: `LEAD_REF=$(cmux identify | jq -r .caller.pane_ref)` (focus 복원용) + `BASE=$(tmux list-panes -a -F '#{pane_id}' | wc -l | tr -d ' ')` (워처 baseline용).
+2. **팀원 전부 + rebalance 워처를 한 메시지에 함께 발사** — 팀원은 `Agent`(병렬), 워처는 `cmux-rebalance-watch "$LEAD_REF" "$BASE"` 를 **`run_in_background: true` Bash** 로. 워처가 panes 가 **BASE 보다 늘어 settle 되는 즉시** `cmux-rebalancing`(컬럼 60:40 + row 균등) + Lead focus 복원을 1회 실행한다.
 
 ```text
-# spawn 메시지에 팀원 Agent 들과 함께 포함 (run_in_background)
-Bash(run_in_background: true): cmux-rebalance-watch "$LEAD_REF"
+# spawn 직전(panes 생성 전)에 캡처:
+LEAD_REF=$(cmux identify | jq -r .caller.pane_ref)
+BASE=$(tmux list-panes -a -F '#{pane_id}' | wc -l | tr -d ' ')
+# spawn 메시지에 팀원 Agent 들과 함께 포함 (run_in_background) — BASE 를 반드시 인자로 전달
+Bash(run_in_background: true): cmux-rebalance-watch "$LEAD_REF" "$BASE"
 ```
+> ⚠️ **baseline(`$BASE`)은 반드시 spawn 전에 캡처해 넘긴다** — 워처가 자기 시작 시점(=panes 생성 후)에 baseline 을 잡으면 값이 부풀려져 "증가" 감지가 안 돼 settle 못 하고 cap 까지 헛돈다(실측 버그 — claude-2.22.1 수정).
 
 > **왜 워처인가 (타이밍 당김)**: 종전엔 "전부 spawn **반환** 후 Lead 가 별도 턴에서 `cmux-rebalancing` 수동 호출"이라, ① `Agent` 툴 반환 지연 ② Lead 턴 생성 지연이 끼어 rebalance 가 **팀원 부팅·작업 시작 이후**로 한참 늦게 떴다(사용자 실측). 워처를 spawn 과 동시에 띄우면 **panes 생성 직후(가장 이른 시점)** 정렬된다.
 >

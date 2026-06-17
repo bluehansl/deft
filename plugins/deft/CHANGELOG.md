@@ -4,6 +4,12 @@
 
 형식은 [Keep a Changelog](https://keepachangelog.com/ko/1.1.0/) 를 따르며, 버전 체계는 [Semantic Versioning](https://semver.org/lang/ko/) 을 사용합니다 (`claude-X.Y.Z` / `codex-X.Y.Z` 접두).
 
+## [claude-2.22.1] - 2026-06-17
+
+### Fixed
+- **`cmux-rebalance-watch` 가 rebalance 못 하고 cap 까지 헛돌던 버그 (2.22.0 회귀 — 사용자 실측)** — 워처가 baseline(`init`)을 **자기 시작 시점**에 캡처했는데, 워처는 spawn 과 같은 메시지에서 발사돼 **보통 panes 가 이미 생성된 뒤 시작**된다. 그래서 `init` 이 현재 pane 수(부풀려진 값)로 잡혀 settle 조건 `n > init`(증가)이 **영원히 거짓** → 80회 cap(~수십 초)까지 헛돌다 끝에야 rebalance(사용자 화면엔 "리밸런싱 실패"로 보임). 로그 진단: `START init=4 … panes=4` 고정.
+  - **수정**: baseline 을 **skill 이 spawn 전에 캡처해 워처에 인자로 전달**(`cmux-rebalance-watch "$LEAD_REF" "$BASE"`). 워처는 주입된 BASE 기준으로 `n > BASE && settle` 판정 → panes 가 이미 생성됐어도 `n(4) > BASE(1)` 즉시 성립해 ~1s 내 발사. BASE 미주입 시 폴백(증가 요건 없이 안정화만, 조기발사 방지 최소 대기). multi-check Phase 3 + agent-teams §2-3 에 BASE 캡처·전달 반영.
+
 ## [claude-2.22.0] - 2026-06-17
 
 > Claude 측만 변경 (codex multi-check 은 cmux-split Option 2 로 rebalance 타이밍이 이미 최적 + 페르소나 미참조 → `codex-1.15.1` 유지).

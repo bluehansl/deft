@@ -7,11 +7,15 @@
 #   rebalance 는 pane geometry 만 필요하므로, 이 워처를 **spawn 과 같은 메시지에서 run_in_background 로**
 #   띄우면 panes 가 생겨 settle 되는 즉시(=가장 이른 시점) rebalance + Lead focus 복원이 실행된다.
 #
-# 사용: cmux-rebalance-watch [LEAD_PANE_REF]
+# 사용: cmux-rebalance-watch [LEAD_PANE_REF] [BASELINE_PANE_COUNT]
 #   - LEAD_PANE_REF: focus 복원 대상(예 pane:5). 생략 시 시작 시점 cmux identify 로 자동 감지.
+#   - BASELINE_PANE_COUNT: **스폰 전** pane 수. ⚠️ 반드시 skill 이 spawn **이전**에 캡처해 넘긴다.
+#       워처는 spawn 과 같은 메시지에서 발사돼 보통 **panes 가 이미 생성된 뒤** 시작되므로,
+#       워처가 자기 시작 시점에 baseline 을 잡으면 그 값이 이미 부풀려져(=현재 pane 수)
+#       "증가" 조건이 영원히 거짓 → settle 못 하고 cap 까지 헛돈다(실측 버그). 그래서 baseline 은 외부 주입.
 #   - 보통 skill 이 spawn 묶음과 함께 run_in_background 로 발사한다.
 #
-# 동작: tmux list-panes 로 pane 수를 폴링 → 시작값보다 늘고(=새 pane 생성) 연속 안정되면 rebalance.
+# 동작: tmux list-panes 로 pane 수를 폴링 → baseline 보다 늘고(=새 pane 생성) 연속 안정되면 rebalance.
 #   증가가 안 보여도 ~24s 상한 후 1회 rebalance(안전). #{pane_dead}/#{pane_pid} 미지원 shim 고려해
 #   pane 수(존재)만 사용.
 set -u
@@ -24,13 +28,20 @@ LEAD_REF="${1:-}"
 
 count_panes() { tmux list-panes -a -F '#{pane_id}' 2>/dev/null | wc -l | tr -d ' '; }
 
-init="$(count_panes)"; [ -z "$init" ] && init=0
+# baseline: 외부 주입(스폰 전 값) 우선. 미전달 시에만 자기 시작 시점 값(부정확 — 폴백).
+BASE="${2:-}"
+if [ -z "$BASE" ]; then BASE="$(count_panes)"; [ -z "$BASE" ] && BASE=0; HAVE_BASE=0; else HAVE_BASE=1; fi
 prev=-1; stable=0
-for _ in $(seq 1 80); do          # 최대 ~24s (0.3s * 80)
+for i in $(seq 1 80); do          # 최대 ~24s (0.3s * 80)
   n="$(count_panes)"; [ -z "$n" ] && n=0
   if [ "$n" = "$prev" ]; then stable=$((stable+1)); else stable=0; fi
-  # 새 pane 이 생겨 시작값보다 늘고(>init) 연속 3회(~0.9s) 안정되면 = 전부 생성 완료 → 발사
-  if [ "$n" -gt "$init" ] && [ "$stable" -ge 3 ]; then break; fi
+  if [ "$HAVE_BASE" -eq 1 ]; then
+    # 정상 경로: 스폰 전 baseline 보다 늘고(>BASE) 연속 3회(~0.9s) 안정 = 전부 생성 완료 → 발사
+    if [ "$n" -gt "$BASE" ] && [ "$stable" -ge 3 ]; then break; fi
+  else
+    # 폴백(baseline 미주입): 증가 요건 없이 안정화만 — 단 spawn 시작 전 조기발사 방지 위해 최소 5회 경과 후
+    if [ "$i" -ge 5 ] && [ "$stable" -ge 3 ]; then break; fi
+  fi
   prev="$n"
   sleep 0.3
 done

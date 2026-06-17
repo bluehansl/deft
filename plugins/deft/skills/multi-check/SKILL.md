@@ -102,8 +102,8 @@ PERSONA_DIR=~/.claude/plugins/marketplaces/bluehansl/plugins/deft/skills/multi-c
 
 **spawn 순서 (Agent-tool — spawn 과 함께 rebalance 워처 발사)**: `Agent` 툴은 spawn 1회가 **pane 생성 + AI 기동을 원자적으로** 수행하고, cmux claude-teams 가 pane 배치를 **자동 처리**한다(스킬이 분할 방향·대상을 제어할 수 없음 — multi-round 와 달리 `cmux new-split` 을 직접 쓰지 못함). 그리고 **각 spawn 마다 Lead pane 이 다시 찌부러진다**(cmux 가 Lead 기준으로 재분할 — 실측). rebalancing 은 pane geometry 만 정렬하는 **독립·비동기** 작업이라 reviewer 의 headless CLI 작업과 무관하게 호출할 수 있다 → **spawn 묶음과 같은 메시지에서 `cmux-rebalance-watch` 를 백그라운드로 띄워, panes 가 다 생겨 settle 되는 즉시 1회 rebalance** 시킨다(§Post-spawn).
 
-1. spawn 직전 Lead pane ref 캡처(focus 복원용): `LEAD_REF=$(cmux identify | jq -r .caller.pane_ref)`.
-2. **사용 가능한 reviewer 전부 + rebalance 워처를 한 메시지에 함께 발사** — reviewer 는 `Agent`(병렬), 워처는 `cmux-rebalance-watch "$LEAD_REF"` 를 **`run_in_background: true` Bash** 로 같은 메시지에. 워처가 panes 가 생겨 **settle 되는 즉시** `cmux-rebalancing`(컬럼 60:40 + row 균등) + Lead focus 복원을 1회 실행한다(§Post-spawn).
+1. spawn **직전(=panes 생성 전)** 에 다음 2개를 캡처: `LEAD_REF=$(cmux identify | jq -r .caller.pane_ref)` (focus 복원용) + `BASE=$(tmux list-panes -a -F '#{pane_id}' | wc -l | tr -d ' ')` (워처 baseline용). ⚠️ **BASE 는 반드시 spawn 전에 캡처**한다 — 워처가 자기 시작 시점에 baseline 을 잡으면 이미 panes 가 생성된 뒤라 값이 부풀려져 "증가" 감지가 영원히 안 돼 cap 까지 헛돈다(실측 버그).
+2. **사용 가능한 reviewer 전부 + rebalance 워처를 한 메시지에 함께 발사** — reviewer 는 `Agent`(병렬), 워처는 `cmux-rebalance-watch "$LEAD_REF" "$BASE"` 를 **`run_in_background: true` Bash** 로 같은 메시지에. 워처가 panes 가 **BASE 보다 늘어 settle 되는 즉시** `cmux-rebalancing`(컬럼 60:40 + row 균등) + Lead focus 복원을 1회 실행한다(§Post-spawn).
 
 각 reviewer 의 `Agent` 인자 템플릿 (사용 가능한 CLI 만, `run_in_background: true`):
 
@@ -157,11 +157,16 @@ While agents are working, the Lead performs its own analysis on the same questio
 **rebalancing 은 워처(`cmux-rebalance-watch`)에 위임한다 — spawn 묶음과 같은 메시지에서 백그라운드로 발사**한다. 워처는 `tmux list-panes` 로 pane 수를 폴링해 **새 pane 들이 생겨 안정(settle)되는 즉시** `cmux-rebalancing`(컬럼 60:40 + row 균등) + Lead focus 복원을 1회 실행한다.
 
 ```text
-# spawn 메시지에 reviewer Agent 들과 함께 포함 (run_in_background)
-Bash(run_in_background: true): cmux-rebalance-watch "$LEAD_REF"
+# spawn 직전(panes 생성 전)에 캡처:
+LEAD_REF=$(cmux identify | jq -r .caller.pane_ref)
+BASE=$(tmux list-panes -a -F '#{pane_id}' | wc -l | tr -d ' ')
+# spawn 메시지에 reviewer Agent 들과 함께 포함 (run_in_background) — BASE 를 반드시 인자로 전달
+Bash(run_in_background: true): cmux-rebalance-watch "$LEAD_REF" "$BASE"
 ```
 
 > **왜 워처인가 (타이밍 당김)**: 종전엔 "전부 spawn **반환** 후 Lead 가 별도 턴에서 `cmux-rebalancing` 수동 호출"이라, ① `Agent` 툴 반환 지연 ② Lead 턴 생성 지연이 끼어 rebalance 가 **haiku 부팅·shell 실행 이후**로 한참 늦게 떴다(사용자 실측). rebalance 는 pane geometry 만 필요하므로, 워처를 spawn 과 동시에 띄우면 **panes 생성 직후(가장 이른 시점)** 정렬된다.
+>
+> ⚠️ **baseline(`$BASE`)은 반드시 spawn 전에 캡처해 워처에 넘긴다** — 워처는 spawn 과 같은 메시지에서 발사돼 보통 panes 가 이미 생성된 뒤 시작되므로, 워처가 자기 시작 시점에 baseline 을 잡으면 그 값이 부풀려져(=현재 pane 수) "증가" 감지가 영원히 안 돼 settle 못 하고 cap 까지 헛돈다(실측 버그 — claude-2.22.1 수정).
 >
 > ⚠️ **중간(첫 spawn 후) 호출이 무의미한 건 동일** — Agent-tool spawn 은 매번 Lead pane 을 재차 찌부러뜨린다(실측: 60%→26%→복원). 워처는 "증가가 멈춰 settle" 될 때까지 기다리므로 모든 spawn 이 끝난 시점을 자동으로 잡는다.
 >
