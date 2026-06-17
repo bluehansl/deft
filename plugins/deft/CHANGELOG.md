@@ -4,6 +4,11 @@
 
 형식은 [Keep a Changelog](https://keepachangelog.com/ko/1.1.0/) 를 따르며, 버전 체계는 [Semantic Versioning](https://semver.org/lang/ko/) 을 사용합니다 (`claude-X.Y.Z` / `codex-X.Y.Z` 접두).
 
+## [claude-2.22.3] - 2026-06-17
+
+### Fixed
+- **gemini 리뷰어가 매번 force-fallback(SIGTERM) + orphan pane 을 내던 원인 규명·수정 (사용자 지시 조사)** — claudex/claude 는 ~2-4s graceful 종료인데 gemini 만 반복적으로 종료가 ~12s 지연돼 grace 창을 넘겨 강제 종료+orphan. **단일 gemini 리뷰어 격리 측정**으로 원인 확정: shutdown_request 수신 시 haiku 래퍼가 **shutdown_response 외 추가 작업(느린 gemini CLI ~12s 재호출/재검토)** 을 해 종료가 지연. 페르소나에 "shutdown 시 **오직 shutdown_response 만**, 추가 CLI 호출·재검토 금지" 를 명시하니 **~2s graceful 종료**로 회복(실측). → 리뷰어 페르소나 3종 §종료 프로토콜에 "추가 작업 금지" 강화. (gemini CLI 가 trivial 쿼리에도 ~12s 걸리는 특성이 이 지연을 치명적으로 만든 배경 — claudex/claude 는 빨라 grace 안에 끝났음.)
+
 ## [claude-2.22.2] - 2026-06-17
 
 > 모두 사용자 실측 피드백 반영. Claude 측만 변경 → `codex-1.15.1` 유지.
