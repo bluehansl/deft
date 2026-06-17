@@ -143,17 +143,19 @@ fi
 
 `Agent` 툴은 spawn 1회가 **pane 생성 + 팀원 기동을 원자적으로** 수행하고, cmux claude-teams 가 pane 을 **자동 배치**한다(스킬이 분할 제어 불가 — multi-round 처럼 `cmux new-split` 을 직접 호출하지 못함). 그리고 **각 spawn 마다 Lead pane 이 다시 찌부러진다**(cmux 가 Lead 기준 재분할 — 실측). rebalancing 은 pane geometry 만 정렬하는 **독립·비동기** 작업이라 팀원 작업과 무관하게 호출할 수 있다 → **spawn 묶음과 같은 메시지에서 `cmux-rebalance-watch` 를 백그라운드로 띄워, panes 가 다 생겨 settle 되는 즉시 1회 rebalance** 시킨다.
 
-1. spawn **직전(=panes 생성 전)** 에 캡처: `LEAD_REF=$(cmux identify | jq -r .caller.pane_ref)` (focus 복원용) + `BASE=$(tmux list-panes -a -F '#{pane_id}' | wc -l | tr -d ' ')` (baseline) + 이번에 spawn 할 팀원 수 `N` → `EXPECTED=$((BASE+N))` (목표 최종 pane 수).
-2. **팀원 전부 + rebalance 워처를 한 메시지에 함께 발사** — 팀원은 `Agent`(병렬), 워처는 `cmux-rebalance-watch "$LEAD_REF" "$BASE" "$EXPECTED"` 를 **`run_in_background: true` Bash** 로. 워처가 panes 가 **EXPECTED 에 도달하는 즉시**(=모든 팀원 pane 등장 — panes 는 하나씩 순차 등장하므로 EXPECTED 도달이 가장 정확한 신호) `cmux-rebalancing`(컬럼 60:40 + row 균등) + Lead focus 복원을 1회 실행한다.
+1. spawn **직전(=panes 생성 전)** 에 캡처: `LEAD_REF=$(cmux identify | jq -r .caller.pane_ref)` (focus 복원용) + `BASE=$(tmux list-panes -a -F '#{pane_id}' | wc -l | tr -d ' ')` (baseline) + 이번에 spawn 할 팀원 수 `N` → `EXPECTED=$((BASE+N))` (목표 최종 pane 수) + `FAST=$([ "$BASE" -eq 1 ] && echo 1 || echo 0)` (**clean Lead 워크스페이스 판정** — BASE==1 이면 빠른 경로).
+2. **팀원 전부 + rebalance 워처를 한 메시지에 함께 발사** — 팀원은 `Agent`(병렬), 워처는 `cmux-rebalance-watch "$LEAD_REF" "$BASE" "$EXPECTED" "$FAST"` 를 **`run_in_background: true` Bash** 로. 워처가 panes 가 **EXPECTED 에 도달하는 즉시**(=모든 팀원 pane 등장 — panes 는 하나씩 순차 등장하므로 EXPECTED 도달이 가장 정확한 신호) rebalance(컬럼 60:40 + row 균등) + Lead focus 복원을 1회 실행한다. **`FAST=1`(clean Lead)이면 `cmux-rebalancing --fast`**(단발 push, ~2s), 아니면 robust `cmux-rebalancing`(~4s).
 
 ```text
 # spawn 직전(panes 생성 전)에 캡처:
 LEAD_REF=$(cmux identify | jq -r .caller.pane_ref)
 BASE=$(tmux list-panes -a -F '#{pane_id}' | wc -l | tr -d ' ')
-EXPECTED=$((BASE + N))   # N = 이번에 spawn 하는 팀원 수
-# spawn 메시지에 팀원 Agent 들과 함께 포함 (run_in_background) — BASE·EXPECTED 인자 전달
-Bash(run_in_background: true): cmux-rebalance-watch "$LEAD_REF" "$BASE" "$EXPECTED"
+EXPECTED=$((BASE + N))                       # N = 이번에 spawn 하는 팀원 수
+FAST=$([ "$BASE" -eq 1 ] && echo 1 || echo 0)   # BASE==1(Lead 단독) → clean-grid 빠른 경로
+# spawn 메시지에 팀원 Agent 들과 함께 포함 (run_in_background)
+Bash(run_in_background: true): cmux-rebalance-watch "$LEAD_REF" "$BASE" "$EXPECTED" "$FAST"
 ```
+> **clean-grid vs robust**: `FAST=1`(BASE==1, Lead 단독)이면 단발 push 빠른 경로(squish 결정론·우측 행 이미 균등 — 실측), 기존 pane 이 있으면(BASE>1) robust 다회 수렴(섞임/비그리드/소유권 변형 위험 회피).
 > ⚠️ **BASE/EXPECTED 는 반드시 spawn 전에 캡처해 넘긴다** — 워처가 자기 시작 시점(=panes 생성 후)에 baseline 을 잡으면 값이 부풀려져 감지가 안 돼 cap 까지 헛돈다(실측 버그 — claude-2.22.1 수정). panes 는 한꺼번에가 아니라 **하나씩 순차 등장**하므로 EXPECTED(목표 수) 도달을 종료 신호로 쓰는 게 가장 정확하다(2.22.2).
 
 > **왜 워처인가 (타이밍 당김)**: 종전엔 "전부 spawn **반환** 후 Lead 가 별도 턴에서 `cmux-rebalancing` 수동 호출"이라, ① `Agent` 툴 반환 지연 ② Lead 턴 생성 지연이 끼어 rebalance 가 **팀원 부팅·작업 시작 이후**로 한참 늦게 떴다(사용자 실측). 워처를 spawn 과 동시에 띄우면 **panes 생성 직후(가장 이른 시점)** 정렬된다.

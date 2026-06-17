@@ -131,6 +131,12 @@ def main():
     args = sys.argv[1:]
     if "--workspace" in args:
         i = args.index("--workspace"); ws = args[i + 1]; del args[i:i + 2]
+    # --fast: clean-grid(Lead 단독 시작) 전용 빠른 경로. 단발 push + row-equalize skip + 폴링 최소화.
+    #   spawn 전 워크스페이스가 Lead pane 하나뿐이면 squish 가 결정론적이고 우측 행이 이미 균등이라(실측),
+    #   robust 다회 수렴이 불필요하다. 다른 pane 이 섞인 환경에선 절대 쓰지 말 것(비그리드·소유권 변형 위험).
+    FAST = False
+    if "--fast" in args:
+        FAST = True; args.remove("--fast")
     if ws is None:
         ws = json.loads(cmux("identify", "--json"))["caller"]["workspace_ref"]
 
@@ -158,21 +164,26 @@ def main():
     targets = [round(r * total) for r in ratios]
     print(f"컬럼 {n}개, 전체 {total}px → 목표 {targets} (비율 {[round(r*100) for r in ratios]}%)")
 
-    # 허용오차(셀 1칸≈cell_width_px) 내로 들어올 때까지 최대 4패스 반복.
-    cw = json.loads(cmux("list-panes", "--workspace", ws, "--json"))["panes"][0]["cell_width_px"]
-    for _ in range(4):
+    if FAST:
+        # clean-grid 전용 빠른 경로: 컬럼 경계를 단발 push 1회만. 다회 수렴 검증·행 균등화 생략
+        # (clean Lead 시작 → squish 결정론적 + 우측 행 이미 균등, 실측 확인). ~4s → ~1-2s.
         set_columns_once(ws, targets)
-        cols = stable_columns(ws)
-        cur = [cols[0][0] + sum(c[1] for c in cols[:i + 1]) for i in range(n - 1)]
-        want = [cols[0][0] + sum(targets[:i + 1]) for i in range(n - 1)]
-        if all(abs(a - b) <= cw for a, b in zip(cur, want)):
-            break
+    else:
+        # robust 경로(다른 pane 이 섞인 환경 등): 허용오차(셀 1칸≈cell_width_px) 내 수렴까지 최대 4패스 + 행 균등화
+        cw = json.loads(cmux("list-panes", "--workspace", ws, "--json"))["panes"][0]["cell_width_px"]
+        for _ in range(4):
+            set_columns_once(ws, targets)
+            cols = stable_columns(ws)
+            cur = [cols[0][0] + sum(c[1] for c in cols[:i + 1]) for i in range(n - 1)]
+            want = [cols[0][0] + sum(targets[:i + 1]) for i in range(n - 1)]
+            if all(abs(a - b) <= cw for a, b in zip(cur, want)):
+                break
 
-    # 컬럼 내 상하 행 균등화
-    ch = json.loads(cmux("list-panes", "--workspace", ws, "--json"))["panes"][0]["cell_height_px"]
-    for x, _, refs in stable_columns(ws):
-        if len(refs) > 1:
-            equalize_rows(ws, x, ch)
+        # 컬럼 내 상하 행 균등화
+        ch = json.loads(cmux("list-panes", "--workspace", ws, "--json"))["panes"][0]["cell_height_px"]
+        for x, _, refs in stable_columns(ws):
+            if len(refs) > 1:
+                equalize_rows(ws, x, ch)
 
     cols = stable_columns(ws); total = sum(w for _, w, _ in cols)
     print("결과(컬럼):", " : ".join(f"{w/total*100:.1f}%" for _, w, _ in cols))

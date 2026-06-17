@@ -4,6 +4,19 @@
 
 형식은 [Keep a Changelog](https://keepachangelog.com/ko/1.1.0/) 를 따르며, 버전 체계는 [Semantic Versioning](https://semver.org/lang/ko/) 을 사용합니다 (`claude-X.Y.Z` / `codex-X.Y.Z` 접두).
 
+## [claude-2.23.0] / [codex-1.15.2] - 2026-06-17
+
+### Added
+- **rebalance clean-grid 빠른 경로 `cmux-rebalancing --fast` (사용자 실측 기반 최적화)** — clean Lead 워크스페이스(spawn 전 pane 1개)에서 Agent-tool spawn 의 squish 는 **결정론적**(실측: 1명→Lead50%, 2+명→Lead26.1%·우측73.9%, 우측 행 raw 상태 이미 균등)이라, robust 다회 수렴이 불필요하다. `--fast` 는 **단발 column push + row-equalize skip + 폴링 최소**로 동일한 60:40 결과를 ~4s→~2s 에 낸다(실측 검증). 워처(`cmux-rebalance-watch`)에 4번째 인자 `FAST` 추가, multi-check/agent-teams 가 **BASE==1(clean Lead)일 때만** `FAST=1` 전달. 기존 pane 이 있으면(BASE>1) 자동으로 robust 경로 유지.
+
+### Changed
+- **rebalance 전제 명문화 + 비-clean 워크스페이스 동작 규명 (사용자 지시 조사)** — "Lead 60%/리뷰어 40%" 시각 모델은 **clean Lead 워크스페이스 전제**임을 실측으로 확인·명문화. 기존 pane 이 섞이면 방식별로 다르게 degrade(기능은 정상, 시각만 영향):
+  - **Agent-tool + 우측 pane**: 새 리뷰어가 기존 우측 컬럼에 섞임 → rebalance 가 사용자 pane 도 리사이즈(소유권 영향).
+  - **Agent-tool + 아래 pane**: 단일 컬럼에 행으로 stack → **1컬럼이라 rebalance no-op**(60:40 안 생김, Lead=1/N행).
+  - **multi-round(new-split)**: Lead 를 쪼개 워커 전용 컬럼 생성(다른 컬럼 미접촉), 아래 pane 있으면 비그리드 → rebalance 컬럼 오측정.
+  → 그래서 `--fast` 는 clean 케이스로 게이트하고, 비-clean 은 robust 경로(안정대기+수렴)로 처리.
+- **codex `cmux-rebalancing` 동기화** — `--fast` 옵션을 codex 측 사본에도 반영(공유 헬퍼 parity). codex 스킬은 Option 2 라 `--fast` 를 호출하진 않음(미사용 옵션, parity 목적).
+
 ## [claude-2.22.3] - 2026-06-17
 
 ### Fixed

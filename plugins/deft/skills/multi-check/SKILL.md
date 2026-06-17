@@ -107,8 +107,8 @@ PERSONA_DIR=~/.claude/plugins/marketplaces/bluehansl/plugins/deft/skills/multi-c
 
 **spawn 순서 (Agent-tool — spawn 과 함께 rebalance 워처 발사)**: `Agent` 툴은 spawn 1회가 **pane 생성 + AI 기동을 원자적으로** 수행하고, cmux claude-teams 가 pane 배치를 **자동 처리**한다(스킬이 분할 방향·대상을 제어할 수 없음 — multi-round 와 달리 `cmux new-split` 을 직접 쓰지 못함). 그리고 **각 spawn 마다 Lead pane 이 다시 찌부러진다**(cmux 가 Lead 기준으로 재분할 — 실측). rebalancing 은 pane geometry 만 정렬하는 **독립·비동기** 작업이라 reviewer 의 headless CLI 작업과 무관하게 호출할 수 있다 → **spawn 묶음과 같은 메시지에서 `cmux-rebalance-watch` 를 백그라운드로 띄워, panes 가 다 생겨 settle 되는 즉시 1회 rebalance** 시킨다(§Post-spawn).
 
-1. spawn **직전(=panes 생성 전)** 에 캡처: `LEAD_REF=$(cmux identify | jq -r .caller.pane_ref)` (focus 복원용) + `BASE=$(tmux list-panes -a -F '#{pane_id}' | wc -l | tr -d ' ')` (baseline) + 이번에 spawn 할 reviewer 수 `N` → `EXPECTED=$((BASE+N))` (목표 최종 pane 수). ⚠️ **BASE/EXPECTED 는 반드시 spawn 전에 캡처**한다 — 워처가 자기 시작 시점에 baseline 을 잡으면 이미 panes 가 생성된 뒤라 값이 부풀려져 감지가 영원히 안 돼 cap 까지 헛돈다(실측 버그).
-2. **사용 가능한 reviewer 전부 + rebalance 워처를 한 메시지에 함께 발사** — reviewer 는 `Agent`(병렬), 워처는 `cmux-rebalance-watch "$LEAD_REF" "$BASE" "$EXPECTED"` 를 **`run_in_background: true` Bash** 로 같은 메시지에. 워처가 panes 가 **EXPECTED 에 도달하는 즉시**(=모든 reviewer pane 등장 — panes 는 한꺼번에가 아니라 하나씩 순차 등장하므로 EXPECTED 도달이 가장 정확한 신호) `cmux-rebalancing`(컬럼 60:40 + row 균등) + Lead focus 복원을 1회 실행한다(§Post-spawn).
+1. spawn **직전(=panes 생성 전)** 에 캡처: `LEAD_REF=$(cmux identify | jq -r .caller.pane_ref)` (focus 복원용) + `BASE=$(tmux list-panes -a -F '#{pane_id}' | wc -l | tr -d ' ')` (baseline) + 이번에 spawn 할 reviewer 수 `N` → `EXPECTED=$((BASE+N))` (목표 최종 pane 수) + `FAST=$([ "$BASE" -eq 1 ] && echo 1 || echo 0)` (**clean Lead 워크스페이스 판정** — BASE==1 이면 빠른 경로). ⚠️ **BASE/EXPECTED/FAST 는 반드시 spawn 전에 캡처**한다 — 워처가 자기 시작 시점에 baseline 을 잡으면 이미 panes 가 생성된 뒤라 값이 부풀려져 감지가 영원히 안 돼 cap 까지 헛돈다(실측 버그).
+2. **사용 가능한 reviewer 전부 + rebalance 워처를 한 메시지에 함께 발사** — reviewer 는 `Agent`(병렬), 워처는 `cmux-rebalance-watch "$LEAD_REF" "$BASE" "$EXPECTED" "$FAST"` 를 **`run_in_background: true` Bash** 로 같은 메시지에. 워처가 panes 가 **EXPECTED 에 도달하는 즉시**(=모든 reviewer pane 등장 — panes 는 한꺼번에가 아니라 하나씩 순차 등장하므로 EXPECTED 도달이 가장 정확한 신호) rebalance(컬럼 60:40 + row 균등) + Lead focus 복원을 1회 실행한다(§Post-spawn). **`FAST=1`(clean Lead)이면 `cmux-rebalancing --fast`** (단발 push + row-equalize skip, ~4s→~2s — clean-grid 결정론 실측 기반), **아니면 robust** `cmux-rebalancing`.
 
 각 reviewer 의 `Agent` 인자 템플릿 (사용 가능한 CLI 만, `run_in_background: true`):
 
@@ -165,10 +165,13 @@ While agents are working, the Lead performs its own analysis on the same questio
 # spawn 직전(panes 생성 전)에 캡처:
 LEAD_REF=$(cmux identify | jq -r .caller.pane_ref)
 BASE=$(tmux list-panes -a -F '#{pane_id}' | wc -l | tr -d ' ')
-EXPECTED=$((BASE + N))   # N = 이번에 spawn 하는 reviewer 수
-# spawn 메시지에 reviewer Agent 들과 함께 포함 (run_in_background) — BASE·EXPECTED 인자 전달
-Bash(run_in_background: true): cmux-rebalance-watch "$LEAD_REF" "$BASE" "$EXPECTED"
+EXPECTED=$((BASE + N))                       # N = 이번에 spawn 하는 reviewer 수
+FAST=$([ "$BASE" -eq 1 ] && echo 1 || echo 0)   # BASE==1(Lead 단독) → clean-grid 빠른 경로
+# spawn 메시지에 reviewer Agent 들과 함께 포함 (run_in_background)
+Bash(run_in_background: true): cmux-rebalance-watch "$LEAD_REF" "$BASE" "$EXPECTED" "$FAST"
 ```
+
+> **clean-grid vs robust (실측 근거)**: 워처는 `FAST=1`이면 `cmux-rebalancing --fast`(단발 push + 행균등 skip + 폴링 최소, ~2s), 아니면 `cmux-rebalancing`(다회 수렴, ~4s)을 부른다. **clean Lead 워크스페이스(BASE==1)에서만 fast** — 그땐 squish 가 결정론적(N≥2 리뷰어 → Lead 26.1%·우측 73.9%, 우측 행 이미 균등)이라 단발로 정확히 60:40 이 된다(실측). **기존 pane 이 있으면(BASE>1) robust** — Agent-tool 은 새 pane 이 기존 우측 컬럼에 섞이거나(소유권), Lead 아래 pane 이 있으면 1컬럼 stack(rebalance no-op)/비그리드가 돼 단발 가정이 깨지기 때문(실측). multi-round 은 별도(Option 2 — fast 미적용).
 
 > **왜 워처인가 (타이밍 당김)**: 종전엔 "전부 spawn **반환** 후 Lead 가 별도 턴에서 `cmux-rebalancing` 수동 호출"이라, ① `Agent` 툴 반환 지연 ② Lead 턴 생성 지연이 끼어 rebalance 가 **haiku 부팅·shell 실행 이후**로 한참 늦게 떴다(사용자 실측). rebalance 는 pane geometry 만 필요하므로, 워처를 spawn 과 동시에 띄우면 **panes 생성 직후(가장 이른 시점)** 정렬된다.
 >

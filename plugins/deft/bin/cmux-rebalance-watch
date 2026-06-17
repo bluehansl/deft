@@ -34,6 +34,7 @@ count_panes() { tmux list-panes -a -F '#{pane_id}' 2>/dev/null | wc -l | tr -d '
 # baseline: 외부 주입(스폰 전 값) 우선. 미전달 시에만 자기 시작 시점 값(부정확 — 폴백).
 BASE="${2:-}"
 EXPECTED="${3:-}"     # 목표 최종 pane 수(= BASE + spawn 수). 가장 정확한 종료 신호.
+FAST="${4:-}"        # "1" 이면 clean-grid 빠른 경로(cmux-rebalancing --fast). skill 이 BASE==1(Lead 단독)일 때만 전달.
 if [ -z "$BASE" ]; then BASE="$(count_panes)"; [ -z "$BASE" ] && BASE=0; HAVE_BASE=0; else HAVE_BASE=1; fi
 prev=-1; stable=0
 for i in $(seq 1 80); do          # 최대 ~24s (0.3s * 80)
@@ -55,6 +56,8 @@ for i in $(seq 1 80); do          # 최대 ~24s (0.3s * 80)
 done
 
 # settle 감지 실패(증가 미관측)해도 루프 종료 후 1회는 정렬한다 — 누락 방지
-command -v cmux-rebalancing >/dev/null 2>&1 && cmux-rebalancing >/dev/null 2>&1
+if command -v cmux-rebalancing >/dev/null 2>&1; then
+  if [ "$FAST" = "1" ]; then cmux-rebalancing --fast >/dev/null 2>&1; else cmux-rebalancing >/dev/null 2>&1; fi
+fi
 [ -n "$LEAD_REF" ] && "$CMUX" focus-pane --pane "$LEAD_REF" >/dev/null 2>&1
 exit 0
