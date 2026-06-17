@@ -4,6 +4,17 @@
 
 형식은 [Keep a Changelog](https://keepachangelog.com/ko/1.1.0/) 를 따르며, 버전 체계는 [Semantic Versioning](https://semver.org/lang/ko/) 을 사용합니다 (`claude-X.Y.Z` / `codex-X.Y.Z` 접두).
 
+## [claude-2.20.0] - 2026-06-17
+
+> Claude 측만 변경 (codex multi-check 은 인라인 프롬프트라 페르소나 파일 미참조 + close-surface 모델 → 무관, `codex-1.15.1` 유지).
+
+### Changed
+- **multi-check 리뷰어 per-report 종료 (idle 대기 제거 — 사용자 요청)** — 기존엔 리뷰어 3종이 보고 후 **idle 대기**하다가 Lead 가 취합을 마치면 **동시 일괄 종료**했다. 1-shot 리뷰어는 보고 후 추가 요청이 없으므로, **각 보고가 도착하는 즉시 그 리뷰어에게만 `shutdown_request` 발송** → 보고순으로 **pane 이 순차 종료**되도록 변경(Phase 4 에 per-report 종료 명문화, Phase 5 ① 은 누락분 보강으로 축소). 깔끔한 종료 메커니즘(`shutdown_response{approve:true}`)은 유지 — self-kill 아님. rebalance 는 깜빡임 방지를 위해 최종 1회(④)만. 리뷰어 페르소나 3종의 "idle 대기 가능" 문구도 "보고 직후 shutdown_request 에 즉시 응답" 으로 정리.
+
+### Fixed
+- **PERSONA_DIR 가 구버전 페르소나를 인라인하던 버그 (배포 시 종료 프로토콜 무력화)** — `ls -d <marketplace> <cache>/*/... | head -1` 이 **버전 정렬 없이** ls 알파벳 첫 항목을 집어 가장 오래된 캐시(`claude-2.0.0`, 종료 프로토콜 없음)를 선택 → 2.19.0 fix 가 배포 단계에서 무력화됨(실측: 캐시 21개 버전 누적 환경에서 발견). marketplace 우선 의도도 ls 정렬(`cache` < `marketplaces`)에 깨져 있었음. → **버전 독립 marketplace 경로를 명시적으로 먼저 체크, 없으면 캐시 `sort -V | tail -1`** 로 수정. (같은 SKILL 의 bin 헬퍼 설치는 이미 `sort -V|tail -1` 인데 PERSONA_DIR 만 누락된 일관성 결함.)
+- **agent-teams 페르소나 경로 버전 미핀 (동일 클래스)** — §4-3 task instruction 이 팀원에게 "agents/<role>.md, skill 경로는 plugin cache 하위" 로만 줘 버전이 핀되지 않아 구버전 페르소나를 읽을 여지. → 버전 독립 marketplace 우선 + 캐시 `sort -V|tail -1` 폴백으로 경로 해석 명문화.
+
 ## [claude-2.19.0] - 2026-06-17
 
 > Claude 측만 변경 (codex multi-check 은 `cmux close-surface` + 추적 surface 모델이라 본 건과 무관 → `codex-1.15.1` 유지, §1-2 독립 bump).

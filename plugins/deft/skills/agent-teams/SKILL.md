@@ -307,8 +307,11 @@ Agent(
 ```text
 [역할/페르소나]
 - 본인 역할: <role> (예: backendDev)
-- 페르소나: 본 skill 패키지의 agents/<role>.md 를 Read 하여 적용
-  (skill 경로는 plugin cache 하위 — Read 가능. 데이터는 절대 거기 쓰지 말 것)
+- 페르소나: 본 skill 패키지의 `agents/<role>.md` 를 Read 하여 적용.
+  경로는 **버전 독립 marketplace 우선, 없으면 최신 캐시**로 해석한다 (⚠️ 캐시 글롭은 `sort -V|tail -1` — `head -1` 은 ls 알파벳 정렬로 가장 오래된 버전을 집어 구버전 페르소나를 읽는다, 실측):
+  - 1순위: `~/.claude/plugins/marketplaces/bluehansl/plugins/deft/skills/agent-teams/agents/<role>.md`
+  - 2순위(캐시 전용 설치): `$(ls -d ~/.claude/plugins/cache/bluehansl/deft/*/skills/agent-teams/agents 2>/dev/null | sort -V | tail -1)/<role>.md`
+  - skill 경로는 Read 전용 — **데이터는 절대 거기 쓰지 말 것**.
 - 작업 특화 override: <work-id>/team.md 의 `## 팀원 기본 프롬프트 골격`에 본인 역할 항목 있으면 우선
 
 [필수 컨텍스트 — 작업 시작 전 Read]
