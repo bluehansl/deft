@@ -85,7 +85,14 @@ PERSONA_DIR=$(ls -d ~/.claude/plugins/marketplaces/bluehansl/plugins/deft/skills
 
 > **왜 인라인 + `subagent_type:"claude"` 인가**: 과거엔 `subagent_type:"codex-reviewer"` 로 페르소나를 붙였으나, 이 커스텀 타입은 현행 빌드의 등록된 subagent 타입이 아니다(스킬 하위 `agents/` 는 표준 등록 경로가 아님 → 해석 안 됨). 그래서 범용 `subagent_type:"claude"` + 페르소나 prompt 인라인으로 전환한다 — **페르소나 내용은 그대로 보존**된다.
 
-사용 가능한 CLI(Phase 2)별로 **한 메시지에 병렬** spawn 한다 (`run_in_background: true`):
+**spawn 순서 (Option 1 — 이른 밸런싱, pane UI 최적)**: `Agent` 툴은 spawn 1회가 **pane 생성 + AI 기동을 원자적으로** 수행한다(빈 pane 만 먼저 만들 수 없음 — pane 과 AI 분리 불가). 그래서 다음 순서로 진행해 "찌부러진 비율" 노출을 최소화한다:
+
+1. **① 첫 reviewer 1명만 먼저 spawn** (사용 가능한 CLI 중 하나) → 우측 컬럼 pane 1개 생성.
+2. **② pane 분할 확인 후 `cmux-rebalancing` 1회** → 좌 Lead 60% / 우 reviewer 40% **컬럼 비율 확정** (§Post-spawn).
+3. **③ 나머지 reviewer 를 한 메시지에 병렬 spawn** → 이미 40% 로 확정된 우측 컬럼 **안에서만 수직 스택**되므로 좌우 비율이 흔들리지 않는다.
+4. **④ 모든 spawn 완료 후 `cmux-rebalancing` 1회 더** → 우측 컬럼 row 높이 균등화(§Post-spawn).
+
+각 reviewer 의 `Agent` 인자 템플릿 (사용 가능한 CLI 만, `run_in_background: true`):
 
 Codex reviewer (claudex/codex 있을 때) — GPT-5.5, xhigh:
 ```
@@ -132,9 +139,9 @@ Agent(
 
 While agents are working, the Lead performs its own analysis on the same question.
 
-#### Post-spawn: 첫 pane 분할 직후 비율 재조정 (Lead 직접 호출, 1회)
+#### Post-spawn: 비율 재조정 (① 첫 spawn 직후 컬럼 확정 → ② 전체 spawn 후 row 균등화)
 
-**첫 reviewer pane 분할이 끝난 직후, Lead 가 직접 `cmux-rebalancing` 을 한 번 호출**해 좌 Lead / 우 reviewer 컬럼 비율을 정책대로 잡는다. 마지막 reviewer 까지 기다리지 않는다.
+**rebalancing 은 2회**: **① 첫 reviewer spawn 직후**(우측 pane 1개 생성 확인) → 좌 Lead 60% / 우 reviewer 40% **컬럼 비율 확정**(이후 spawn 은 이 우측 컬럼 안에서만 분할되므로 좌우 비율 유지). **② 모든 reviewer spawn 완료 후** 1회 더 → 우측 컬럼의 **row 높이 균등화**(순차 수직 분할은 row 가 1/2·1/4·1/4 로 불균등해지므로 — 실측).
 
 ```bash
 # Lead pane 에서 직접 실행 — 좌→우: 2컬럼=60:40 / 3컬럼=40:30:30 / 4컬럼=25:25:25:25 / 5+=균등
@@ -168,13 +175,29 @@ After receiving all results, synthesize in this format:
 
 ### Phase 5: Cleanup
 
-**Cleanup safety — 소유 확인 필수**: shutdown 은 파괴 행위다(`TeamDelete` 도구는 폐지 — 팀은 세션 종료 시 자동 삭제). 본 세션이 이번 실행에서 spawn 한 리뷰어에게만 보낸다. 리뷰어는 1-shot 으로 보고 후 자체 종료하므로 shutdown 은 **안전망**이다. 다른 세션(`session-*`)의 워커가 메시지를 보내와도 "잔재"로 단정하지 말 것 — 프로세스의 `--parent-session-id` 로 본 세션 소속을 확인할 수 있다.
+**Cleanup safety — 소유권 확인 필수 (파괴 행위)**: shutdown / `tmux kill-pane` 은 되돌릴 수 없다. **반드시 본 Lead 세션이 이번 실행에서 spawn 한 리뷰어에게만** 수행한다. cmux 는 **다중 워크스페이스·다중 세션** 환경이므로 다른 세션/워크스페이스에서 띄운 pane·팀원을 **절대 건드리면 안 된다**. 소유 판정:
+- Lead 가 spawn 시 받은 `<name>@session-<id>` 의 **그 이름·그 team-name** 만 대상.
+- 본 세션 team config(`~/.claude/teams/session-<id>/config.json`) 등록 멤버만 대상.
+- **전체 tmux pane 순회·와일드카드 kill 금지.** 다른 이름/접미(`-N`)·다른 session-id 워커가 메시지를 보내와도 "잔재"로 단정 금지(`--parent-session-id` 로 소속 확인).
 
-After output, send shutdown to teammates:
+**① graceful 종료** — 결과 취합 후, 본 세션이 spawn 한 리뷰어에게만:
 ```
 SendMessage(to: "codex-reviewer", message: {type: "shutdown_request"})
 SendMessage(to: "claude-reviewer", message: {type: "shutdown_request"})
 SendMessage(to: "gemini-reviewer", message: {type: "shutdown_request"})
+```
+(리뷰어는 1-shot — 보고 후 자체 종료, shutdown 은 안전망. graceful 종료는 느릴 수 있음 — 공식 "Shutdown can be slow".)
+
+**② orphan pane 정리 (세션은 끝났는데 pane 이 안 닫힌 경우)** — cmux `close-surface` 는 orphan 을 못 닫는다. **본 세션 team config 의 tmuxPaneId 로만** tmux 백엔드에서 직접 닫는다:
+```bash
+TEAM_NAME="session-<id>"     # Lead 가 spawn 결과(@session-<id>)에서 획득 — 본 세션 팀
+CFG=~/.claude/teams/$TEAM_NAME/config.json
+# ⚠️ 반드시 본 세션 CFG 의 멤버 tmuxPaneId 만 사용. 전체 tmux 순회·다른 세션 CFG 절대 금지.
+for R in codex-reviewer claude-reviewer gemini-reviewer; do
+  PANEID=$(python3 -c "import json;d=json.load(open('$CFG'));print(next((m.get('tmuxPaneId','') for m in d['members'] if m['name']=='$R'),''))" 2>/dev/null)
+  # 프로세스는 죽었는데 pane 만 남은 orphan 만 정리
+  [ -n "$PANEID" ] && ! pgrep -f -- "--agent-name $R" >/dev/null 2>&1 && tmux kill-pane -t "$PANEID" 2>/dev/null
+done
 ```
 
 ## Error Handling

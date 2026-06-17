@@ -315,29 +315,30 @@ LEAD_SURFACE=$(cmux identify 2>/dev/null | jq -r '.caller.surface_ref' 2>/dev/nu
 
 Lead 도 레지스트리에 등록한다 — 워커가 post 하면 **Lead pane(Codex TUI 입력창)에도 노크가 주입**되어 Lead 턴이 자동 발동된다 (폴링 불필요).
 
-**(2) pane 분할**
+**(2) pane 분할 — Option 2 (전체 pane 먼저 분할 → 밸런싱 → 그다음 CLI 부팅)**
 
-첫 워커: 우측 분할
+multi-round 워커는 `cmux new-split`(빈 pane) + pane 안 CLI 실행 모델이라 **pane 생성과 CLI 부팅을 분리**할 수 있다. 그래서 **모든 워커 pane 을 먼저 분할**(빠름) → 밸런싱(부팅 전에 완료) → 그다음 (3.5)~(5)에서 CLI 부팅·등록한다. "찌부러진 비율" 노출이 최소화된다.
+
+첫 워커는 우측 분할(새 컬럼), 이후 워커는 직전 워커 pane 기준 아래 분할 — **워커 수만큼 반복해 W1..Wn_SURFACE 를 모두 확보**:
 ```bash
-SPLIT=$(cmux new-split right --focus false 2>&1)
+SPLIT=$(cmux new-split right --focus false 2>&1)                       # W1 (우측 새 컬럼)
 W1_SURFACE=$(printf '%s' "$SPLIT" | grep -oE 'surface:[0-9]+' | head -1)
-```
-
-이후 워커: 아래 분할 (직전 워커 pane 기준)
-```bash
-SPLIT=$(cmux new-split down --pane "<prev_pane>" --focus false 2>&1)
+SPLIT=$(cmux new-split down --pane "<W1_pane>" --focus false 2>&1)     # W2 (W1 아래)
 W2_SURFACE=$(printf '%s' "$SPLIT" | grep -oE 'surface:[0-9]+' | head -1)
+# ... Wn 까지 반복 (직전 워커 pane 아래로). 이 단계에서는 CLI 를 아직 띄우지 않는다(빈 pane 만).
 ```
 
-**(3) 첫 분할 직후 비율 재조정 (1회)**
+**(3) 전체 분할 확인 후 비율 재조정 (컬럼 + row 한 번에, 1회)**
 
 ```bash
-# Lead pane 에서 직접 실행 — 좌→우: 2컬럼=60:40 / 3컬럼=40:30:30 / 4컬럼=25:25:25:25 / 5+=균등
+# 모든 워커 pane 분할이 끝난 뒤 1회 — 좌 Lead 60% / 우 워커 컬럼 40% + 우측 row 균등화 동시 정렬
 command -v cmux-rebalancing >/dev/null 2>&1 && cmux-rebalancing
+cmux focus-pane --pane "$(cmux identify | jq -r .caller.pane_ref)" 2>/dev/null   # Lead focus 복원
 ```
 
-> 두 번째 이후 워커는 같은 우측 컬럼 안에서 하단 수직 분할이므로 **좌우 비율은** 유지 — 단 순차 down 분할은 **row 높이가 1/2·1/4·1/4 로 불균등**해진다 (실측). 워커가 2명 이상이면 **모든 분할(재spawn 포함) 완료 후 `cmux-rebalancing` 을 1회 더** 호출해 row 를 균등화하고, `cmux focus-pane --pane "$(cmux identify | jq -r .caller.pane_ref)"` 로 Lead focus 를 복원한다.
-> ⚠️ 첫 호출 누락 시 Lead 가 2:8 처럼 축소되어 가독성 저하.
+> **Option 2**: 빈 pane 들을 먼저 다 만든 뒤 한 번에 밸런싱하므로 컬럼·row 가 **동시 정렬**되고, 느린 CLI 부팅 전에 레이아웃이 안정된다. (Agent-tool 기반 multi-check/agent-teams 는 pane·AI 가 원자 결합이라 빈 pane 선분할이 불가 → Option 1. multi-round 는 분리 가능해 Option 2 적용.) 재spawn(죽은 워커 교체)으로 pane 이 바뀌면 그 직후 다시 호출.
+
+**(3.5)~(5) — 각 워커 pane 마다 반복** (pane 분할·밸런싱은 (2)~(3)에서 전체 일괄 완료됨. 이제 각 W*_SURFACE 에 대해 readiness→부팅→등록을 수행)
 
 **(3.5) pane 쉘 readiness 확인 (send 유실 가드 — 필수)**
 
@@ -545,10 +546,12 @@ Lead 의 라운드 동작:
 
 회의록 전문 확인: `"$BUS_BIN" history --session "$SESSION_DIR"` (원본 audit 은 board.jsonl, 가독 파생물은 transcript.md, Lead 종합은 summary.md — 역할 분리)
 
-#### 5-B. 정리 (워커 + pane)
+#### 5-B. 정리 (워커 + pane) — 소유권 안전 (파괴 행위)
+
+**소유권 (필수)**: cmux 는 **다중 워크스페이스·다중 세션** 환경이다. **본 회의가 (2)에서 분할해 추적한 `W*_SURFACE`(워커 pane)만** 닫는다. 다른 워크스페이스/세션의 pane·`surface:N` 을 추측으로 닫지 말 것 — **전체 surface 순회·와일드카드 close 금지**.
 
 - 종료 알림 게시: `"$BUS_BIN" post --session "$SESSION_DIR" --from lead --to all --type signal --content "VERDICT: 회의 종료. 참여 감사합니다."` (워커들이 마지막 노크로 종료 인지)
-- **회의 종료 후 워커 pane 을 닫는다** (`cmux close-surface --surface surface:N`) — 회의록은 board.jsonl·transcript.md 로 보존되므로 관찰 손실 없음. 닫은 뒤 `cmux-rebalancing` 1회로 레이아웃 복원.
+- **본 회의 워커 pane(추적한 `W*_SURFACE`)만 닫는다**: `cmux close-surface --surface "$W1_SURFACE"` … (워커 수만큼). 회의록은 board.jsonl·transcript.md 로 보존되므로 관찰 손실 없음. close-surface 가 못 닫는 orphan 이면 그 워커 pane 의 tmux id 로만 `tmux kill-pane -t <id>` (전체 tmux 순회·다른 세션 절대 금지). 닫은 뒤 `cmux-rebalancing` 1회로 복원.
 - 버스 MCP 서버 프로세스는 각 워커 TUI 의 자식 — pane 종료 시 함께 정리됨. 잔존 확인: `pgrep -f "multi-round-bus mcp"`
 - 3-C 경로의 conversation 은 별도 종료 명령 없음 (다음 사용 시 새 conversationId)
 

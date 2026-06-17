@@ -4,6 +4,18 @@
 
 형식은 [Keep a Changelog](https://keepachangelog.com/ko/1.1.0/) 를 따르며, 버전 체계는 [Semantic Versioning](https://semver.org/lang/ko/) 을 사용합니다 (`claude-X.Y.Z` / `codex-X.Y.Z` 접두).
 
+## [claude-2.18.0] / [codex-1.15.0] - 2026-06-17
+
+### Changed
+- **pane 분할·밸런싱 타이밍 (UI 최적화 — 사용자 실측 피드백)** — spawn 시 "찌부러진 비율" 노출 시간을 최소화하도록 스킬별 spawn/밸런싱 순서를 명문화:
+  - **Agent-tool 기반(multi-check / agent-teams)**: `Agent` spawn 은 pane 생성 + AI 기동이 **원자 결합**이라 빈 pane 선분할이 불가 → **Option 1**(① 첫 1명 spawn → ② `cmux-rebalancing` 컬럼 60:40 확정 → ③ 나머지 spawn(확정 컬럼 안 스택) → ④ row 균등화).
+  - **cmux-split 기반(multi-round / codex multi-check)**: pane·CLI 분리 가능 → **Option 2**(전체 pane 먼저 분할 → 밸런싱(컬럼+row 동시) → 그다음 CLI 부팅). 느린 CLI 부팅 전에 레이아웃 안정.
+  - rebalancing 타이밍 규칙을 multi-check 뿐 아니라 **전 스킬 공통** 적용(claude multi-check/agent-teams/multi-round + codex multi-round/multi-check).
+
+### Added
+- **종료·정리 소유권 안전 (전 스킬, 파괴 행위 가드)** — shutdown / `tmux kill-pane` / `close-surface` 는 **본 Lead 세션이 spawn 한 팀원/워커만** 대상으로 명문화. cmux **다중 워크스페이스·다중 세션** 환경에서 다른 세션/워크스페이스 pane 을 절대 건드리지 않도록: 본 세션 team config 의 tmuxPaneId · 본 실행이 추적한 `W*_SURFACE`/`$R*` 만 사용, **전체 tmux/surface 순회·와일드카드 kill 금지**, `--parent-session-id` 로 소속 확인.
+- **orphan pane 정리법 (실측 확인)** — graceful shutdown 이 닫지 못한 잔여 pane(세션 종료·pane 잔존)은 cmux `close-surface` 로 안 닫힌다 → **본 세션 소속 pane 의 tmuxPaneId 로만** `tmux kill-pane -t <id>` 직접 정리. (force-kill 이 pane 을 orphan 으로 남기는 문제 + graceful shutdown 의 느린 종료 대응.)
+
 ## [claude-2.17.0] / [codex-1.14.3] - 2026-06-16
 
 ### Changed
