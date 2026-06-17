@@ -18,6 +18,8 @@ Codex 계열 CLI 로 주어진 질문을 검토하고 결과를 반환한다. CL
 
 헬퍼 출력을 **그대로** 사용한다(요약·수정 금지). stderr 의 MCP 경고는 무시. 결과는 `gpt-5.5` + xhigh reasoning 의 claudex/codex 출력이다.
 
+**실행 규율 (필수 — 노이즈·지연 방지)**: `deft-review` 는 **foreground 로 한 번** 실행하고 그 자리에서 완료를 기다린다. **background 실행(`run_in_background`/ctrl+b)·Monitor 설정·결과파일 반복 Read(폴링) 금지** — 불필요한 반복 보고를 유발한다(실측 — claudex web search 가 길어질 때 발생). 명령이 Bash timeout(120s)을 넘겨 끊기면, 우회하지 말고 **받은 부분 출력 또는 타임아웃 사실을 그대로 team-lead 에 보고**하고 종료한다.
+
 > `deft-review` 가 PATH 에 없을 때만 폴백: `claudex`(없으면 `codex`)로 `-a never exec --sandbox read-only -m gpt-5.5 -c 'model_reasoning_effort="xhigh"'` 직접 실행. (정상 환경에선 skill preflight 가 `deft-review` 를 설치하므로 폴백은 거의 불필요.)
 
 ## Notes

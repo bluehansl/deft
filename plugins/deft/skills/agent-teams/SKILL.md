@@ -41,6 +41,11 @@ if ! command -v cmux-rebalancing >/dev/null 2>&1; then
     echo "WARN: cmux-rebalancing 미설치 + plugin 동봉본 없음 — pane 비율 자동 조정 비활성"
   fi
 fi
+# cmux-rebalance-watch 헬퍼 설치 — spawn 과 함께 백그라운드로 띄워 panes settle 즉시 rebalance(타이밍 당김)
+if ! command -v cmux-rebalance-watch >/dev/null 2>&1; then
+  SRC=$(ls -1 ~/.claude/plugins/cache/bluehansl/deft/*/bin/cmux-rebalance-watch 2>/dev/null | sort -V | tail -1)
+  [ -n "$SRC" ] && mkdir -p ~/.local/bin && cp "$SRC" ~/.local/bin/ && chmod +x ~/.local/bin/cmux-rebalance-watch
+fi
 
 # 세션 바이너리 keepalive — 오래된 세션에서 자동 업데이트로 세션 버전 바이너리가 삭제되면
 # teammate spawn 이 "env: .../versions/<ver>: No such file or directory" 로 실패. 보존·복원으로 예방.
@@ -134,20 +139,23 @@ fi
 
 사용자는 Claude Code를 `cmux claude-teams`로 실행한다. 이 환경에서 `Agent` spawn은 **cmux pane 분할까지 자동 처리**된다. Lead가 별도 분할 명령을 호출할 필요 없다. (cmux 외부 실행 시는 §0-2 fallback)
 
-### 2-3. pane 비율 재조정 — 전체 spawn 후 단일 rebalance
+### 2-3. pane 비율 재조정 — spawn 과 함께 rebalance 워처 발사
 
-`Agent` 툴은 spawn 1회가 **pane 생성 + 팀원 기동을 원자적으로** 수행하고, cmux claude-teams 가 pane 을 **자동 배치**한다(스킬이 분할 제어 불가 — multi-round 처럼 `cmux new-split` 을 직접 호출하지 못함). 그리고 **각 spawn 마다 Lead pane 이 다시 찌부러진다**(cmux 가 Lead 기준 재분할 — 실측). 따라서 중간 rebalance 는 다음 spawn 에 덮어써져 무효 → **모든 팀원을 spawn 한 뒤 1회만 rebalance** 한다. rebalancing 은 pane geometry 만 정렬하는 **독립·비동기** 작업이라 팀원 작업과 무관하게 호출할 수 있다:
+`Agent` 툴은 spawn 1회가 **pane 생성 + 팀원 기동을 원자적으로** 수행하고, cmux claude-teams 가 pane 을 **자동 배치**한다(스킬이 분할 제어 불가 — multi-round 처럼 `cmux new-split` 을 직접 호출하지 못함). 그리고 **각 spawn 마다 Lead pane 이 다시 찌부러진다**(cmux 가 Lead 기준 재분할 — 실측). rebalancing 은 pane geometry 만 정렬하는 **독립·비동기** 작업이라 팀원 작업과 무관하게 호출할 수 있다 → **spawn 묶음과 같은 메시지에서 `cmux-rebalance-watch` 를 백그라운드로 띄워, panes 가 다 생겨 settle 되는 즉시 1회 rebalance** 시킨다.
 
-1. **팀원 전부 spawn** (병렬 가능하면 한 메시지에).
-2. **모든 spawn 이 반환된 뒤(=pane 다 생성됨) `cmux-rebalancing` 1회** → 컬럼 60:40 + 우측 row 균등화가 함께 정렬됨.
+1. spawn 직전 Lead pane ref 캡처: `LEAD_REF=$(cmux identify | jq -r .caller.pane_ref)`.
+2. **팀원 전부 + rebalance 워처를 한 메시지에 함께 발사** — 팀원은 `Agent`(병렬), 워처는 `cmux-rebalance-watch "$LEAD_REF"` 를 **`run_in_background: true` Bash** 로. 워처가 panes settle 즉시 `cmux-rebalancing`(컬럼 60:40 + row 균등) + Lead focus 복원을 1회 실행한다.
 
-```bash
-# Lead pane 에서 직접 실행 — 좌→우: 2컬럼=60:40 / 3컬럼=40:30:30 / 4컬럼=25:25:25:25 / 5+=균등
-command -v cmux-rebalancing >/dev/null 2>&1 && cmux-rebalancing
-# 사용자 명시 비율 (예시): cmux-rebalancing 7:3
+```text
+# spawn 메시지에 팀원 Agent 들과 함께 포함 (run_in_background)
+Bash(run_in_background: true): cmux-rebalance-watch "$LEAD_REF"
 ```
 
-⚠️ **중간(첫 spawn 후) rebalance 는 무의미** — Agent-tool spawn 은 매번 Lead pane 을 재차 찌부러뜨려 다음 spawn 이 이전 rebalance 를 덮어쓴다(실측: 60%→26%→복원). 그래서 "전부 spawn 후 1회"가 유일하게 유효하다. 재spawn(죽은 팀원 교체)으로 pane 이 바뀌면 그 직후 다시 1회. cmux 외부 실행 (§0-2 fallback) 시 자동 skip.
+> **왜 워처인가 (타이밍 당김)**: 종전엔 "전부 spawn **반환** 후 Lead 가 별도 턴에서 `cmux-rebalancing` 수동 호출"이라, ① `Agent` 툴 반환 지연 ② Lead 턴 생성 지연이 끼어 rebalance 가 **팀원 부팅·작업 시작 이후**로 한참 늦게 떴다(사용자 실측). 워처를 spawn 과 동시에 띄우면 **panes 생성 직후(가장 이른 시점)** 정렬된다.
+>
+> ⚠️ **중간(첫 spawn 후) 호출이 무의미한 건 동일** — Agent-tool spawn 은 매번 Lead pane 을 재차 찌부러뜨린다(실측: 60%→26%→복원). 워처는 "증가가 멈춰 settle" 될 때까지 기다리므로 모든 spawn 이 끝난 시점을 자동으로 잡는다. 재spawn(죽은 팀원 교체)으로 pane 이 바뀌면 워처를 다시 발사.
+>
+> **폴백(워처 미설치 / cmux 외부 §0-2)**: 종전처럼 모든 spawn 반환 후 `cmux-rebalancing` 1회 수동 호출(좌→우: 2컬럼=60:40 / 3컬럼=40:30:30 / 4컬럼=25:25:25:25 / 5+=균등. 사용자 명시 비율: `cmux-rebalancing 7:3`) + `cmux focus-pane --pane "$LEAD_REF"`. cmux 외부 실행 시 자동 skip.
 
 ---
 

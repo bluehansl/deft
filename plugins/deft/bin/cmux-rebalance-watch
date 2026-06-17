@@ -1,0 +1,41 @@
+#!/usr/bin/env bash
+# cmux-rebalance-watch — Agent-tool spawn 직후 rebalance 타이밍을 "panes 생성 시점"으로 당기는 워처.
+#
+# 배경: multi-check/agent-teams 는 Agent 툴로 팀원을 spawn 한다. 종전엔 "전부 spawn 반환 후
+#   Lead 가 cmux-rebalancing 을 별도 호출"했는데, 그 사이 ① Agent-tool 반환 지연 ② Lead 턴 생성
+#   지연이 끼어 rebalance 가 "haiku 부팅·shell 실행 이후"로 한참 늦게 떴다(사용자 실측).
+#   rebalance 는 pane geometry 만 필요하므로, 이 워처를 **spawn 과 같은 메시지에서 run_in_background 로**
+#   띄우면 panes 가 생겨 settle 되는 즉시(=가장 이른 시점) rebalance + Lead focus 복원이 실행된다.
+#
+# 사용: cmux-rebalance-watch [LEAD_PANE_REF]
+#   - LEAD_PANE_REF: focus 복원 대상(예 pane:5). 생략 시 시작 시점 cmux identify 로 자동 감지.
+#   - 보통 skill 이 spawn 묶음과 함께 run_in_background 로 발사한다.
+#
+# 동작: tmux list-panes 로 pane 수를 폴링 → 시작값보다 늘고(=새 pane 생성) 연속 안정되면 rebalance.
+#   증가가 안 보여도 ~24s 상한 후 1회 rebalance(안전). #{pane_dead}/#{pane_pid} 미지원 shim 고려해
+#   pane 수(존재)만 사용.
+set -u
+
+CMUX="${CMUX_BUNDLED_CLI_PATH:-cmux}"
+command -v "$CMUX" >/dev/null 2>&1 || CMUX="cmux"
+
+LEAD_REF="${1:-}"
+[ -z "$LEAD_REF" ] && LEAD_REF="$("$CMUX" identify 2>/dev/null | jq -r '.caller.pane_ref // empty' 2>/dev/null)"
+
+count_panes() { tmux list-panes -a -F '#{pane_id}' 2>/dev/null | wc -l | tr -d ' '; }
+
+init="$(count_panes)"; [ -z "$init" ] && init=0
+prev=-1; stable=0
+for _ in $(seq 1 80); do          # 최대 ~24s (0.3s * 80)
+  n="$(count_panes)"; [ -z "$n" ] && n=0
+  if [ "$n" = "$prev" ]; then stable=$((stable+1)); else stable=0; fi
+  # 새 pane 이 생겨 시작값보다 늘고(>init) 연속 3회(~0.9s) 안정되면 = 전부 생성 완료 → 발사
+  if [ "$n" -gt "$init" ] && [ "$stable" -ge 3 ]; then break; fi
+  prev="$n"
+  sleep 0.3
+done
+
+# settle 감지 실패(증가 미관측)해도 루프 종료 후 1회는 정렬한다 — 누락 방지
+command -v cmux-rebalancing >/dev/null 2>&1 && cmux-rebalancing >/dev/null 2>&1
+[ -n "$LEAD_REF" ] && "$CMUX" focus-pane --pane "$LEAD_REF" >/dev/null 2>&1
+exit 0

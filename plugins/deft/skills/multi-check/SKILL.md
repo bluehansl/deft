@@ -20,6 +20,7 @@ Collects and multi-checks answers from Codex CLI, Claude CLI, and Gemini CLI on 
    - Question body
    - Gathered context
    - Instruction to respond in the user's language
+   - **time-box 지침 (필수 — 무한 검색·지연 방지)**: 프롬프트 말미에 "multi-check 은 **빠른 교차검증** — 신속히 진행하고, 핵심 신뢰 출처 **1~2개**로 결론을 내라. 과도한 다중 web search(수십 회)는 하지 말 것" 를 덧붙인다. claudex/codex 의 web search 가 100+ 쿼리로 수 분간 늘어지면 haiku 래퍼가 background+Monitor 폴링으로 우회해 노이즈·지연을 유발한다(실측). 심층 사실검증이 필요하면 multi-check 이 아니라 `deep-research` 스킬이 적합하다.
 
 ### Phase 2: CLI Availability Check
 
@@ -39,6 +40,11 @@ if ! command -v cmux-rebalancing >/dev/null 2>&1; then
     mkdir -p ~/.local/bin && cp "$SRC" ~/.local/bin/cmux-rebalancing && chmod +x ~/.local/bin/cmux-rebalancing
     echo "INFO: cmux-rebalancing 자동 설치 완료 (~/.local/bin/)"
   fi
+fi
+# cmux-rebalance-watch 헬퍼 설치 — spawn 과 함께 백그라운드로 띄워 panes settle 즉시 rebalance(타이밍 당김)
+if ! command -v cmux-rebalance-watch >/dev/null 2>&1; then
+  SRC=$(ls -1 ~/.claude/plugins/cache/bluehansl/deft/*/bin/cmux-rebalance-watch 2>/dev/null | sort -V | tail -1)
+  [ -n "$SRC" ] && mkdir -p ~/.local/bin && cp "$SRC" ~/.local/bin/ && chmod +x ~/.local/bin/cmux-rebalance-watch
 fi
 
 # 세션 바이너리 keepalive — 오래된 세션에서 자동 업데이트로 세션 버전 바이너리가 삭제되면
@@ -94,10 +100,10 @@ PERSONA_DIR=~/.claude/plugins/marketplaces/bluehansl/plugins/deft/skills/multi-c
 
 > **왜 인라인 + `subagent_type:"claude"` 인가**: 과거엔 `subagent_type:"codex-reviewer"` 로 페르소나를 붙였으나, 이 커스텀 타입은 현행 빌드의 등록된 subagent 타입이 아니다(스킬 하위 `agents/` 는 표준 등록 경로가 아님 → 해석 안 됨). 그래서 범용 `subagent_type:"claude"` + 페르소나 prompt 인라인으로 전환한다 — **페르소나 내용은 그대로 보존**된다.
 
-**spawn 순서 (Agent-tool — 전부 spawn 후 단일 rebalance)**: `Agent` 툴은 spawn 1회가 **pane 생성 + AI 기동을 원자적으로** 수행하고, cmux claude-teams 가 pane 배치를 **자동 처리**한다(스킬이 분할 방향·대상을 제어할 수 없음 — multi-round 와 달리 `cmux new-split` 을 직접 쓰지 못함). 그리고 **각 spawn 마다 Lead pane 이 다시 찌부러진다**(cmux 가 Lead 기준으로 재분할 — 실측). 따라서 중간 rebalance 는 다음 spawn 에 덮어써져 무효 → **모든 reviewer 를 spawn 한 뒤 1회만 rebalance** 한다. rebalancing 은 pane geometry 만 정렬하는 **독립·비동기** 작업이라 reviewer 의 headless CLI 작업과 무관하게 호출할 수 있다(찌부러진 상태는 spawn 동안 잠깐 보였다가 1회 rebalance 로 정리됨).
+**spawn 순서 (Agent-tool — spawn 과 함께 rebalance 워처 발사)**: `Agent` 툴은 spawn 1회가 **pane 생성 + AI 기동을 원자적으로** 수행하고, cmux claude-teams 가 pane 배치를 **자동 처리**한다(스킬이 분할 방향·대상을 제어할 수 없음 — multi-round 와 달리 `cmux new-split` 을 직접 쓰지 못함). 그리고 **각 spawn 마다 Lead pane 이 다시 찌부러진다**(cmux 가 Lead 기준으로 재분할 — 실측). rebalancing 은 pane geometry 만 정렬하는 **독립·비동기** 작업이라 reviewer 의 headless CLI 작업과 무관하게 호출할 수 있다 → **spawn 묶음과 같은 메시지에서 `cmux-rebalance-watch` 를 백그라운드로 띄워, panes 가 다 생겨 settle 되는 즉시 1회 rebalance** 시킨다(§Post-spawn).
 
-1. **사용 가능한 reviewer 전부를 한 메시지에 병렬 spawn**.
-2. **모든 spawn 이 반환된 뒤(=pane 다 생성됨) `cmux-rebalancing` 1회** → 컬럼 60:40 + 우측 row 균등화가 함께 정렬됨(§Post-spawn).
+1. spawn 직전 Lead pane ref 캡처(focus 복원용): `LEAD_REF=$(cmux identify | jq -r .caller.pane_ref)`.
+2. **사용 가능한 reviewer 전부 + rebalance 워처를 한 메시지에 함께 발사** — reviewer 는 `Agent`(병렬), 워처는 `cmux-rebalance-watch "$LEAD_REF"` 를 **`run_in_background: true` Bash** 로 같은 메시지에. 워처가 panes 가 생겨 **settle 되는 즉시** `cmux-rebalancing`(컬럼 60:40 + row 균등) + Lead focus 복원을 1회 실행한다(§Post-spawn).
 
 각 reviewer 의 `Agent` 인자 템플릿 (사용 가능한 CLI 만, `run_in_background: true`):
 
@@ -146,17 +152,22 @@ Agent(
 
 While agents are working, the Lead performs its own analysis on the same question.
 
-#### Post-spawn: 비율 재조정 (전체 spawn 후 단일 1회)
+#### Post-spawn: 비율 재조정 — 워처가 panes settle 즉시 자동 실행
 
-**rebalancing 은 1회** — 모든 reviewer spawn 이 반환된 뒤(=pane 다 생성됨) Lead 가 `cmux-rebalancing` 을 1회 호출하면 컬럼(60:40)과 우측 row 가 함께 정렬된다. ⚠️ **중간(첫 spawn 후) 호출은 무의미** — Agent-tool spawn 은 매번 Lead pane 을 재차 찌부러뜨려 다음 spawn 이 이전 rebalance 를 덮어쓴다(실측: 60%→26%→복원). 그래서 "전부 spawn 후 1회"가 유일하게 유효한 시점이다. 재spawn(죽은 reviewer 교체)으로 pane 이 바뀌면 그 직후 다시 1회.
+**rebalancing 은 워처(`cmux-rebalance-watch`)에 위임한다 — spawn 묶음과 같은 메시지에서 백그라운드로 발사**한다. 워처는 `tmux list-panes` 로 pane 수를 폴링해 **새 pane 들이 생겨 안정(settle)되는 즉시** `cmux-rebalancing`(컬럼 60:40 + row 균등) + Lead focus 복원을 1회 실행한다.
 
-```bash
-# Lead pane 에서 직접 실행 — 좌→우: 2컬럼=60:40 / 3컬럼=40:30:30 / 4컬럼=25:25:25:25 / 5+=균등
-command -v cmux-rebalancing >/dev/null 2>&1 && cmux-rebalancing
-# 사용자 명시 비율 (예시): cmux-rebalancing 7:3
+```text
+# spawn 메시지에 reviewer Agent 들과 함께 포함 (run_in_background)
+Bash(run_in_background: true): cmux-rebalance-watch "$LEAD_REF"
 ```
 
-> **호출 규칙**: spawn(또는 재spawn)으로 pane 구성이 바뀔 때마다 그 spawn 묶음 직후 1회 호출한다 — 첫 spawn 만이 아니다. reviewer 가 죽어 재spawn 한 경우 새 pane 이 생기므로 반드시 다시 호출 (실측: 재spawn 후 누락 시 비율·row 불균등 잔존).
+> **왜 워처인가 (타이밍 당김)**: 종전엔 "전부 spawn **반환** 후 Lead 가 별도 턴에서 `cmux-rebalancing` 수동 호출"이라, ① `Agent` 툴 반환 지연 ② Lead 턴 생성 지연이 끼어 rebalance 가 **haiku 부팅·shell 실행 이후**로 한참 늦게 떴다(사용자 실측). rebalance 는 pane geometry 만 필요하므로, 워처를 spawn 과 동시에 띄우면 **panes 생성 직후(가장 이른 시점)** 정렬된다.
+>
+> ⚠️ **중간(첫 spawn 후) 호출이 무의미한 건 동일** — Agent-tool spawn 은 매번 Lead pane 을 재차 찌부러뜨린다(실측: 60%→26%→복원). 워처는 "증가가 멈춰 settle" 될 때까지 기다리므로 모든 spawn 이 끝난 시점을 자동으로 잡는다.
+>
+> **재spawn(죽은 reviewer 교체)**: pane 구성이 바뀌므로 워처를 다시 한 번 발사한다.
+>
+> **폴백(워처 미설치)**: 종전처럼 모든 spawn 반환 후 `cmux-rebalancing` 1회 수동 호출 + `cmux focus-pane --pane "$LEAD_REF"`. (좌→우: 2컬럼=60:40 / 3컬럼=40:30:30 / 4컬럼=25:25:25:25 / 5+=균등. 사용자 명시 비율: `cmux-rebalancing 7:3`)
 
 ### Phase 4: 보고 수신(per-report 종료) + Synthesis
 

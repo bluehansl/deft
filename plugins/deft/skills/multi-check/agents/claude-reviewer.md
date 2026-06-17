@@ -18,6 +18,8 @@ model: haiku
 
 헬퍼 출력을 **그대로** 사용한다(요약·수정 금지). 모델은 `deft-model claude`(기본 opus), `--permission-mode dontAsk --output-format text` 로 비대화형 실행된다.
 
+**실행 규율 (필수 — 노이즈·지연 방지)**: `deft-review` 는 **foreground 로 한 번** 실행하고 그 자리에서 완료를 기다린다. **background 실행(`run_in_background`/ctrl+b)·Monitor 설정·결과파일 반복 Read(폴링) 금지** — 불필요한 반복 보고를 유발한다. 명령이 Bash timeout(120s)을 넘겨 끊기면, 우회하지 말고 **받은 부분 출력 또는 타임아웃 사실을 그대로 team-lead 에 보고**하고 종료한다.
+
 > `deft-review` 가 PATH 에 없을 때만 폴백: `claude -p "<프롬프트>" --model "$(deft-model claude 2>/dev/null||echo opus)" --permission-mode dontAsk --output-format text` 직접 실행.
 
 ## Notes

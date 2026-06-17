@@ -4,6 +4,18 @@
 
 형식은 [Keep a Changelog](https://keepachangelog.com/ko/1.1.0/) 를 따르며, 버전 체계는 [Semantic Versioning](https://semver.org/lang/ko/) 을 사용합니다 (`claude-X.Y.Z` / `codex-X.Y.Z` 접두).
 
+## [claude-2.22.0] - 2026-06-17
+
+> Claude 측만 변경 (codex multi-check 은 cmux-split Option 2 로 rebalance 타이밍이 이미 최적 + 페르소나 미참조 → `codex-1.15.1` 유지).
+
+### Added
+- **rebalance 타이밍 워처 `bin/cmux-rebalance-watch` 신설 (사용자 실측 피드백)** — Agent-tool spawn(multi-check/agent-teams)에서 rebalance 가 "haiku 부팅·shell 실행 **이후**"로 한참 늦게 뜨던 문제. 원인: 종전엔 "전부 spawn **반환** 후 Lead 가 별도 턴에서 `cmux-rebalancing` 수동 호출" → ① Agent-tool 반환 지연 ② Lead 턴 생성 지연이 누적. rebalance 는 pane geometry 만 필요하므로, **spawn 묶음과 같은 메시지에서 워처를 `run_in_background` 로 띄워 `tmux list-panes` 폴링 → panes 가 생겨 settle 되는 즉시** `cmux-rebalancing` + Lead focus 복원을 발사하도록 변경. settle 감지(증가 후 안정)라 baseline 불필요, 미감지 시 ~24s 상한 후 1회 실행(누락 방지). multi-check Phase 3 + agent-teams §2-3 + 양 skill preflight 자동설치 반영.
+
+### Changed
+- **codex 리뷰어 비정상 모니터링 차단 (사용자 실측)** — `deft-review codex`(claudex web search)가 **115+ 쿼리로 수 분간** 늘어져 Bash timeout(120s)을 초과하면, haiku 래퍼가 **background 실행 + Monitor + 결과파일 반복 Read(폴링)** 로 우회해 "Monitor event/계속 진행 중/파일 확인" 반복 노이즈를 냈다(gemini·claude 리뷰어는 빨라서 미발생 — 속도 비대칭이 원인). 두 갈래로 차단:
+  - **페르소나 3종 §실행 규율**: `deft-review` 는 **foreground 1회 실행**, background/Monitor/파일폴링 **금지**, 타임아웃 시 우회 말고 부분출력·타임아웃 사실을 그대로 보고.
+  - **multi-check Phase 1 프롬프트 time-box**: "빠른 교차검증 — 신속히, 핵심 출처 1~2개로 결론, 과도한 web search 자제" 를 프롬프트 말미에 명시(claudex/codex 무한검색 방지). 심층 사실검증은 `deep-research` 스킬 권장. → codex 8분 병목도 함께 완화.
+
 ## [claude-2.21.0] - 2026-06-17
 
 > Claude 측만 변경 (codex multi-check 은 페르소나 미참조라 무관 → `codex-1.15.1` 유지).
