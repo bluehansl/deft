@@ -43,6 +43,7 @@ EOF
 # (b) bin 스크립트 문법
 node --check plugins/deft/bin/multi-round-bus && echo "bus syntax OK"
 bash -n plugins/deft/bin/claude-bin-keepalive && echo "keepalive syntax OK"
+bash -n plugins/deft/bin/deft-log && echo "deft-log syntax OK"
 python3 -m json.tool plugins/deft/hooks/hooks.json >/dev/null && echo "hooks.json OK"
 
 # (c) bin 동기화 (Claude ↔ Codex 측 동일해야)
@@ -144,6 +145,7 @@ node "$BUS" history --session "$SESSION_DIR"; rm -rf "$SESSION_DIR"
 - 구성: **기본 워커 3명** — 페르소나 자동 도출(명확 주제) 또는 후보 질문(애매 주제 — 양쪽 경로 모두 한 번씩 테스트), **엔진 mix** (claudex + 진짜 codex + claude — 3엔진 전부 거치기. claude 워커는 skip-permissions 경로 확인)
 - 의도적 레이스 1회: 워커가 R1 처리 중일 때 추가 요청 게시 → 미응답 큐 회복 확인
 - 체크: reply_to 전 응답 / 디바운스(연속 post 시 skip) / 워치독 RESPONDED / inject 발췌 / 비수신 워커 자발 발언(3인부터) / Phase 5 transcript 자동 생성 / **pane 자동 close + rebalancing + focus 복원**
+- **관찰성(2.24.0)**: 세션 시작 시 `orchestration.log` 생성 + `tail -f` 안내 / 단계마다 STEP·WAIT·DONE 기록 / **readiness 타임아웃 시 BLOCKED + 부팅 중단(fail-fast)** — 미기동 pane 에 send 를 흘리지 않고 사용자 보고 후 대기하는지 확인 (`deft-log "$SESSION_DIR" --tail` 로 점검). FOMC 무진행 침묵 재발 방지의 핵심 검증.
 
 ### 4-2. multi-check (Claude 측)
 
@@ -157,6 +159,7 @@ node "$BUS" history --session "$SESSION_DIR"; rm -rf "$SESSION_DIR"
 - work-id 규약 로드(공통 config) → work.md 생성/이어받기 → **multi-round 회의록 교차 참조** (있으면 설계 결정 반영 확인)
 - 팀원 2~3 페르소나 혼합 (직전 테스트와 다른 조합 권장 — backendDev/qa ↔ frontendDev/qa/reviewer 교대)
 - Plan 게이트(보고→승인→구현) / role.md 즉시 기록 / Lead diff 검증 / cascade(구현→qa→reviewer VERDICT)
+- **관찰성(2.24.0)**: `~/.claude/plugin-data/deft/agent-teams/<work-id>/orchestration.log` 생성 + `tail -f` 안내 / spawn·단계 게이트·정리 STEP 기록 / preflight `STOP_TEAM_SPAWN` 시 BLOCKED 기록 확인
 - 종료: shutdown 3건(소유 확인) → TeamDelete → pane 정리
 
 ### 4-4. 종료 후 공통 정리 체크리스트

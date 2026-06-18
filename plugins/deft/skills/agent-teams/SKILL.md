@@ -58,6 +58,11 @@ if ! command -v deft-model >/dev/null 2>&1; then
   SRC=$(ls -1 ~/.claude/plugins/cache/bluehansl/deft/*/bin/deft-model 2>/dev/null | sort -V | tail -1)
   [ -n "$SRC" ] && mkdir -p ~/.local/bin && cp "$SRC" ~/.local/bin/ && chmod +x ~/.local/bin/deft-model
 fi
+# deft-log 진행 로그 헬퍼 설치 — 오케스트레이션 단계를 work-id 로그로 남겨 사용자 관찰성 확보 (§2-4)
+if ! command -v deft-log >/dev/null 2>&1; then
+  SRC=$(ls -1 ~/.claude/plugins/cache/bluehansl/deft/*/bin/deft-log 2>/dev/null | sort -V | tail -1)
+  [ -n "$SRC" ] && mkdir -p ~/.local/bin && cp "$SRC" ~/.local/bin/ && chmod +x ~/.local/bin/deft-log
+fi
 if command -v claude-bin-keepalive >/dev/null 2>&1; then
   claude-bin-keepalive || echo "STOP_TEAM_SPAWN: 세션 바이너리 복원 불가(KEEPALIVE_HARDFAIL) — 이 세션의 teammate spawn 은 반드시 실패한다."
 fi
@@ -152,6 +157,8 @@ LEAD_REF=$(cmux identify | jq -r .caller.pane_ref)
 BASE=$(tmux list-panes -a -F '#{pane_id}' | wc -l | tr -d ' ')
 EXPECTED=$((BASE + N))                       # N = 이번에 spawn 하는 팀원 수
 FAST=$([ "$BASE" -eq 1 ] && echo 1 || echo 0)   # BASE==1(Lead 단독) → clean-grid 빠른 경로
+# spawn 직후 진행 로그 (관찰성 §2-4 — LOG_DIR 은 work-id 디렉토리):
+deft-log "$LOG_DIR" STEP "팀원 $N명 spawn — rebalance 워처 발사 (EXPECTED=$EXPECTED, FAST=$FAST)"
 # spawn 메시지에 팀원 Agent 들과 함께 포함 (run_in_background)
 Bash(run_in_background: true): cmux-rebalance-watch "$LEAD_REF" "$BASE" "$EXPECTED" "$FAST"
 ```
@@ -163,6 +170,19 @@ Bash(run_in_background: true): cmux-rebalance-watch "$LEAD_REF" "$BASE" "$EXPECT
 > ⚠️ **중간(첫 spawn 후) 호출이 무의미한 건 동일** — Agent-tool spawn 은 매번 Lead pane 을 재차 찌부러뜨린다(실측: 60%→26%→복원). 워처는 "증가가 멈춰 settle" 될 때까지 기다리므로 모든 spawn 이 끝난 시점을 자동으로 잡는다. 재spawn(죽은 팀원 교체)으로 pane 이 바뀌면 워처를 다시 발사.
 >
 > **폴백(워처 미설치 / cmux 외부 §0-2)**: 종전처럼 모든 spawn 반환 후 `cmux-rebalancing` 1회 수동 호출(좌→우: 2컬럼=60:40 / 3컬럼=40:30:30 / 4컬럼=25:25:25:25 / 5+=균등. 사용자 명시 비율: `cmux-rebalancing 7:3`) + `cmux focus-pane --pane "$LEAD_REF"`. cmux 외부 실행 시 자동 skip.
+
+### 2-4. 진행 로그 (관찰성) — deft-log
+
+팀 오케스트레이션(preflight 게이트·팀원 spawn·rebalance·단계 게이트·검증·정리)은 진행 신호가 SendMessage 보고와 pane 출력에 흩어져, "지금 전체가 어느 단계인지"를 한눈에 보기 어렵다(특히 spawn 직후·정리 구간). `deft-log` 헬퍼로 **work-id 단위 진행 로그**를 남겨 사용자가 실시간 관찰 + 사후 추적할 수 있게 한다(multi-round §진행 로그 와 동일 사상·동일 헬퍼).
+
+- **로그 파일**: `~/.claude/plugin-data/deft/agent-teams/<work-id>/orchestration.log` (`deft-log` 가 기록 — §0-1 에서 설치. PATH 에 없으면 `~/.local/bin/deft-log` 절대경로). 이하 `LOG_DIR="$HOME/.claude/plugin-data/deft/agent-teams/<work-id>"`.
+- **작업 시작 직후 사용자에게 `tail -f $LOG_DIR/orchestration.log` 를 안내**한다 (실시간 관찰 경로).
+- 다음 마일스톤마다 `deft-log "$LOG_DIR" <LEVEL> "<무엇>"` 한 줄:
+  - `STEP` preflight 통과 / 팀원 spawn / rebalance / 각 단계 게이트 진입(요건분석→영향도→Plan→체크리스트 단계N) / 검증 / 정리 진입·완료.
+  - `WAIT` Lead 가 다음 액션을 못 하고 대기하는 5초+ 구간 · `DONE` 단계 완료 · `BLOCKED` 차단(preflight `STOP_TEAM_SPAWN`·사용자 개입 필요) · `WARN`/`ERROR`.
+- **preflight 게이트 연동**: §0-1 의 `STOP_TEAM_SPAWN`/`KEEPALIVE_HARDFAIL` 감지 시 `deft-log "$LOG_DIR" BLOCKED "세션 바이너리 삭제 — teammate spawn 불가. 세션 재시작 필요"` 를 남기고 spawn 을 진행하지 않는다(무진행 침묵 금지).
+- **팀원 idle 은 정상**(§2-1)이므로 `WAIT` 를 남발하지 않는다 — idle 대기 자체는 로그하지 않고, **Lead 의 단계 전환·게이트·정리**를 기록한다.
+- 최근 로그 빠른 확인: `deft-log "$LOG_DIR" --tail`.
 
 ---
 
@@ -597,6 +617,7 @@ Lead 또는 **팀원**은 경계가 분명한 **대규모·결정론적 fan-out 
 shutdown / `tmux kill-pane` 은 되돌릴 수 없다. **반드시 본 Lead 세션이 spawn 한 팀원만** 종료·정리한다. cmux 는 **다중 워크스페이스·다중 세션** 환경이므로 다른 세션/워크스페이스 pane·팀원을 **절대 건드리면 안 된다**.
 - 대상: Lead 가 spawn 시 받은 `<name>@session-<id>` 의 그 이름·그 team-name, 본 세션 team config(`~/.claude/teams/session-<id>/config.json`) 등록 멤버만.
 - **전체 tmux pane 순회·와일드카드 kill 금지.** 다른 이름/접미(`-N`)·다른 session-id 워커는 "잔재"로 단정 금지(`--parent-session-id` 로 소속 확인).
+- 정리 진입 시 `deft-log "$LOG_DIR" STEP "팀/팀원 정리 시작"` 로 기록한다(관찰성 §2-4).
 
 **① graceful 종료**: `SendMessage(to="<팀원이름>", message={type:"shutdown_request"})`. graceful 은 느릴 수 있음(공식 "Shutdown can be slow").
 
@@ -623,6 +644,7 @@ done
 ```bash
 command -v cmux-rebalancing >/dev/null 2>&1 && cmux-rebalancing
 cmux focus-pane --pane "$(cmux identify | jq -r .caller.pane_ref)" 2>/dev/null
+deft-log "$LOG_DIR" DONE "팀원 정리·레이아웃 복원 완료"
 ```
 
 ---

@@ -4,6 +4,17 @@
 
 형식은 [Keep a Changelog](https://keepachangelog.com/ko/1.1.0/) 를 따르며, 버전 체계는 [Semantic Versioning](https://semver.org/lang/ko/) 을 사용합니다 (`claude-X.Y.Z` / `codex-X.Y.Z` 접두).
 
+## [claude-2.24.0] - 2026-06-18
+
+> 사용자 지시(멀티라운드/에이전트팀 테스트 관찰성). Claude 측만 변경 → `codex-1.15.2` 유지. codex multi-round 미러는 형태 확정(첫 테스트) 후 적용 예정.
+
+### Added
+- **`deft-log` 진행 로그 헬퍼 (오케스트레이션 관찰성 SSOT)** — multi-round/agent-teams 의 Lead 오케스트레이션(pane 분할·readiness 대기·워커 부팅·페르소나 주입·라운드/단계 게이트·정리)은 `cmux send`/`Agent` spawn 으로 조용히 진행돼 "지금 무엇을 하는지"가 안 보였다. 특히 워커 셸 **lazy-init 으로 멈추면 무진행 침묵**이 생겨 위험했다 — 사용자가 빈 pane 을 보다 다른 pane 을 건드리면 의도치 않은 명령이 실행될 수 있다(실측 — FOMC 멀티라운드 셋업 차단 사례). `deft-log <session_dir> <level> <msg>` 가 단계마다 타임스탬프 한 줄을 `<session_dir>/orchestration.log` 에 append + stderr echo → 사용자가 `tail -f` 로 **실시간 관찰** + 실패 시 **정확히 어디서 멈췄는지 사후 추적**. 레벨 `STEP/WAIT/DONE/BLOCKED/WARN/ERROR`, `--tail [N]` 조회 지원. deft-model/deft-review 와 동일한 단일 bin 헬퍼 패턴.
+- **multi-round/agent-teams 진행 로그 배선** — multi-round: Phase 0-F 자동설치 + 세션 시작 시 `tail -f` 안내 + Lead 등록·pane 분할·rebalance·readiness·부팅·정리 마일스톤 로그. agent-teams: §0-1 자동설치 + §2-4 관찰성 서브섹션 + 팀원 spawn·정리 마일스톤 로그.
+
+### Changed
+- **multi-round readiness 를 fail-fast 게이트로 강화** — 종전엔 워커 pane 쉘 readiness 타임아웃 시 `echo WARN` 한 줄 뒤 **그대로 부팅을 진행**해, 미기동 pane 에 `cmux send` 가 흘러 입력이 유실되거나(조용한 실패) 사용자가 그새 다른 pane 으로 전환했을 때 잘못된 pane 에 명령이 들어갈 수 있었다(실측 위험). → 타임아웃 시 `deft-log BLOCKED` 기록 + **부팅 중단 + 사용자에게 "화면 전면 활성 후 재개" 보고**. 무진행 침묵으로 끌지 않는다.
+
 ## [claude-2.23.0] / [codex-1.15.2] - 2026-06-17
 
 ### Added
