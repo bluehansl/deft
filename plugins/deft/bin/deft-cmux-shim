@@ -1,0 +1,32 @@
+#!/usr/bin/env bash
+# deft-cmux-shim — cmux CLI 런타임 해석 wrapper (deft 스킬 preflight 가 ~/.local/bin/cmux 로 설치)
+#
+# 배경(실측): cmux 신버전(2026-06~)은 `cmux` CLI 를 PATH 바이너리/alias/함수로 두지 않고,
+#   셸 통합(cmux-zsh-integration.zsh)의 precmd 훅 `_cmux_fix_path` 가 **첫 대화형 프롬프트에 1회**
+#   `Resources/bin` 을 PATH 앞에 끼워넣어 노출한다. 따라서 **비대화형 셸**(Claude/Codex 의 Bash 도구
+#   실행 컨텍스트)에서는 프롬프트가 없어 훅이 안 돌고 `cmux` 가 "command not found" 가 된다.
+#   → 스킬의 bare `cmux new-split`/`send` 등이 깨진다(multi-round). 구버전은 비대화형에서도 됐기에
+#   "갑자기 안 됨" 으로 보였다.
+#
+# 동작: deft preflight 가 **`cmux` 가 PATH 에 없을 때만**(조건부) 이 파일을 `~/.local/bin/cmux` 로
+#   설치한다(구버전을 가리지 않는 gap-fill). 그러면 bare `cmux` 호출이 이 wrapper 로 해석되고,
+#   wrapper 는 **매 호출마다** 진짜 cmux CLI 를 env 힌트→표준 설치 경로 순으로 찾아 exec 한다
+#   (cmux-rebalancing 의 _resolve_cmux_bin 과 동일 체인 — 정적 symlink 보다 환경 변화에 강함).
+#
+# ⚠️ 자기 재귀 방지: 이 wrapper 는 자신이 `cmux` 라는 이름으로 PATH 에 있으므로, 해석에
+#   `command -v cmux` 를 절대 쓰지 않는다(자기 자신을 다시 부르는 무한 루프 차단). env 키와
+#   표준 설치 경로만 사용한다.
+#
+# 크로스버전: 구버전(비대화형에서 `cmux` 이름으로 동작)에는 preflight 가 이 wrapper 를 설치하지
+#   않으므로 영향 없음. 신버전(이름 부재)에만 설치되어 env 로 해석한다.
+set -u
+
+for c in "${CMUX_BUNDLED_CLI_PATH:-}" \
+         "${CMUX_CLAUDE_TEAMS_CMUX_BIN:-}" \
+         "${CMUX_BIN:-}" \
+         "/Applications/cmux.app/Contents/Resources/bin/cmux"; do
+  [ -n "$c" ] && [ -x "$c" ] && exec "$c" "$@"
+done
+
+echo "cmux(deft-cmux-shim): 진짜 cmux CLI 를 찾을 수 없습니다 — CMUX_BUNDLED_CLI_PATH/CMUX_CLAUDE_TEAMS_CMUX_BIN/CMUX_BIN 미설정 + 표준 경로 부재" >&2
+exit 127

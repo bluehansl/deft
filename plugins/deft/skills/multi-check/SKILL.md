@@ -38,6 +38,14 @@ which gemini 2>/dev/null && echo "GEMINI_OK" || echo "GEMINI_NOT_FOUND"
 CODEX_REVIEWER_NAME=$(command -v claudex >/dev/null 2>&1 && echo claudex-reviewer || echo codex-reviewer)
 echo "Codex-family reviewer 이름: $CODEX_REVIEWER_NAME"
 
+# cmux CLI wrapper 설치 — cmux 가 PATH 에 없으면(신 cmux 는 대화형 precmd 훅으로만 PATH 주입 →
+#   비대화형 셸엔 부재) deft 동봉 wrapper 를 ~/.local/bin/cmux 로 설치(조건부 gap-fill, 구버전 안 가림).
+#   Lead 의 bare cmux(identify/focus-pane 등) 보호. wrapper 는 매 호출 env→표준경로로 진짜 cmux 해석.
+if ! command -v cmux >/dev/null 2>&1; then
+  SRC=$(ls -1 ~/.claude/plugins/cache/bluehansl/deft/*/bin/deft-cmux-shim 2>/dev/null | sort -V | tail -1)
+  [ -n "$SRC" ] && mkdir -p ~/.local/bin && cp "$SRC" ~/.local/bin/cmux && chmod +x ~/.local/bin/cmux \
+    && echo "INFO: cmux wrapper 를 ~/.local/bin/cmux 로 설치 (비대화형 셸 PATH 누락 대응)"
+fi
 # cmux-rebalancing 헬퍼 설치 확인 — 미설치 시 plugin 동봉본으로 자동 설치
 if ! command -v cmux-rebalancing >/dev/null 2>&1; then
   SRC=$(ls -1 ~/.claude/plugins/cache/bluehansl/deft/*/bin/cmux-rebalancing 2>/dev/null | sort -V | tail -1)

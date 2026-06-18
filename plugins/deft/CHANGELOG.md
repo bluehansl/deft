@@ -4,6 +4,14 @@
 
 형식은 [Keep a Changelog](https://keepachangelog.com/ko/1.1.0/) 를 따르며, 버전 체계는 [Semantic Versioning](https://semver.org/lang/ko/) 을 사용합니다 (`claude-X.Y.Z` / `codex-X.Y.Z` 접두).
 
+## [claude-2.25.0] - 2026-06-18
+
+> 사용자 실측(멀티라운드 재테스트 preflight)에서 발견·재조사. Claude 측만 변경 → `codex-1.15.2` 유지. codex 미러는 형태 확정 후.
+
+### Fixed
+- **cmux CLI 가 비대화형 셸 PATH 에 없어 multi-round pane 회의가 통째로 폴백되던 버그 (사용자 실측·재조사)** — cmux 신버전(2026-06~)은 `cmux` 를 PATH 바이너리/alias/함수가 아니라 셸 통합 precmd 훅(`_cmux_fix_path`)으로 **첫 대화형 프롬프트에 1회** `Resources/bin` 을 PATH 앞에 주입해 노출한다. 따라서 Claude/Codex 의 **비대화형 Bash 도구 셸**에선 프롬프트가 없어 훅이 안 돌고 `cmux` 가 `command not found` → 스킬의 bare `cmux new-split`/`send` 가 깨지고 `HAVE_CMUX=0` 으로 오판(pane 회의 폴백). 구버전은 비대화형에서도 동작했기에 "갑자기 안 됨" 으로 관측됨. (multi-check 은 pane 생성을 Agent 도구로, 리밸런싱을 bin 으로 처리해 Lead 의 bare cmux 실패가 silent 라 무사 — 비대칭. bin 들은 이미 `_resolve_cmux_bin`/`CMUX_BUNDLED_CLI_PATH` 로 hardening 돼 있었음.)
+  - **수정**: `deft-cmux-shim` wrapper 신규 + 3개 스킬(multi-round/agent-teams/multi-check) preflight 가 **`cmux` 가 PATH 에 없을 때만** 이를 `~/.local/bin/cmux` 로 설치(조건부 gap-fill — 구버전·기존 cmux 를 가리지 않음). wrapper 는 매 호출 `CMUX_BUNDLED_CLI_PATH`→`CMUX_CLAUDE_TEAMS_CMUX_BIN`→`CMUX_BIN`→표준 설치 경로 순으로 진짜 cmux CLI 를 해석해 exec(정적 symlink 보다 환경 변화·버전 차이에 강함; `cmux-rebalancing` 의 `_resolve_cmux_bin` 과 동일 체인). 자기 재귀 방지 위해 wrapper 는 `command -v cmux` 미사용(env/표준경로만). → 신·구 cmux + 다양한 환경에서 bare `cmux` 동작 보장, 스킬 57곳 무수정.
+
 ## [claude-2.24.0] - 2026-06-18
 
 > 사용자 지시(멀티라운드/에이전트팀 테스트 관찰성). Claude 측만 변경 → `codex-1.15.2` 유지. codex multi-round 미러는 형태 확정(첫 테스트) 후 적용 예정.

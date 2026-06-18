@@ -233,6 +233,17 @@ fi
 echo "참가자 모드: $PARTICIPANTS_MODE"
 
 # B. cmux 환경 검출 — spawn 정책 분기
+# B-0. cmux CLI 가 PATH 에 없으면 deft wrapper 를 ~/.local/bin/cmux 로 설치 (조건부 gap-fill).
+#   신 cmux(2026-06~)는 `cmux` 를 PATH 바이너리가 아니라 셸 통합 precmd 훅(`_cmux_fix_path`)으로
+#   **첫 대화형 프롬프트에만** PATH 에 주입한다 → 비대화형 셸(Bash 도구)엔 `cmux` 부재 → bare cmux 깨짐.
+#   wrapper 는 매 호출 env(CMUX_BUNDLED_CLI_PATH 등)→표준경로로 진짜 cmux 를 해석해 exec(신·구·환경 무관).
+#   ⚠️ 조건부라 구버전(이름으로 동작)·기존 cmux 는 가리지 않는다(gap-fill, not shadow).
+if ! command -v cmux >/dev/null 2>&1; then
+  SRC=$(ls -1 ~/.claude/plugins/cache/bluehansl/deft/*/bin/deft-cmux-shim 2>/dev/null | sort -V | tail -1)
+  [ -z "$SRC" ] && SRC=$(ls -1 ~/.codex/plugins/cache/bluehansl-codex/deft/*/bin/deft-cmux-shim 2>/dev/null | sort -V | tail -1)
+  [ -n "$SRC" ] && mkdir -p ~/.local/bin && cp "$SRC" ~/.local/bin/cmux && chmod +x ~/.local/bin/cmux \
+    && echo "INFO: cmux CLI 가 PATH 에 없어 deft wrapper 를 ~/.local/bin/cmux 로 설치 (비대화형 셸 PATH 누락 대응)"
+fi
 HAVE_CMUX=0
 which cmux >/dev/null 2>&1 && cmux identify >/dev/null 2>&1 && HAVE_CMUX=1
 echo "cmux 환경: $([ "$HAVE_CMUX" -eq 1 ] && echo YES || echo NO)"
