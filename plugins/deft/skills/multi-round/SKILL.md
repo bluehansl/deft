@@ -686,6 +686,7 @@ Lead 의 라운드 동작:
 ```
 - 응답 언어: 한국어
 - 통신: 버스 MCP 도구만 사용. '[bus] 메시지 확인' 입력 수신 시 즉시 check_messages → 수신자 본인이면 작업 후 post_message 응답 / 아니면 검토만 (자발 발언은 기여할 내용 있을 때 1회)
+- **발언 time-box (속도 — 실측 검증)**: 핵심 권장 + 근거 1~3줄로 **간결히**. 회의는 의견·설계 토론이므로 **과도한 web search(수십 회)·장문 분석 금지** — 아는 지식으로 신속히 응답해 라운드 지연을 막는다. (multi-check 의 time-box 와 동일 사상 — claudex/codex 워커가 web search 로 수 분 늘어지면 라운드가 정체됨. 심층 사실확인이 핵심이면 multi-check/deep-research 가 적합)
 - 응답 마지막 줄에 'DONE:' 센티넬 (버스 메시지 본문 안에)
 - 회의 모드: {consult|dialogue|collaborate|debate}
 - 신호 프로토콜 사용 (ACK/STATUS/BLOCKED/DONE + 모드별 확장)

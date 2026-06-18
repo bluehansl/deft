@@ -4,6 +4,18 @@
 
 형식은 [Keep a Changelog](https://keepachangelog.com/ko/1.1.0/) 를 따르며, 버전 체계는 [Semantic Versioning](https://semver.org/lang/ko/) 을 사용합니다 (`claude-X.Y.Z` / `codex-X.Y.Z` 접두).
 
+## [claude-2.26.0] - 2026-06-18
+
+> 멀티라운드 속도 재테스트(speed2 — 셋업→3자 CONSENSUS 50s 클린 사이클)에서 검증된 패턴의 **스킬 간 교차 적용(harmonize)**. Claude 측만 변경 → `codex-1.15.2` 유지.
+
+### Added
+- **multi-round 워커 inject 에 brevity time-box (multi-check 검증 패턴 이식)** — 회의 워커(claudex/codex)가 web search 로 수 분 늘어져 라운드가 정체되는 위험. 워커 표준 inject(버스 첫 메시지)에 "핵심 권장 + 근거 1~3줄 간결, **과도한 web search·장문 분석 금지**, 아는 지식으로 신속 응답" 추가. multi-check Phase 1 time-box 와 동일 사상. 실측(speed2): 적용 시 3워커 응답 ~30s, 셋업 포함 50s 에 3자 CONSENSUS.
+
+### Notes (선검토 후 미적용 — 사유 기록)
+- agent-teams brevity: **미적용** — 코드 작업 팀원은 thorough 해야 하고 web search 정체 위험이 낮음(용도 상이).
+- multi-check deft-log: **미적용** — 세션 dir 개념이 없고, Agent-tool pane 라이브 출력 + reviewer SendMessage 보고가 이미 관찰성 제공(관찰성 모델 상이).
+- zsh-안전성 감사: 스킬 본문 bash 는 `${!arr[@]}`·`set -- $`·`declare -A` 전무로 **안전**(speed2 실패는 테스트 핸드롤 한정). deft-test §4-1 에 "단일 bash 스크립트 오케스트레이션" best-practice 기록(비배포).
+
 ## [claude-2.25.0] - 2026-06-18
 
 > 사용자 실측(멀티라운드 재테스트 preflight)에서 발견·재조사. Claude 측만 변경 → `codex-1.15.2` 유지. codex 미러는 형태 확정 후.
