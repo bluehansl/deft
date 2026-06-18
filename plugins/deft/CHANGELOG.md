@@ -4,6 +4,18 @@
 
 형식은 [Keep a Changelog](https://keepachangelog.com/ko/1.1.0/) 를 따르며, 버전 체계는 [Semantic Versioning](https://semver.org/lang/ko/) 을 사용합니다 (`claude-X.Y.Z` / `codex-X.Y.Z` 접두).
 
+## [codex-1.16.0] - 2026-06-18
+
+> Claude 측 검증 완료 패턴(claude-2.24.0~2.26.0)을 codex 측에 미러. 형태는 Claude 에서 3회 클린 사이클(3워커 consensus 40~50s + 4워커 research debate)로 확정 후 적용. Claude 측은 변경 없음.
+
+### Added
+- **`deft-cmux-shim` + `deft-log` bin (Claude 측과 byte-identical 동기화)** + codex multi-round/multi-check preflight 조건부 자동 설치. cmux 비대화형 PATH 부재(신 cmux 의 precmd 훅 PATH 주입) 대응 + 오케스트레이션 관찰성 로그.
+- **multi-round 워커 inject brevity time-box** — 회의 워커가 web search 로 라운드 정체시키는 위험 제거(실측). + 세션 시작 진행 로그(`tail -f` 안내).
+
+### Changed
+- **multi-round readiness 를 fail-fast 게이트로 강화** — 워커 pane 쉘 미기동 시 BLOCKED 기록 + 부팅 중단 + 사용자 보고(미기동 pane 오발 send 방지).
+- **multi-check preflight 에 cmux-shim 설치** — Lead 의 bare cmux(identify/focus-pane) 가 비대화형 셸에서 깨지던 것 방지.
+
 ## [claude-2.26.0] - 2026-06-18
 
 > 멀티라운드 속도 재테스트(speed2 — 셋업→3자 CONSENSUS 50s 클린 사이클)에서 검증된 패턴의 **스킬 간 교차 적용(harmonize)**. Claude 측만 변경 → `codex-1.15.2` 유지.

@@ -69,6 +69,14 @@ fi
 ## 병렬 실행 전략 — cmux 환경 여부로 분기
 
 ```bash
+# cmux CLI 가 PATH 에 없으면 deft wrapper 를 ~/.local/bin/cmux 로 설치 (조건부 gap-fill) — 신 cmux 는
+#   대화형 precmd 훅으로만 PATH 주입 → 비대화형 셸엔 부재. Lead 의 bare cmux(identify/focus-pane) 보호.
+if ! command -v cmux >/dev/null 2>&1; then
+  SRC=$(ls -1 ~/.codex/plugins/cache/bluehansl-codex/deft/*/bin/deft-cmux-shim 2>/dev/null | sort -V | tail -1)
+  [ -z "$SRC" ] && SRC=$(ls -1 ~/.claude/plugins/cache/bluehansl/deft/*/bin/deft-cmux-shim 2>/dev/null | sort -V | tail -1)
+  [ -n "$SRC" ] && mkdir -p ~/.local/bin && cp "$SRC" ~/.local/bin/cmux && chmod +x ~/.local/bin/cmux \
+    && echo "INFO: cmux wrapper 를 ~/.local/bin/cmux 로 설치 (비대화형 셸 PATH 누락 대응)"
+fi
 HAVE_CMUX=0
 which cmux >/dev/null 2>&1 && cmux identify >/dev/null 2>&1 && HAVE_CMUX=1
 ```

@@ -152,6 +152,10 @@ SESSION_DIR="$SKILL_BASE/sessions/<work-id>/$SESSION_TAG"
 # 독립 토론 (사용자 명시 시만):
 # SESSION_DIR="$SKILL_BASE/sessions/standalone/$SESSION_TAG"
 mkdir -p "$SESSION_DIR"
+
+# 진행 로그 시작 + 사용자에게 실시간 관찰 경로 안내 (deft-log — 관찰성)
+deft-log "$SESSION_DIR" STEP "multi-round 세션 시작 (tag=$SESSION_TAG)"
+echo "📋 진행 로그: tail -f $SESSION_DIR/orchestration.log  (다른 터미널/pane 에서 실시간 관찰)"
 ```
 
 ### agent-teams 작업노트 교차 참조 (연계 회의)
@@ -181,6 +185,15 @@ HAVE_CLAUDE=0; HAVE_CLAUDEX=0; HAVE_CODEX=0; HAVE_CMUX=0
 which claude   >/dev/null 2>&1 && HAVE_CLAUDE=1
 which claudex  >/dev/null 2>&1 && HAVE_CLAUDEX=1
 which codex    >/dev/null 2>&1 && HAVE_CODEX=1
+# cmux CLI 가 PATH 에 없으면 deft wrapper 를 ~/.local/bin/cmux 로 설치 (조건부 gap-fill) — 신 cmux(2026-06~)는
+#   `cmux` 를 셸 통합 precmd 훅으로 첫 대화형 프롬프트에만 PATH 주입 → 비대화형 셸(Bash 도구)엔 부재 → bare cmux 깨짐.
+#   wrapper 가 매 호출 env(CMUX_BUNDLED_CLI_PATH 등)→표준경로로 진짜 cmux 해석. 구버전·기존 cmux 는 안 가림.
+if ! command -v cmux >/dev/null 2>&1; then
+  SRC=$(ls -1 ~/.codex/plugins/cache/bluehansl-codex/deft/*/bin/deft-cmux-shim 2>/dev/null | sort -V | tail -1)
+  [ -z "$SRC" ] && SRC=$(ls -1 ~/.claude/plugins/cache/bluehansl/deft/*/bin/deft-cmux-shim 2>/dev/null | sort -V | tail -1)
+  [ -n "$SRC" ] && mkdir -p ~/.local/bin && cp "$SRC" ~/.local/bin/cmux && chmod +x ~/.local/bin/cmux \
+    && echo "INFO: cmux CLI 가 PATH 에 없어 deft wrapper 를 ~/.local/bin/cmux 로 설치 (비대화형 셸 PATH 누락 대응)"
+fi
 which cmux     >/dev/null 2>&1 && cmux identify >/dev/null 2>&1 && HAVE_CMUX=1
 
 if [ "$HAVE_CLAUDE" -eq 0 ] && [ "$HAVE_CLAUDEX" -eq 0 ] && [ "$HAVE_CODEX" -eq 0 ]; then
@@ -237,6 +250,12 @@ if ! command -v deft-model >/dev/null 2>&1; then
   SRC=$(ls -1 ~/.codex/plugins/cache/bluehansl-codex/deft/*/bin/deft-model 2>/dev/null | sort -V | tail -1)
   [ -z "$SRC" ] && SRC=$(ls -1 ~/.claude/plugins/cache/bluehansl/deft/*/bin/deft-model 2>/dev/null | sort -V | tail -1)
   [ -n "$SRC" ] && mkdir -p ~/.local/bin && cp "$SRC" ~/.local/bin/deft-model && chmod +x ~/.local/bin/deft-model
+fi
+# deft-log 진행 로그 헬퍼 설치 — 오케스트레이션 단계를 세션 로그로 남겨 사용자 관찰성 확보
+if ! command -v deft-log >/dev/null 2>&1; then
+  SRC=$(ls -1 ~/.codex/plugins/cache/bluehansl-codex/deft/*/bin/deft-log 2>/dev/null | sort -V | tail -1)
+  [ -z "$SRC" ] && SRC=$(ls -1 ~/.claude/plugins/cache/bluehansl/deft/*/bin/deft-log 2>/dev/null | sort -V | tail -1)
+  [ -n "$SRC" ] && mkdir -p ~/.local/bin && cp "$SRC" ~/.local/bin/deft-log && chmod +x ~/.local/bin/deft-log
 fi
 ```
 
@@ -346,11 +365,19 @@ cmux focus-pane --pane "$(cmux identify | jq -r .caller.pane_ref)" 2>/dev/null  
 cmux 는 surface 가 **화면에 실제 렌더될 때 쉘을 기동**한다 (lazy-init). 미기동 상태에 send 하면 입력이 조용히 유실되므로, 마커 파일로 쉘 기동을 확인한 뒤에만 본 명령을 보낸다:
 
 ```bash
+deft-log "$SESSION_DIR" WAIT "$WORKER_NAME pane 쉘 readiness 대기 (최대 15s)"
 cmux send --surface "$W1_SURFACE" "touch $SESSION_DIR/.ready-$WORKER_NAME"
 cmux send-key --surface "$W1_SURFACE" Enter
 for _ in $(seq 1 15); do [ -f "$SESSION_DIR/.ready-$WORKER_NAME" ] && break; sleep 1; done
-[ -f "$SESSION_DIR/.ready-$WORKER_NAME" ] \
-  || echo "WARN: 워커 pane 쉘 미기동 — cmux 창이 화면에 보이는 상태여야 합니다. 사용자에게 화면 확인 요청 후 재시도"
+if [ -f "$SESSION_DIR/.ready-$WORKER_NAME" ]; then
+  deft-log "$SESSION_DIR" DONE "$WORKER_NAME pane 쉘 기동 확인 — 부팅 진행"
+else
+  deft-log "$SESSION_DIR" BLOCKED "$WORKER_NAME pane 쉘 미기동(lazy-init) — cmux 워크스페이스 화면 전면 활성 필요. 부팅 중단."
+  echo "BLOCKED: 워커 pane 쉘 미기동 — cmux 창/워크스페이스를 화면 전면으로 활성화해 주세요. 활성 후 알려주시면 readiness 재확인→부팅을 이어갑니다."
+  # ⚠️ fail-fast 게이트 (필수): readiness 미확인 상태로 (4) 부팅을 진행하지 말 것 — 미기동 pane 에 send 하면
+  #   입력이 조용히 유실되거나 사용자가 그새 다른 pane 으로 전환했을 때 잘못된 pane 에 명령이 들어갈 수 있다(실측).
+  #   그 워커(필요 시 전체 회의) 부팅을 멈추고 사용자 보고 후 대기. 무진행 침묵으로 끌지 않는다.
+fi
 ```
 
 **(4) 워커 TUI 기동 — 버스 MCP 인라인 주입**
@@ -600,6 +627,7 @@ Lead 의 라운드 동작:
 ```
 - 응답 언어: 한국어
 - 통신: 버스 MCP 도구만 사용. '[bus] 메시지 확인' 입력 수신 시 즉시 check_messages → 수신자 본인이면 작업 후 post_message 응답 / 아니면 검토만 (자발 발언은 기여할 내용 있을 때 1회)
+- **발언 time-box (속도 — 실측 검증)**: 핵심 권장 + 근거 1~3줄로 **간결히**. 회의는 의견·설계 토론이므로 **과도한 web search(수십 회)·장문 분석 금지** — 아는 지식으로 신속히 응답해 라운드 지연을 막는다. (심층 사실확인이 핵심이면 multi-check/deep-research 가 적합)
 - 응답 마지막 줄에 'DONE:' 센티넬 (버스 메시지 본문 안에)
 - 회의 모드: {consult|dialogue|collaborate|debate}
 - 신호 프로토콜 사용 (ACK/STATUS/BLOCKED/DONE + 모드별 확장)

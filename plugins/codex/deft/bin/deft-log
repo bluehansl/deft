@@ -1,0 +1,65 @@
+#!/usr/bin/env bash
+# deft-log — deft 스킬 오케스트레이션 진행 로그 (관찰성 SSOT)
+#
+# 목적: multi-round / agent-teams 의 Lead 오케스트레이션(pane 분할·readiness 대기·워커 부팅·
+#       페르소나 주입·단계 게이트·정리)은 cmux send / Agent spawn 으로 조용히 진행돼 "지금
+#       무엇을 하는지"가 사용자에게 안 보인다. 특히 워커 셸 lazy-init 으로 멈추면 무진행 침묵이
+#       위험하다 — 사용자가 빈 pane 을 보다 다른 pane 을 건드려 의도치 않은 명령이 실행될 수
+#       있다(실측 — FOMC 멀티라운드 셋업 차단 사례). 이 헬퍼는 단계마다 타임스탬프 한 줄을
+#       세션 로그에 append + stderr 로도 echo 해, 사용자가 `tail -f <session>/orchestration.log`
+#       로 실시간 관찰하고 실패 시 정확히 어디서 멈췄는지 사후 추적할 수 있게 한다.
+#       (deft-model/deft-review 와 동일 사상 — 구현 단일 진실 소스.)
+#
+# 사용:
+#   deft-log <session_dir> <level> <message...>            # 인자로 메시지
+#   printf '%s' "<message>" | deft-log <session_dir> <level>   # stdin 본문(긴/특수문자)
+#   deft-log <session_dir> --tail [N]                      # 최근 N줄(기본 20) 출력
+#
+# level: STEP | WAIT | DONE | BLOCKED | WARN | ERROR | INFO  (자유 문자열 허용 — 표시는 대문자)
+#   STEP   단계 진입/전환        WAIT   5초+ 대기 시작(readiness·노크 응답)
+#   DONE   단계/대기 정상 해소   BLOCKED 차단 — 사용자 개입 필요(부팅·진행 중단)
+#   WARN   경고(진행은 계속)     ERROR  오류
+#
+# 로그 파일: <session_dir>/orchestration.log  (append-only)
+#   형식: [YYYY-MM-DDTHH:MM:SS] [LEVEL] message
+#
+# 부작용 없음(파괴 X) — 로그 한 줄 append 뿐. 호출이 실패해도 오케스트레이션을 막지 않도록 설계
+# (mkdir/append 실패는 무시, 항상 exit 0; usage 오류만 exit 2).
+set -u
+
+SESS="${1:-}"
+if [ -z "$SESS" ]; then
+  echo "usage: deft-log <session_dir> <level> <message...>   |   deft-log <session_dir> --tail [N]" >&2
+  exit 2
+fi
+shift
+
+LOG="$SESS/orchestration.log"
+
+# --tail 모드: 최근 N줄 출력 후 종료 (사용자·Lead 의 빠른 상태 확인)
+if [ "${1:-}" = "--tail" ]; then
+  N="${2:-20}"
+  if [ -f "$LOG" ]; then tail -n "$N" "$LOG"; else echo "(아직 로그 없음: $LOG)"; fi
+  exit 0
+fi
+
+LEVEL="${1:-INFO}"
+shift 2>/dev/null || true
+
+# 메시지: 인자가 있으면 인자 전체, 없으면 stdin(파이프 입력일 때만 — tty 면 빈 메시지로 hang 회피)
+if [ "$#" -gt 0 ]; then
+  MSG="$*"
+elif [ ! -t 0 ]; then
+  MSG="$(cat)"
+else
+  MSG=""
+fi
+
+LEVEL_UP="$(printf '%s' "$LEVEL" | tr '[:lower:]' '[:upper:]')"
+TS="$(date +%Y-%m-%dT%H:%M:%S)"
+LINE="[$TS] [$LEVEL_UP] $MSG"
+
+mkdir -p "$SESS" 2>/dev/null || true
+printf '%s\n' "$LINE" >> "$LOG" 2>/dev/null || true
+printf '%s\n' "$LINE" >&2          # Lead 의 Bash 출력에도 즉시 보이도록 (stdout 오염 회피 위해 stderr)
+exit 0
