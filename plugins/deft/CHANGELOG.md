@@ -4,6 +4,19 @@
 
 형식은 [Keep a Changelog](https://keepachangelog.com/ko/1.1.0/) 를 따르며, 버전 체계는 [Semantic Versioning](https://semver.org/lang/ko/) 을 사용합니다 (`claude-X.Y.Z` / `codex-X.Y.Z` 접두).
 
+## [claude-2.27.0] - 2026-06-22
+
+> claudex 네이티브 팀통신 이식(별도 작업, claudex 0.139.1+)에 대응한 Lead-side 통합. Claude↔claudex 양방향 네이티브 통신을 E2E 실증(도구 경로 + 평문)한 뒤, multi-round 가 버스 대신 Claude 네이티브 inbox 로 claudex 와 통신할 수 있게 함. **Claude-core 변경 0** — Lead 는 평범한 `SendMessage` 만.
+
+### Added
+- **`deft-claudex-native-spawn` bin** — claudex(0.139.1+)를 Claude 네이티브 팀원으로 cmux pane 에 기동(`--claude-team`/`--claude-team-agent` binding + readiness 가드). 이후 Lead 는 `SendMessage(to:"<name>")` 로 직접 네이티브 통신(버스/노크 불요). `CLAUDEX_NATIVE_BIN` 으로 설치 전 built 바이너리 테스트 가능.
+- **multi-round 통신 우선순위 매트릭스에 "Lead=Claude + claudex(0.139.1+) → Claude 네이티브 inbox 1순위, 버스 폴백" 행 + §claudex 네이티브 팀원 절차** (팀 materialize→team-id 획득→bin 기동→SendMessage). binding 미지원/claudex-Lead/cmux 외부면 버스로 자동 폴백.
+- multi-round Phase 0 에 `deft-claudex-native-spawn` 조건부 자동 설치.
+
+### Notes
+- team-session-id 는 Lead 의 `Agent` spawn 결과(`<name>@session-<id>`)에서만 신뢰 획득(팀 config 의 `leadSessionId` 는 팀 자체 id 라 Claude 세션 id 와 달라 자동발견 불가 — 실측).
+- 전체 deft 경로 E2E 는 claudex 0.139.1 설치 후 진행 예정. 현재는 built 바이너리로 양방향 왕복(수신·발신·평문) 실증 완료.
+
 ## [codex-1.16.0] - 2026-06-18
 
 > Claude 측 검증 완료 패턴(claude-2.24.0~2.26.0)을 codex 측에 미러. 형태는 Claude 에서 3회 클린 사이클(3워커 consensus 40~50s + 4워커 research debate)로 확정 후 적용. Claude 측은 변경 없음.

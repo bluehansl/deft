@@ -1,0 +1,75 @@
+#!/usr/bin/env bash
+# deft-claudex-native-spawn — Claude(Lead) 팀에 claudex 를 "네이티브 팀원"으로 붙인다.
+#
+# claudex 0.139.1+ 는 Claude Code 의 네이티브 팀원 통신(파일 inbox 프로토콜)을 말한다
+# (--claude-team / --claude-team-agent binding). 이 헬퍼는 그 claudex 를 cmux pane 에 기동해
+# Lead 의 팀 inbox 를 watch 시키므로, 이후 Lead 는 **평범한 SendMessage(to:"<agent-name>")** 로
+# claudex 와 네이티브 통신한다(버스/노크 불요). claudex 답신은 Lead inbox → Lead 에 자동 주입.
+#
+# 사용 (Lead=Claude 전제):
+#   1) Lead 가 먼저 native Agent 1명을 spawn → 결과 "<name>@session-<id>" 에서 team-id 획득
+#      (Claude 팀은 ≥1 Agent spawn 으로 materialize 되며, 그 결과가 team-session-id 의 유일한 신뢰 출처.
+#       팀 config 의 leadSessionId 는 팀 자체 id 라 Claude 세션 id 와 다르다 — 자동발견 불가, 실측).
+#   2) 그 team-id 를 인자로 이 헬퍼 호출:
+#        deft-claudex-native-spawn <team-session-id> <agent-name> [cwd]
+#   3) 이후 Lead 는 SendMessage(to:"<agent-name>") 로 통신.
+#
+# 환경:
+#   CLAUDEX_NATIVE_BIN  claudex 바이너리 경로 오버라이드(미설정 시 PATH claudex). 0.139.1 설치 전
+#                       repo built 바이너리(codex-rs/target/debug|release/claudex)로 테스트할 때 사용.
+#   CLAUDE_CONFIG_DIR   Claude 홈(기본 ~/.claude). teams/<id>/inboxes 해석에 사용(claudex 도 동일 존중).
+#
+# 출력: JSON 한 줄 {spawned,team,surface,inbox,bin} + 다음 안내.
+set -u
+
+TEAM_ID="${1:?usage: deft-claudex-native-spawn <team-session-id> <agent-name> [cwd]}"
+AGENT="${2:?agent-name required (Lead 가 SendMessage(to:...) 로 부를 이름)}"
+CWD="${3:-$PWD}"
+
+# claudex 바이너리: 오버라이드 > PATH
+CLAUDEX_BIN="${CLAUDEX_NATIVE_BIN:-$(command -v claudex 2>/dev/null || true)}"
+if [ -z "$CLAUDEX_BIN" ] || [ ! -x "$CLAUDEX_BIN" ]; then
+  echo "ERROR: claudex 바이너리 없음. 0.139.1+ 설치(npm) 또는 CLAUDEX_NATIVE_BIN 으로 경로 지정." >&2
+  exit 1
+fi
+
+CLAUDE_HOME="${CLAUDE_CONFIG_DIR:-$HOME/.claude}"
+TEAM_DIR="$CLAUDE_HOME/teams/$TEAM_ID"
+INBOX="$TEAM_DIR/inboxes/$AGENT.json"
+
+# cmux 환경 가드 (deft-cmux-shim 이 PATH 보강했을 수 있음)
+if ! command -v cmux >/dev/null 2>&1 || ! cmux identify >/dev/null 2>&1; then
+  echo "ERROR: cmux 환경 아님(pane 기동 불가). cmux claude-teams 에서 실행하라." >&2
+  exit 1
+fi
+LEAD_PANE="$(cmux identify 2>/dev/null | jq -r .caller.pane_ref)"
+
+# 워커 pane 분할 (우측 새 컬럼) + 비율 정렬 + Lead focus 복원
+SPLIT="$(cmux new-split right --focus false 2>&1)"
+SURF="$(printf '%s' "$SPLIT" | grep -oE 'surface:[0-9]+' | head -1)"
+[ -n "$SURF" ] || { echo "ERROR: pane 분할 실패: $SPLIT" >&2; exit 1; }
+command -v cmux-rebalancing >/dev/null 2>&1 && cmux-rebalancing >/dev/null 2>&1
+cmux focus-pane --pane "$LEAD_PANE" >/dev/null 2>&1
+
+# readiness 가드 — cmux surface lazy-init send 유실 방지(화면 미렌더 pane 은 셸 미기동)
+MARK="$TEAM_DIR/.ready-${AGENT}-$$"
+mkdir -p "$TEAM_DIR" 2>/dev/null
+rm -f "$MARK"
+cmux send --surface "$SURF" "mkdir -p '$TEAM_DIR' && touch '$MARK'"
+cmux send-key --surface "$SURF" Enter
+ready=0
+for _ in $(seq 1 15); do [ -f "$MARK" ] && { ready=1; break; }; sleep 1; done
+rm -f "$MARK"
+if [ "$ready" != "1" ]; then
+  echo "BLOCKED: pane 셸 미기동(lazy-init) — cmux 워크스페이스를 화면 전면으로 활성화 후 재시도." >&2
+  exit 2
+fi
+
+# claudex 네이티브 팀원 기동 (binding 플래그)
+LAUNCH="cd '$CWD' && '$CLAUDEX_BIN' --dangerously-bypass-approvals-and-sandbox --claude-team '$TEAM_ID' --claude-team-agent '$AGENT'"
+cmux send --surface "$SURF" "$LAUNCH"
+cmux send-key --surface "$SURF" Enter
+
+printf '{"spawned":"%s","team":"%s","surface":"%s","inbox":"%s","bin":"%s"}\n' \
+  "$AGENT" "$TEAM_ID" "$SURF" "$INBOX" "$CLAUDEX_BIN"
+echo "다음: Lead 는 SendMessage(to:\"$AGENT\") 로 네이티브 통신. claudex 답신은 Lead inbox 로 와 자동 주입된다."

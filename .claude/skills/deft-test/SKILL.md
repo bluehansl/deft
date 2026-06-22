@@ -45,6 +45,7 @@ node --check plugins/deft/bin/multi-round-bus && echo "bus syntax OK"
 bash -n plugins/deft/bin/claude-bin-keepalive && echo "keepalive syntax OK"
 bash -n plugins/deft/bin/deft-log && echo "deft-log syntax OK"
 bash -n plugins/deft/bin/deft-cmux-shim && echo "deft-cmux-shim syntax OK"
+bash -n plugins/deft/bin/deft-claudex-native-spawn && echo "claudex-native-spawn syntax OK"
 python3 -m json.tool plugins/deft/hooks/hooks.json >/dev/null && echo "hooks.json OK"
 
 # (c) bin 동기화 (Claude ↔ Codex 측 동일해야)
