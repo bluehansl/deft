@@ -55,21 +55,53 @@ cmux focus-pane --pane "$LEAD_PANE" >/dev/null 2>&1
 MARK="$TEAM_DIR/.ready-${AGENT}-$$"
 mkdir -p "$TEAM_DIR" 2>/dev/null
 rm -f "$MARK"
-cmux send --surface "$SURF" "mkdir -p '$TEAM_DIR' && touch '$MARK'"
+# readiness 는 touch 마커 존재(-f)로 견고하게 판정한다. pane 셸의 $TMUX_PANE(tmux pane id)는
+# 별도 파일에 best-effort 캡처(빈 값이어도 readiness 와 무관) → members 등록 tmuxPaneId 로 사용
+# (없으면 빈 값; 팀원↔claudex 라우팅은 name 기반이라 빈 paneId 여도 동작). touch 는 printf 실패와 무관하게 실행.
+PANEFILE="$TEAM_DIR/.pane-${AGENT}-$$"
+rm -f "$PANEFILE"
+cmux send --surface "$SURF" "mkdir -p '$TEAM_DIR'; printf %s \"\$TMUX_PANE\" > '$PANEFILE' 2>/dev/null; touch '$MARK'"
 cmux send-key --surface "$SURF" Enter
 ready=0
 for _ in $(seq 1 15); do [ -f "$MARK" ] && { ready=1; break; }; sleep 1; done
-rm -f "$MARK"
+PANE_ID="$(cat "$PANEFILE" 2>/dev/null)"
+rm -f "$MARK" "$PANEFILE"
 if [ "$ready" != "1" ]; then
   echo "BLOCKED: pane 셸 미기동(lazy-init) — cmux 워크스페이스를 화면 전면으로 활성화 후 재시도." >&2
   exit 2
 fi
 
+# 팀 config members 등록 — **팀원↔claudex 통신 필수**.
+#   Lead→claudex 는 미등록 이름도 inbox 배달되지만, 다른 *팀원*의 SendMessage 라우팅은
+#   수신자가 config.json members 에 있어야 한다(실측: 미등록이면 조용히 드롭). agentType="claude"
+#   로 등록하면 claude 팀원이 정상 주소지정하고, Claude Code 는 런타임 추가 멤버를 라우팅에 즉시 반영.
+#   tmuxPaneId 는 위에서 캡처한 pane 셸의 $TMUX_PANE. 이미 있으면 skip(idempotent).
+#   write_inbox 와 무관한 Claude 소유 파일이라 jq + atomic mv 로 최소 침습 갱신.
+REGISTERED=0
+CFG="$TEAM_DIR/config.json"
+if [ -f "$CFG" ] && command -v jq >/dev/null 2>&1; then
+  if jq -e --arg n "$AGENT" 'any(.members[]?; .name==$n)' "$CFG" >/dev/null 2>&1; then
+    REGISTERED="already"
+  else
+    TS="$(date +%s)000"
+    if jq --arg n "$AGENT" --arg tid "$TEAM_ID" --arg pane "$PANE_ID" --arg cwd "$CWD" --argjson ts "$TS" \
+        '.members += [{agentId:($n+"@"+$tid), name:$n, color:"cyan", joinedAt:$ts, tmuxPaneId:$pane, subscriptions:[], agentType:"claude", model:"opus", prompt:"claudex 네이티브 팀원(deft-claudex-native-spawn)", planModeRequired:false, cwd:$cwd, backendType:"tmux", isActive:true}]' \
+        "$CFG" > "$CFG.deft-tmp" 2>/dev/null && mv "$CFG.deft-tmp" "$CFG"; then
+      REGISTERED=1
+    else
+      rm -f "$CFG.deft-tmp" 2>/dev/null
+      echo "WARN: config.json members 등록 실패 — 팀원↔claudex 통신이 안 될 수 있다(Lead↔claudex 는 정상)." >&2
+    fi
+  fi
+fi
+
 # claudex 네이티브 팀원 기동 (binding 플래그)
-LAUNCH="cd '$CWD' && '$CLAUDEX_BIN' --dangerously-bypass-approvals-and-sandbox --claude-team '$TEAM_ID' --claude-team-agent '$AGENT'"
+# exec 로 셸을 claudex 로 대체 → claudex 가 shutdown 자기종료(process::exit)하면 pane 에 남는
+# 프로세스가 없어 cmux 가 pane 을 자동 close 한다(DoD: "프로세스 종료 + pane 정리"). force-kill·크래시 시도 동일.
+LAUNCH="cd '$CWD' && exec '$CLAUDEX_BIN' --dangerously-bypass-approvals-and-sandbox --claude-team '$TEAM_ID' --claude-team-agent '$AGENT'"
 cmux send --surface "$SURF" "$LAUNCH"
 cmux send-key --surface "$SURF" Enter
 
-printf '{"spawned":"%s","team":"%s","surface":"%s","inbox":"%s","bin":"%s"}\n' \
-  "$AGENT" "$TEAM_ID" "$SURF" "$INBOX" "$CLAUDEX_BIN"
+printf '{"spawned":"%s","team":"%s","surface":"%s","tmuxPaneId":"%s","inbox":"%s","bin":"%s","registered":"%s"}\n' \
+  "$AGENT" "$TEAM_ID" "$SURF" "$PANE_ID" "$INBOX" "$CLAUDEX_BIN" "$REGISTERED"
 echo "다음: Lead 는 SendMessage(to:\"$AGENT\") 로 네이티브 통신. claudex 답신은 Lead inbox 로 와 자동 주입된다."

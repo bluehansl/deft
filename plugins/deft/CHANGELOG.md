@@ -4,6 +4,21 @@
 
 형식은 [Keep a Changelog](https://keepachangelog.com/ko/1.1.0/) 를 따르며, 버전 체계는 [Semantic Versioning](https://semver.org/lang/ko/) 을 사용합니다 (`claude-X.Y.Z` / `codex-X.Y.Z` 접두).
 
+## [claude-2.28.0] - 2026-06-23
+
+> 혼합 claude+claudex **네이티브** 에이전트팀 지원. claudex(0.139.2+, shutdown 자기종료 구현)를 Claude 네이티브 팀에 팀원으로 합류시켜, claude·claudex 팀원이 한 팀에서 네이티브 inbox 로 통신·정상종료한다. (Claude-core 변경 0 — Lead 는 평범한 `SendMessage` 만.)
+
+### Added
+- **agent-teams §2-5: claudex 네이티브 팀원 + 혼합 팀** 절차. claude 팀원=`Agent` tool, claudex 팀원=`deft-claudex-native-spawn`, 둘 다 같은 `~/.claude/teams/<id>/inboxes/` 공유. Lead↔팀원·**팀원↔팀원(claude↔claudex 양방향)** 네이티브 통신, 전원 shutdown 자기종료 + pane auto-close (+미종료 시 force-kill 폴백). §0 에 `deft-claudex-native-spawn` 자동설치, §1 멘탈모델에 혼합 팀 노트.
+
+### Changed
+- **`deft-claudex-native-spawn` 헬퍼 강화** (혼합 팀 필수):
+  - **config.json members 자동 등록** — 팀원↔claudex 라우팅 필수. Lead→claudex 는 미등록도 배달되나, 다른 *팀원*의 `SendMessage` 는 수신자가 members 에 등록돼야 라우팅됨(미등록 시 조용히 드롭, 실측). tmuxPaneId 는 pane 셸 `$TMUX_PANE` best-effort 캡처(빈 값이어도 name 기반 라우팅 동작).
+  - **`exec claudex` 기동** — claudex shutdown 자기종료(`process::exit`) 시 pane 에 프로세스가 남지 않아 cmux 가 pane 자동 close. force-kill·크래시 시에도 동일.
+
+### Verified
+- 혼합 1+1 풀사이클 E2E (2026-06-23, claudex 로컬 debug 빌드): 스폰 → Lead↔both·팀원↔팀원 양방향(수신 inbox from-field 객관 확인) → 전원 shutdown 자기종료(PID 사멸 실측) → 전원 pane auto-close → 잔존 0. (단위테스트 통과 ≠ E2E — 실제 프로세스 종료까지 실측이 합격 기준.)
+
 ## [claude-2.27.0] - 2026-06-22
 
 > claudex 네이티브 팀통신 이식(별도 작업, claudex 0.139.1+)에 대응한 Lead-side 통합. Claude↔claudex 양방향 네이티브 통신을 E2E 실증(도구 경로 + 평문)한 뒤, multi-round 가 버스 대신 Claude 네이티브 inbox 로 claudex 와 통신할 수 있게 함. **Claude-core 변경 0** — Lead 는 평범한 `SendMessage` 만.
