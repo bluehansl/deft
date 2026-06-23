@@ -4,6 +4,20 @@
 
 형식은 [Keep a Changelog](https://keepachangelog.com/ko/1.1.0/) 를 따르며, 버전 체계는 [Semantic Versioning](https://semver.org/lang/ko/) 을 사용합니다 (`claude-X.Y.Z` / `codex-X.Y.Z` 접두).
 
+## [claude-2.29.0] - 2026-06-23
+
+> agent-teams 혼합 claude+claudex 네이티브 팀(§2-5, 2.28.0) **철회** — agent-teams 는 다시 Claude 전용으로 복원. 이종 AI 네이티브 통신(NTP)은 multi-round 로 일원화한다. NTP 헬퍼 `deft-claudex-native-spawn` 는 multi-round 소속으로 유지(철회 대상 아님).
+
+### Changed
+- **agent-teams §2-5(혼합 claude+claudex 팀) 철회** — `agent-teams/SKILL.md` 를 1071d77 직전 상태로 복원(§2-5 혼합팀 절차 + §0 `deft-claudex-native-spawn` 설치 안내 + §1 멘탈모델 혼합 노트 제거). agent-teams 는 Claude 전용 협업 도구로 환원.
+- **방향 정리**: 이종 AI(Claude+claudex) 네이티브 팀 통신 = **NTP(Native Teammate Protocol)** 로 명명하고, agent-teams 가 아니라 **multi-round** 에서 다룬다(헬퍼의 고향). agent-teams 에 claudex 를 끼우던 2.28.0 방향을 되돌림.
+
+### Kept (철회 대상 아님)
+- **`deft-claudex-native-spawn` 헬퍼 유지** — config.json members 자동 등록(팀원↔팀원 NTP 라우팅 인프라)·`exec claudex` 기동 포함. bin 공용 위치(`plugins/deft/bin/`) 불변, multi-round SKILL §claudex 네이티브 팀원 안내가 사용처. (2.28.0 에서 강화된 헬퍼 기능은 NTP 자산이라 보존)
+
+### Note
+- 다운그레이드 금지 정책(§1-4)에 따라 revert 가 아니라 2.29.0 forward 로 진행.
+
 ## [claude-2.28.0] - 2026-06-23
 
 > 혼합 claude+claudex **네이티브** 에이전트팀 지원. claudex(0.139.2+, shutdown 자기종료 구현)를 Claude 네이티브 팀에 팀원으로 합류시켜, claude·claudex 팀원이 한 팀에서 네이티브 inbox 로 통신·정상종료한다. (Claude-core 변경 0 — Lead 는 평범한 `SendMessage` 만.)

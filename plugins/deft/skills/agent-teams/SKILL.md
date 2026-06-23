@@ -72,11 +72,6 @@ if ! command -v deft-log >/dev/null 2>&1; then
   SRC=$(ls -1 ~/.claude/plugins/cache/bluehansl/deft/*/bin/deft-log 2>/dev/null | sort -V | tail -1)
   [ -n "$SRC" ] && mkdir -p ~/.local/bin && cp "$SRC" ~/.local/bin/ && chmod +x ~/.local/bin/deft-log
 fi
-# deft-claudex-native-spawn 설치 — 혼합 claude+claudex 네이티브 팀에서 claudex 팀원 스폰용 (§2-5). claudex 팀원이 필요할 때만.
-if ! command -v deft-claudex-native-spawn >/dev/null 2>&1; then
-  SRC=$(ls -1 ~/.claude/plugins/cache/bluehansl/deft/*/bin/deft-claudex-native-spawn 2>/dev/null | sort -V | tail -1)
-  [ -n "$SRC" ] && mkdir -p ~/.local/bin && cp "$SRC" ~/.local/bin/ && chmod +x ~/.local/bin/deft-claudex-native-spawn
-fi
 if command -v claude-bin-keepalive >/dev/null 2>&1; then
   claude-bin-keepalive || echo "STOP_TEAM_SPAWN: 세션 바이너리 복원 불가(KEEPALIVE_HARDFAIL) — 이 세션의 teammate spawn 은 반드시 실패한다."
 fi
@@ -112,11 +107,9 @@ fi
 |---|---|---|---|
 | `deft:multi-check` | **1회성** fan-out (응답 비교) | Codex/Claude/Gemini 동시 | "한 번 물어보고 답만 비교" |
 | `deft:multi-round` | **지속 통신** (N라운드 양방향 토론) | Claude + Claudex/Codex mix | "의견 갈려서 여러 번 주고받으며 좁히고 싶다 / 토론·합의" |
-| **`deft:agent-teams`** (본 skill) | **지속 협업** (multi-turn 분담·구현·리뷰) | **Claude 중심 (+ claudex 혼합 가능, §2-5)** (내장 팀 기능) | **"실제 코드 분담·구현·검증·리뷰 루프·작업노트 관리"** |
+| **`deft:agent-teams`** (본 skill) | **지속 협업** (multi-turn 분담·구현·리뷰) | **Claude끼리** (내장 팀 기능) | **"실제 코드 분담·구현·검증·리뷰 루프·작업노트 관리"** |
 
 판단 키워드: **답이 하나면 multi-check, 답을 좁혀가야 하면 multi-round, 코드를 만져야 하면 agent-teams.**
-
-> ※ **혼합 claude+claudex 네이티브 팀**: agent-teams 는 claudex 팀원(`0.139.2+`)도 같은 **네이티브 inbox 팀**에 섞을 수 있다(§2-5) — 다른 AI 시각을 코드/협업 팀 안에서 네이티브로 원할 때. (버스 기반 토론·합의는 여전히 `multi-round`.)
 
 **강한 트리거 라우팅** (문구 포함 시 우선 적용):
 
@@ -199,31 +192,6 @@ Bash(run_in_background: true): cmux-rebalance-watch "$LEAD_REF" "$BASE" "$EXPECT
 - **preflight 게이트 연동**: §0-1 의 `STOP_TEAM_SPAWN`/`KEEPALIVE_HARDFAIL` 감지 시 `deft-log "$LOG_DIR" BLOCKED "세션 바이너리 삭제 — teammate spawn 불가. 세션 재시작 필요"` 를 남기고 spawn 을 진행하지 않는다(무진행 침묵 금지).
 - **팀원 idle 은 정상**(§2-1)이므로 `WAIT` 를 남발하지 않는다 — idle 대기 자체는 로그하지 않고, **Lead 의 단계 전환·게이트·정리**를 기록한다.
 - 최근 로그 빠른 확인: `deft-log "$LOG_DIR" --tail`.
-
-### 2-5. claudex 네이티브 팀원 (혼합 claude+claudex 팀)
-
-agent-teams 는 기본적으로 Claude 팀원만 다루지만(§1), **claudex `0.139.2+` 는 Claude Code 네이티브 팀원 통신(파일 inbox 프로토콜)을 구현**하므로 같은 팀에 claudex 팀원을 섞을 수 있다. "에이전트팀 claudex N + claude M 띄워서 …" 처럼 **다른 AI 시각을 네이티브 팀 안에서** 원할 때 사용한다. (claudex 미설치/구버전이면 네이티브 불가 → `multi-round` 버스로 안내.)
-
-**구성 원리**: claude 팀원 = `Agent` tool spawn(§4-3). claudex 팀원 = `deft-claudex-native-spawn` 헬퍼. **둘 다 같은 `~/.claude/teams/<id>/inboxes/` 공유** → 한 팀으로 공존(실측).
-
-**스폰 절차** (Lead=Claude):
-1. **team-id 확보**: claude 팀원 1명을 `Agent` 로 먼저 spawn → 결과 `<name>@session-<id>` 에서 `session-<id>` 획득. (팀은 ≥1 Agent spawn 으로 materialize 되며, 이 결과가 team-session-id 의 유일한 신뢰원 — config 의 leadSessionId 와 다름, 실측.)
-2. **claudex 팀원 spawn**: `deft-claudex-native-spawn <team-id> <agent-name> [cwd]` (헬퍼 설치는 §0). 헬퍼가 자동으로:
-   - cmux pane 분할 + readiness 가드,
-   - **config.json members 등록** ← **팀원↔claudex 라우팅 필수**. 미등록이면 *다른 팀원*의 `SendMessage` 가 claudex inbox 에 라우팅되지 않는다(조용히 드롭, 실측). Lead→claudex 는 미등록도 배달되지만 팀원→claudex 는 members 등록 필요. (Claude Code 는 런타임 추가 멤버를 즉시 반영.)
-   - `exec claudex …` 로 기동 → claudex 종료 시 pane 에 프로세스가 없어 **cmux 가 pane 자동 close**.
-3. 나머지 claude/claudex 팀원 반복.
-
-**통신** (전부 네이티브 inbox):
-- Lead→claudex/claude: 평범한 `SendMessage(to:"<name>")`. claudex→Lead/팀원: claudex `send_message` 도구(평문). claude→claudex/claude: `SendMessage`.
-- **claude↔claudex 팀원 양방향 검증됨**(2026-06-23, 1+1 E2E, 수신 inbox from-field 객관 확인).
-
-**종료** (회의/작업 끝): 각 팀원에 `SendMessage(message:{type:"shutdown_request"})` →
-- claude 팀원: 네이티브 승인 후 종료(harness 가 pane close, `teammate_terminated` 시스템 메시지).
-- claudex 팀원: `shutdown_approved` 기록 후 **`process::exit` 자기종료** + `exec` 로 **pane 자동 close**.
-- **force-kill 폴백**: 혹시 미종료(구버전 등)면 `cmux close-surface --surface <surf>` 로 강제 정리(프로세스 사멸 확인됨). **소유 pane 만**, §Cleanup 안전 규칙 준수.
-
-**검증된 풀사이클**(2026-06-23, 로컬 debug 빌드 E2E): 혼합 1+1 스폰 → Lead↔both·팀원↔팀원 양방향 → 전원 shutdown 자기종료(PID 사멸 실측) → 전원 pane auto-close → 잔존 0. (단위테스트 아닌 실제 프로세스 종료까지 실측이 합격 기준.)
 
 ---
 
