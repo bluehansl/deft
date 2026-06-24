@@ -4,6 +4,14 @@
 
 형식은 [Keep a Changelog](https://keepachangelog.com/ko/1.1.0/) 를 따르며, 버전 체계는 [Semantic Versioning](https://semver.org/lang/ko/) 을 사용합니다 (`claude-X.Y.Z` / `codex-X.Y.Z` 접두).
 
+## [claude-2.36.2] - 2026-06-25
+
+> **multi-check reviewer 견고화 2건 (풀사이클 테스트 발견)** — ① reviewer 가 spawn 후 첫 턴에 idle 로 멈추던 문제(즉시 실행 지시 추가) ② reviewer 가 shutdown_request 에 prose 로만 응답해 SIGKILL 필요했던 문제(shutdown_response 도구 호출 강조). Claude 측 전용(Codex multi-check reviewer 는 종료 메커니즘이 달라 무관).
+
+### Changed
+- **reviewer spawn prompt 에 "즉시 실행" 지시 명시 (§Phase 3 템플릿)** — `run_in_background:true` 로 띄워도 페르소나만 인라인하면 reviewer 가 첫 턴에 deft-review 를 실행 않고 idle 대기하는 경우가 있어(실측), `[검토 대상]` 뒤에 "지금 즉시 deft-review 실행 후 SendMessage 보고, 추가 지시 대기 말 것" 한 줄을 덧붙이도록 명문화.
+- **reviewer 페르소나 종료 프로토콜 강조 (codex/claude/gemini-reviewer.md)** — shutdown_request 수신 시 "다른 어떤 출력보다 먼저 shutdown_response 도구 호출, prose·CLI 재실행 금지" 🚨 블록 추가. codex/gpt-5.5 reviewer 가 shutdown 을 prose 로만 응답해 SIGKILL·좀비 핸들을 유발한 실측 사고 반영.
+
 ## [claude-2.36.1 / codex-1.20.1] - 2026-06-25
 
 > **deft-review PATH 자동 보강 — 빈약한 PATH 환경(Agent 워커 셸)에서도 CLI 탐색** — multi-check reviewer(Agent tool 워커)의 비대화형 셸은 PATH 에 nvm bin 이 없어 `command -v claudex/codex/gemini` 가 실패, CODEX_NOT_INSTALLED/GEMINI_NOT_INSTALLED 오판이 났다(실측). deft-review 가 호출 시 표준 설치 경로를 PATH 앞에 prepend 해 어느 셸에서 호출돼도 CLI 를 찾게 보강.

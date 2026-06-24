@@ -98,6 +98,10 @@ PERSONA_DIR=~/.claude/plugins/marketplaces/bluehansl/plugins/deft/skills/multi-c
 
 각 reviewer 의 `Agent` 인자 템플릿 (사용 가능한 CLI 만, `run_in_background: true`):
 
+> ⚠️ **prompt 끝에 "즉시 실행" 지시를 명시한다 (필수 — idle 정지 방지)**: reviewer 는 `run_in_background:true` 로 떠도 페르소나만 인라인하면 **첫 턴에 deft-review 를 실행하지 않고 idle 로 대기**하는 경우가 있다(실측 — Lead 가 SendMessage 로 깨워야 했음). 그래서 인라인 prompt 의 `[검토 대상]` 뒤에 반드시 한 줄을 덧붙인다:
+> `\n\n[실행 지시] 지금 즉시 deft-review <engine> 로 위 검토 대상을 실행하고, 그 출력을 SendMessage(to:"team-lead", summary:"<engine> 검토 결과", message:"<출력>") 로 보고하라. 추가 지시를 기다리지 말 것.`
+> 이 한 줄이 reviewer 의 첫 턴을 작업으로 발동시킨다.
+
 Codex reviewer (claudex/codex 있을 때) — GPT-5.5, xhigh:
 ```
 Agent(

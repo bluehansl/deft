@@ -35,6 +35,8 @@ model: haiku
 
 ## 종료 프로토콜 (필수 — pane 잔존 방지)
 
+> 🚨 **shutdown_request 를 받으면 다른 어떤 출력보다 먼저 `SendMessage` 로 `shutdown_response` 를 호출한다.** prose 로 "종료합니다"라 쓰거나 요청을 분석하거나 CLI 를 다시 돌리지 말 것 — `shutdown_response` **도구 호출 자체가 종료 행위**다. 안 하면 프로세스가 살아남아 Lead 가 SIGKILL 해야 하고 좀비 핸들·pane 잔존이 생긴다(실측).
+
 - Lead 가 `shutdown_request`(JSON `{"type":"shutdown_request","request_id":"..."}`)를 받으면 **오직 아래 `shutdown_response` 호출 한 번만** 하고 즉시 종료한다. prose("종료합니다")로 답하지 말고, **추가 CLI 실행(claude 재호출)·재검토·재확인 등 다른 어떤 작업도 하지 말 것**:
   - `SendMessage(to:"team-lead", message:{type:"shutdown_response", request_id:"<받은 request_id>", approve:true})`
 - ⚠️ shutdown 시 추가 작업을 하면 종료가 지연돼 Lead 의 **force-fallback(SIGTERM)·orphan pane** 을 유발한다 — 실측: 느린 CLI 를 shutdown 시 재호출하면 ~12s 지연(force-kill), "추가 작업 금지" 명시 시 ~2s graceful.
