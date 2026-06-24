@@ -4,6 +4,16 @@
 
 형식은 [Keep a Changelog](https://keepachangelog.com/ko/1.1.0/) 를 따르며, 버전 체계는 [Semantic Versioning](https://semver.org/lang/ko/) 을 사용합니다 (`claude-X.Y.Z` / `codex-X.Y.Z` 접두).
 
+## [claude-2.36.0 / codex-1.20.0] - 2026-06-25
+
+> **rebalance-guard `expected-panes` 인자 — 예정 다(多)컬럼이면 첫 워커부터 목표 비율 미리 정렬** — guard 가 "지금 pane 수"만 보던 것을, Lead 가 spawn 확정 시 넘기는 "예정 총 pane 수"도 알게 해, 워커가 다 뜨기 전부터 최종 목표 비율(60:40)로 당긴다. multi-round·agent-teams 공통(multi-check 은 guard 미사용이라 제외).
+
+### Added
+- **`cmux-rebalance-guard` 7번째 인자 `expected-panes`** (양측) — Lead 포함 예정 총 pane 수(= 스폰 확정 워커 수 + 1). **≥3 이면** 현재 pane 이 2개(Lead+워커1)일 때도 발동 임계를 58 로 올려, cmux 기본 2-pane 분할(50:50)을 **워커가 다 뜨기 전부터 목표 60:40 으로 미리** 정렬한다. ≤2(또는 미지정)면 최종 2-pane=50:50 이 기본 분할이라 별도 교정 불요 → 기존 임계(50)대로(하위호환). (배경: 종전엔 첫 워커 단계 50:50 이 임계 50 에 안 걸려 두 번째 워커가 Lead 를 깎아야 비로소 60:40 으로 정렬됐다 — 실측.)
+
+### Changed
+- **multi-round(용례 1·작업 T-1)·agent-teams(§2-3) guard 호출에 `EXP_PANES` 전달** — multi-round 는 `EXP_PANES=$((WORKER_COUNT+1))`, agent-teams 는 기존 `$EXPECTED`(=BASE+N) 재사용. 워커 2명+ 면 ≥3 이 되어 첫 워커 단계부터 60:40 정렬.
+
 ## [codex-1.19.1] - 2026-06-24
 
 > **Codex 스킬 Phase 0 deft-bin-sync 일원화** — Claude 측(claude-2.34.0)에 이어 Codex 포팅본 스킬의 개별 헬퍼 설치 블록을 deft-bin-sync 부트스트랩으로 교체. (인프라 `bin/deft-bin-sync`·`cmux-rebalance-guard` 는 codex-1.18.0/1.19.0 에서 이미 양측 미러됨 — 이번엔 스킬 인라인만 교체. Codex 만 bump.)

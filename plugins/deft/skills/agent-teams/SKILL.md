@@ -149,7 +149,9 @@ Bash(run_in_background: true): cmux-rebalance-watch "$LEAD_REF" "$BASE" "$EXPECT
 #   (느린 마지막 팀원 재계산까지 커버), 모든 spawn 후 touch 하면 마지막 안정 확인 후 종료.
 LEAD_WS=$(cmux identify | jq -r '.caller.workspace_ref // .focused.workspace_ref')
 GUARD_FLAG="$LOG_DIR/.spawn-done"; rm -f "$GUARD_FLAG"
-Bash(run_in_background: true): cmux-rebalance-guard "$LEAD_WS" 90 0.1 50 5 "$GUARD_FLAG"
+# 7번째 인자 = expected-panes(Lead 포함 예정 총 pane). 위에서 이미 계산한 $EXPECTED(=BASE+N) 를 그대로 재사용 —
+#   **≥3 이면** 첫 팀원(2-pane) 단계부터 50:50 → 목표 60:40 으로 미리 당긴다(팀원 2명+ 에 필수).
+Bash(run_in_background: true): cmux-rebalance-guard "$LEAD_WS" 90 0.1 50 5 "$GUARD_FLAG" "$EXPECTED"
 # ⚠️ 모든 팀원 Agent spawn 이 반환된 직후 반드시:  touch "$GUARD_FLAG"  (guard 종료 신호)
 ```
 > **clean-grid vs robust**: `FAST=1`(BASE==1, Lead 단독)이면 단발 push 빠른 경로(squish 결정론·우측 행 이미 균등 — 실측), 기존 pane 이 있으면(BASE>1) robust 다회 수렴(섞임/비그리드/소유권 변형 위험 회피).

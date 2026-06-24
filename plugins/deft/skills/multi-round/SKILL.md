@@ -191,9 +191,13 @@ echo "$CLAUDE_CODE_SESSION_ID"   # Lead(현재 Claude Code 세션)의 UUID — 1
 # done-flag 방식: guard 는 플래그가 touch 되기 전엔 시간 무관하게 비율을 지킨다(느린 마지막 워커
 #   재계산까지 커버). 마지막 워커 spawn 반환 후 플래그를 touch 하면 그때 마지막 안정 확인 후 종료.
 GUARD_FLAG="$SESSION_DIR/.spawn-done"; rm -f "$GUARD_FLAG"
-nohup cmux-rebalance-guard "$DEFT_BASE_WORKSPACE" 90 0.1 50 5 "$GUARD_FLAG" >/dev/null 2>&1 &
+# expected-panes(7번째 인자) = Lead 포함 예정 총 pane = 스폰 확정한 워커 수 + 1. **≥3 이면** 첫 워커(2-pane)
+#   단계부터 50:50 → 목표 60:40 으로 미리 당긴다(워커 2명 이상 회의/작업에 필수). 워커 1명뿐이면 EXP=2 → 50:50 유지.
+EXP_PANES=$((WORKER_COUNT + 1))   # WORKER_COUNT = 이번 회의/작업에 스폰 확정한 총 워커 수
+nohup cmux-rebalance-guard "$DEFT_BASE_WORKSPACE" 90 0.1 50 5 "$GUARD_FLAG" "$EXP_PANES" >/dev/null 2>&1 &
 ```
 > ⚠️ **모든 워커 spawn 이 끝난 직후 반드시 `touch "$GUARD_FLAG"`** — 이게 guard 종료 신호다. 빠뜨리면 guard 가 max-sec(90초)까지 살아있다 종료(잔존은 아니나 늦음). spawn 호출 반환 ≠ pane 재계산 완료라 시간으로 못 끊으므로 플래그가 정확하다.
+> ⚠️ **`EXP_PANES` 는 spawn 시작 전에 확정**한다 — Lead 가 띄울 워커 수를 정하는 순간 함께 정하는 값(워커 수 + 1). 워커 2명+ 면 ≥3 이 되어 첫 워커 단계부터 60:40 정렬, 워커 1명이면 2 라 50:50(기본 분할) 유지.
 
 첫 claude 워커 (이 spawn 이 팀을 materialize → 여기서 team-id 를 얻고, 동시에 회의 참가자가 된다):
 
@@ -744,7 +748,7 @@ Lead 의 라운드 동작:
 
 - 첫 claude 워커 `Agent` tool spawn(팀 생성 겸 참가) → claudex 워커 `deft-claudex-native-spawn`(헬퍼 down). **§NTP 불변 하네스 H1~H4 그대로**(anchor/placeholder 금지).
 - ⚠️ 회의와 유일한 차이: 헬퍼에 **`DEFT_BUS_DIR` 를 설정하지 않는다**(board 버스 미주입 = 순수 NTP). claude 워커는 Agent tool 이라 어차피 버스 없음.
-- spawn 시작 시 `cmux-rebalance-guard` 발사(§용례 1 과 동일 — done-flag 방식: `GUARD_FLAG="$SESSION_DIR/.spawn-done"; rm -f "$GUARD_FLAG"; nohup cmux-rebalance-guard "$DEFT_BASE_WORKSPACE" 90 0.1 50 5 "$GUARD_FLAG" &`). **모든 mate spawn 후 `touch "$GUARD_FLAG"`** 로 guard 종료.
+- spawn 시작 시 `cmux-rebalance-guard` 발사(§용례 1 과 동일 — done-flag + expected-panes 방식: `GUARD_FLAG="$SESSION_DIR/.spawn-done"; rm -f "$GUARD_FLAG"; EXP_PANES=$((WORKER_COUNT + 1)); nohup cmux-rebalance-guard "$DEFT_BASE_WORKSPACE" 90 0.1 50 5 "$GUARD_FLAG" "$EXP_PANES" &`). **모든 mate spawn 후 `touch "$GUARD_FLAG"`** 로 guard 종료. (mate 2명+ 면 EXP_PANES≥3 → 첫 워커 단계부터 60:40 정렬.)
 
 **(T-2) 작업 분배 — Lead↔mate 1:N**
 
