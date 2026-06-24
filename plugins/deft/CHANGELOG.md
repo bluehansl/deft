@@ -4,6 +4,19 @@
 
 형식은 [Keep a Changelog](https://keepachangelog.com/ko/1.1.0/) 를 따르며, 버전 체계는 [Semantic Versioning](https://semver.org/lang/ko/) 을 사용합니다 (`claude-X.Y.Z` / `codex-X.Y.Z` 접두).
 
+## [claude-2.30.0] - 2026-06-24
+
+> 이종 AI 네이티브 팀 통신의 확정 기술명 **NTP(Native Teammate Protocol)** 명칭 통일 + multi-round 가이드에 NTP **운영 용례 3종**(팀원 spawn · 기존 세션 resume 편입 · NTP 메시지 송수신) 추가.
+
+### Added
+- **multi-round/SKILL.md §운영 용례** — §"NTP — claudex 네이티브 팀원" 섹션에 복사실행 가능한 용례 4종 추가(모두 실측 검증): ⓪ Lead 세션 ID 확인(`$CLAUDE_CODE_SESSION_ID`) + **team-id 와 다른 값임을 명시**(leadSessionId 조차 팀 자체 id 라 세션 ID 아님), ① team-id 획득 + claude(`Agent`)·claudex(`deft-claudex-native-spawn`) 팀원 spawn, ② 기존 claudex 세션을 `--claude-team … --claude-team-agent … resume <uuid>` 로 **대화 맥락 보존한 채 팀원 편입**, ③ `SendMessage` NTP 송수신 + `<teammate-message>` 자동주입 + `shutdown_request` 종료. 추상 절차(why)와 분리된 명령(how) 레퍼런스.
+
+### Changed
+- **multi-round/SKILL.md** — §"claudex 네이티브 팀원" 섹션 제목에 `NTP —` prefix 추가 + 도입부에 NTP 한 줄 정의(파일 inbox 네이티브 팀 통신을 이종 AI 에 이식, `send_message` 직접 통신) 삽입. 통신 우선순위 매트릭스의 "Claude 네이티브 inbox" 라벨을 "NTP — Claude 네이티브 inbox" 로 보강. 기존 표현·섹션 참조(`§claudex 네이티브 팀원`)는 유지해 링크 무손상.
+
+### Note
+- claudex 측 `docs/claudex-customizations.md` §5-1 제목도 같은 NTP 명칭으로 통일(별도 repo, 로컬 문서 — deft 버전과 무관). 메모리(reference_ntp.md)는 기 통일됨.
+
 ## [claude-2.29.0] - 2026-06-23
 
 > agent-teams 혼합 claude+claudex 네이티브 팀(§2-5, 2.28.0) **철회** — agent-teams 는 다시 Claude 전용으로 복원. 이종 AI 네이티브 통신(NTP)은 multi-round 로 일원화한다. NTP 헬퍼 `deft-claudex-native-spawn` 는 multi-round 소속으로 유지(철회 대상 아님).
