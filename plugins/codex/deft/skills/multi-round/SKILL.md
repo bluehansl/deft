@@ -185,14 +185,18 @@ HAVE_CLAUDE=0; HAVE_CLAUDEX=0; HAVE_CODEX=0; HAVE_CMUX=0
 which claude   >/dev/null 2>&1 && HAVE_CLAUDE=1
 which claudex  >/dev/null 2>&1 && HAVE_CLAUDEX=1
 which codex    >/dev/null 2>&1 && HAVE_CODEX=1
-# cmux CLI 가 PATH 에 없으면 deft wrapper 를 ~/.local/bin/cmux 로 설치 (조건부 gap-fill) — 신 cmux(2026-06~)는
-#   `cmux` 를 셸 통합 precmd 훅으로 첫 대화형 프롬프트에만 PATH 주입 → 비대화형 셸(Bash 도구)엔 부재 → bare cmux 깨짐.
-#   wrapper 가 매 호출 env(CMUX_BUNDLED_CLI_PATH 등)→표준경로로 진짜 cmux 해석. 구버전·기존 cmux 는 안 가림.
-if ! command -v cmux >/dev/null 2>&1; then
-  SRC=$(ls -1 ~/.codex/plugins/cache/bluehansl-codex/deft/*/bin/deft-cmux-shim 2>/dev/null | sort -V | tail -1)
-  [ -z "$SRC" ] && SRC=$(ls -1 ~/.claude/plugins/cache/bluehansl/deft/*/bin/deft-cmux-shim 2>/dev/null | sort -V | tail -1)
-  [ -n "$SRC" ] && mkdir -p ~/.local/bin && cp "$SRC" ~/.local/bin/cmux && chmod +x ~/.local/bin/cmux \
-    && echo "INFO: cmux CLI 가 PATH 에 없어 deft wrapper 를 ~/.local/bin/cmux 로 설치 (비대화형 셸 PATH 누락 대응)"
+# 헬퍼 설치·갱신은 deft-bin-sync 단일 도구로 일원화(codex-1.18.0~). 종전 개별 `if ! command -v`(없으면 설치)는
+#   ~/.local/bin 구버전 잔재를 plugin update 후에도 갱신 못 하던 결함이 있어 제거. deft-bin-sync 는 캐시 sort -V tail
+#   최신본과 cmp 해 다르면 cp → cmux(shim)·multi-round-bus·cmux-rebalancing·cmux-rebalance-guard·deft-model·deft-log·
+#   deft-claudex/claude-native-spawn 등 전체를 항상 최신화. 캐시 탐색은 codex 우선(deft-bin-sync 내장 순서).
+DEFT_SYNC_SRC=$(ls -1 ~/.codex/plugins/cache/bluehansl-codex/deft/*/bin/deft-bin-sync 2>/dev/null | sort -V | tail -1)
+[ -z "$DEFT_SYNC_SRC" ] && DEFT_SYNC_SRC=$(ls -1 ~/.claude/plugins/cache/bluehansl/deft/*/bin/deft-bin-sync 2>/dev/null | sort -V | tail -1)
+if [ -n "$DEFT_SYNC_SRC" ]; then
+  mkdir -p ~/.local/bin && cp "$DEFT_SYNC_SRC" ~/.local/bin/deft-bin-sync && chmod +x ~/.local/bin/deft-bin-sync
+  deft-bin-sync   # 전체 헬퍼 갱신형 동기
+  command -v cmux >/dev/null 2>&1 || deft-bin-sync cmux 2>/dev/null   # cmux gap-fill 보강
+else
+  echo "WARN: deft-bin-sync 미발견(구버전 캐시) — 헬퍼 자동 동기 비활성"
 fi
 which cmux     >/dev/null 2>&1 && cmux identify >/dev/null 2>&1 && HAVE_CMUX=1
 
@@ -215,49 +219,19 @@ fi
 echo "참가자 모드: $PARTICIPANTS_MODE"
 echo "cmux 환경: $([ "$HAVE_CMUX" -eq 1 ] && echo YES || echo NO)"
 
-# B. 버스 가용성 — node + multi-round-bus 헬퍼 (미설치 시 plugin 동봉본 자동 설치)
+# B. 버스 가용성 판정 — node + multi-round-bus (설치는 위 deft-bin-sync 가 이미 처리)
 HAVE_BUS=0
 if command -v node >/dev/null 2>&1; then
-  if ! command -v multi-round-bus >/dev/null 2>&1; then
-    SRC=$(ls -1 ~/.codex/plugins/cache/bluehansl-codex/deft/*/bin/multi-round-bus 2>/dev/null | sort -V | tail -1)
-    [ -z "$SRC" ] && SRC=$(ls -1 ~/.claude/plugins/cache/bluehansl/deft/*/bin/multi-round-bus 2>/dev/null | sort -V | tail -1)
-    if [ -n "$SRC" ]; then
-      mkdir -p ~/.local/bin && cp "$SRC" ~/.local/bin/multi-round-bus && chmod +x ~/.local/bin/multi-round-bus
-      echo "INFO: multi-round-bus 자동 설치 완료 (~/.local/bin/)"
-    fi
-  fi
   command -v multi-round-bus >/dev/null 2>&1 && HAVE_BUS=1
 else
   echo "WARN: node 미설치 — 메시지 버스 비활성 (send/capture 폴백)"
 fi
 BUS_BIN=$(command -v multi-round-bus 2>/dev/null)
 echo "메시지 버스: $([ "$HAVE_BUS" -eq 1 ] && echo "YES ($BUS_BIN)" || echo NO)"
-
-# C. cmux-rebalancing 헬퍼 설치 확인 — 미설치 시 plugin 동봉본으로 자동 설치
-if ! command -v cmux-rebalancing >/dev/null 2>&1; then
-  SRC=$(ls -1 ~/.codex/plugins/cache/bluehansl-codex/deft/*/bin/cmux-rebalancing 2>/dev/null | sort -V | tail -1)
-  [ -z "$SRC" ] && SRC=$(ls -1 ~/.claude/plugins/cache/bluehansl/deft/*/bin/cmux-rebalancing 2>/dev/null | sort -V | tail -1)
-  if [ -n "$SRC" ]; then
-    mkdir -p ~/.local/bin && cp "$SRC" ~/.local/bin/cmux-rebalancing && chmod +x ~/.local/bin/cmux-rebalancing
-    echo "INFO: cmux-rebalancing 자동 설치 완료 (~/.local/bin/)"
-  else
-    echo "WARN: cmux-rebalancing 미설치 + plugin 동봉본 없음 — pane 비율 자동 조정 비활성"
-  fi
-fi
-
-# deft 공용 모델 ID 헬퍼(deft-model) 설치 — 모델 차단·버전업 시 단일 관리 지점
-if ! command -v deft-model >/dev/null 2>&1; then
-  SRC=$(ls -1 ~/.codex/plugins/cache/bluehansl-codex/deft/*/bin/deft-model 2>/dev/null | sort -V | tail -1)
-  [ -z "$SRC" ] && SRC=$(ls -1 ~/.claude/plugins/cache/bluehansl/deft/*/bin/deft-model 2>/dev/null | sort -V | tail -1)
-  [ -n "$SRC" ] && mkdir -p ~/.local/bin && cp "$SRC" ~/.local/bin/deft-model && chmod +x ~/.local/bin/deft-model
-fi
-# deft-log 진행 로그 헬퍼 설치 — 오케스트레이션 단계를 세션 로그로 남겨 사용자 관찰성 확보
-if ! command -v deft-log >/dev/null 2>&1; then
-  SRC=$(ls -1 ~/.codex/plugins/cache/bluehansl-codex/deft/*/bin/deft-log 2>/dev/null | sort -V | tail -1)
-  [ -z "$SRC" ] && SRC=$(ls -1 ~/.claude/plugins/cache/bluehansl/deft/*/bin/deft-log 2>/dev/null | sort -V | tail -1)
-  [ -n "$SRC" ] && mkdir -p ~/.local/bin && cp "$SRC" ~/.local/bin/deft-log && chmod +x ~/.local/bin/deft-log
-fi
+# (cmux-rebalancing·deft-model·deft-log 등 헬퍼 설치는 deft-bin-sync 가 일원 처리 — 개별 블록 제거됨, codex-1.18.0~)
 ```
+
+> **헬퍼 설치·갱신은 `deft-bin-sync` 단일 도구로 일원화**(codex-1.18.0~). 종전의 개별 `if ! command -v` 블록(bus·cmux-rebalancing·deft-model·deft-log)은 **"없으면 설치"라 구버전 잔재를 갱신 못 하던 결함**이 있어 제거했다. `deft-bin-sync` 는 캐시 최신본과 `cmp` 해 다르면 갱신하므로 plugin update 후 항상 최신 헬퍼가 쓰인다. (Claude 측 multi-round·agent-teams·multi-check 와 동일 사상.)
 
 **핵심**:
 - 참가자 CLI 1개 이상 필수

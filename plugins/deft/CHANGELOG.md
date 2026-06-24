@@ -4,6 +4,16 @@
 
 형식은 [Keep a Changelog](https://keepachangelog.com/ko/1.1.0/) 를 따르며, 버전 체계는 [Semantic Versioning](https://semver.org/lang/ko/) 을 사용합니다 (`claude-X.Y.Z` / `codex-X.Y.Z` 접두).
 
+## [codex-1.19.1] - 2026-06-24
+
+> **Codex 스킬 Phase 0 deft-bin-sync 일원화** — Claude 측(claude-2.34.0)에 이어 Codex 포팅본 스킬의 개별 헬퍼 설치 블록을 deft-bin-sync 부트스트랩으로 교체. (인프라 `bin/deft-bin-sync`·`cmux-rebalance-guard` 는 codex-1.18.0/1.19.0 에서 이미 양측 미러됨 — 이번엔 스킬 인라인만 교체. Codex 만 bump.)
+
+### Changed
+- **Codex multi-round·multi-check Phase 0 자동설치 일원화** — 개별 `if ! command -v $H`(없으면 설치, 구버전 잔재 갱신 불가 결함) 블록을 **deft-bin-sync 부트스트랩 + 1회 호출**로 교체(캐시 codex 우선 탐색). `HAVE_BUS`(node+bus 판정)·`HAVE_CMUX`(cmux identify) 판정 로직은 유지, 설치만 위임. cmux gap-fill 은 `deft-bin-sync cmux` 보강.
+
+### Notes
+- **done-flag 는 Codex 포팅본에 적용 대상 없음**(의도된 미반영) — Codex multi-round/multi-check 는 Lead=Codex 로 `cmux new-split`(빈 pane) **선분할 → 단발 rebalancing**(Option 2) 모델이라, claude `Agent` tool 의 "spawn ~1.4초 후 늦은 cmux 재계산" 타이밍 결함이 **구조적으로 발생하지 않는다**. done-flag guard 가 푸는 그 문제가 없으므로 부분 반영조차 불요. (claude-2.35.0 done-flag 는 Agent-tool spawn 전용.)
+
 ## [claude-2.35.0 / codex-1.19.0] - 2026-06-24
 
 > **rebalance-guard done-flag 종료 방식** — guard 종료 조건을 "시간(grace 5초)" → "Lead 의 spawn 완료 신호 플래그"로 전환. 느린 마지막 워커(4번째 Agent)의 재계산이 grace 후에 와서 guard 가 먼저 죽어 마지막 틀어짐을 놓치던 문제(실측 540px 잔존) 해결. multi-round 회의·작업 + agent-teams 공통 적용.
