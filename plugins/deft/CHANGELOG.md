@@ -4,6 +4,17 @@
 
 형식은 [Keep a Changelog](https://keepachangelog.com/ko/1.1.0/) 를 따르며, 버전 체계는 [Semantic Versioning](https://semver.org/lang/ko/) 을 사용합니다 (`claude-X.Y.Z` / `codex-X.Y.Z` 접두).
 
+## [claude-2.33.0] - 2026-06-24
+
+> multi-round **작업 모드 신규**(순수 NTP mesh) + **Lead 자동주입 폴백 워치독** — 회의(board 브로드캐스트)에 더해 board 없는 점대점 분담 실행 모드를 추가하고, NTP 수신 간헐 실패를 inbox 직접 폴링으로 복구. (Lead=Claude NTP 고유 — Codex 포팅본 미적용, Claude 만 bump.)
+
+### Added
+- **multi-round 작업 모드 (§통신 모드 — 회의 vs 작업 / §Phase 4-T)** — 회의 모드(board 브로드캐스트 + 합의)와 별개의 **순수 NTP mesh** 통신 모드. board 없이 Lead↔mate 1:N(작업 지시) + mate↔mate N:N(직접 협의) 점대점, audit 은 agent-teams `work.md`(같은 work-id)에 Lead 단독 취합. 트리거 "작업지시"/"작업요청"/"의뢰". 차이는 **브로드캐스트(board) 유무** — 회의=의견 수렴, 작업=분담 실행.
+- **Lead 자동주입 폴백 워치독 (용례 3)** — NTP 수신(Lead 자동주입) 간헐 실패(porter 수신 사고) 대응. 응답 대기 구간에서 N초 무응답이면 `team-lead.json` inbox 를 직접 폴링·드레인(read=false 확인 + 마킹). 버스 `watch` 데드락 워치독과 같은 사상. 회의·작업 모드 공통.
+
+### Changed
+- **트리거 라우팅 + Phase 1-0.5 통신 모드 결정** — "회의"/"미팅"/"논의"/"토론" → 회의 모드, "작업지시"/"작업요청"/"의뢰" → 작업 모드. agent-teams("코딩 작업"=실제 파일 수정)와의 경계 명시: "코드 만지면 agent-teams, AI 시각 섞어 분담하면 multi-round 작업 모드". description 에 작업 모드 트리거 추가.
+
 ## [claude-2.32.0 / codex-1.17.0] - 2026-06-24
 
 > multi-round/agent-teams 워커 spawn **하네스 확정 + pane 레이아웃 자가교정 + kill 안전종료** — 실전 검증 세션에서 anchor/placeholder 우회 장치 제거, claudex 헬퍼 right→down 세로 스택, claude Agent 워커 spawn 시 cmux 비율 깨짐 자동 교정 워처(`cmux-rebalance-guard`), in-process 워커 좀비 핸들 방지 규칙을 확립. 모두 0.1초 pane-watch 모니터링으로 실측 확정.
