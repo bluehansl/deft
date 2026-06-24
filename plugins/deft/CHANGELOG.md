@@ -4,6 +4,14 @@
 
 형식은 [Keep a Changelog](https://keepachangelog.com/ko/1.1.0/) 를 따르며, 버전 체계는 [Semantic Versioning](https://semver.org/lang/ko/) 을 사용합니다 (`claude-X.Y.Z` / `codex-X.Y.Z` 접두).
 
+## [claude-2.31.0] - 2026-06-24
+
+> multi-round 워커 **보고 채널 원칙** 강화 — Lead 가 요청한 작업은 항상 통신 도구(NTP `send_message` / 버스 `post_message`)로 보고하고, 사용자가 TUI 에 직접 친 것만 세션 출력으로 답한다. (워커가 결과를 세션에 출력만 하고 `send_message` 미호출 → Lead 미수신하던 실측 사고 차단.)
+
+### Changed
+- **multi-round 페르소나(`agents/claude-participant.md`·`codex-participant.md`)** — §"보고 채널 원칙 (출력 ≠ 전달)" 신규 섹션: 요청 **출처**(통신 채널 주입 vs 사용자 TUI 직접 입력)에 따라 응답 채널을 구분. 통신 채널로 온 Lead·참가자 요청은 반드시 통신 도구(버스 `post_message` / NTP `send_message`)로 보고, 사용자 직접 입력만 출력. §금지의 "pane 출력만으로 응답 종료 금지"를 버스 전용에서 **NTP(`send_message`)까지 일반화**.
+- **multi-round/SKILL.md §NTP 절차 3** — 워커 보고 규칙 명시(출력 ≠ 전달, `send_message` 강제 + 실측 사고 기록). 페르소나 §보고 채널 원칙과 SSOT 연결.
+
 ## [claude-2.30.0] - 2026-06-24
 
 > 이종 AI 네이티브 팀 통신의 확정 기술명 **NTP(Native Teammate Protocol)** 명칭 통일 + multi-round 가이드에 NTP **운영 용례 3종**(팀원 spawn · 기존 세션 resume 편입 · NTP 메시지 송수신) 추가.
