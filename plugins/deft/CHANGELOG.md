@@ -4,7 +4,14 @@
 
 형식은 [Keep a Changelog](https://keepachangelog.com/ko/1.1.0/) 를 따르며, 버전 체계는 [Semantic Versioning](https://semver.org/lang/ko/) 을 사용합니다 (`claude-X.Y.Z` / `codex-X.Y.Z` 접두).
 
-## [claude-2.36.0 / codex-1.20.0] - 2026-06-25
+## [claude-2.36.1 / codex-1.20.1] - 2026-06-25
+
+> **deft-review PATH 자동 보강 — 빈약한 PATH 환경(Agent 워커 셸)에서도 CLI 탐색** — multi-check reviewer(Agent tool 워커)의 비대화형 셸은 PATH 에 nvm bin 이 없어 `command -v claudex/codex/gemini` 가 실패, CODEX_NOT_INSTALLED/GEMINI_NOT_INSTALLED 오판이 났다(실측). deft-review 가 호출 시 표준 설치 경로를 PATH 앞에 prepend 해 어느 셸에서 호출돼도 CLI 를 찾게 보강.
+
+### Fixed
+- **`deft-review` PATH 자동 보강** (양측) — 프롬프트 처리 후 case 진입 전, `$HOME/.local/bin` · 최신 nvm bin(`$HOME/.nvm/versions/node/*/bin` sort -V tail) · `$HOME/.nvm/current/bin` · `/opt/homebrew/bin` · `/usr/local/bin` 을 PATH 에 prepend(이미 있으면 skip). 빈약한 PATH(`/usr/bin:/bin`)에서도 claudex/codex/gemini/claude 전부 발견 확인. multi-check·multi-round(작업 모드 deft-review 호출) 공통 혜택 — Agent 워커 셸 PATH 와 무관하게 reviewer 동작.
+
+
 
 > **rebalance-guard `expected-panes` 인자 — 예정 다(多)컬럼이면 첫 워커부터 목표 비율 미리 정렬** — guard 가 "지금 pane 수"만 보던 것을, Lead 가 spawn 확정 시 넘기는 "예정 총 pane 수"도 알게 해, 워커가 다 뜨기 전부터 최종 목표 비율(60:40)로 당긴다. multi-round·agent-teams 공통(multi-check 은 guard 미사용이라 제외).
 
