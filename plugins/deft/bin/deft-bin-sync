@@ -1,0 +1,51 @@
+#!/usr/bin/env bash
+# deft-bin-sync — deft 플러그인이 ~/.local/bin 에 까는 헬퍼들을 **캐시 최신본으로 동기(갱신형)**.
+#
+# 배경(실측 배포 결함): 종전 스킬 Phase 0 자동설치는 `if ! command -v $H`(없으면 설치)라,
+#   ~/.local/bin 에 구버전 잔재가 있으면 plugin update 를 해도 **영원히 갱신 안 됨**.
+#   게다가 PATH 에 캐시 bin 경로가 있으면 ~/.local/bin 구버전이 그보다 앞서 캐시 최신본을 가린다.
+#   → 이 도구는 "캐시 sort -V tail 최신본 ↔ ~/.local/bin 내용 비교(cmp), 다르거나 없으면 cp" 로 **항상 최신화**.
+#
+# 사용:
+#   deft-bin-sync                # deft 전체 헬퍼 동기
+#   deft-bin-sync multi-round-bus cmux-rebalancing   # 지정 헬퍼만
+# 출력: 갱신된 항목만 한 줄씩(INFO). 이미 최신이면 무출력.
+set -u
+DEST="$HOME/.local/bin"
+mkdir -p "$DEST"
+
+# deft 가 ~/.local/bin 에 설치하는 헬퍼 전체(= plugins/deft/bin 의 실행 파일). cmux 는 deft-cmux-shim→cmux 매핑.
+ALL_HELPERS="multi-round-bus cmux-rebalancing cmux-rebalance-watch cmux-rebalance-guard deft-model deft-log deft-review claude-bin-keepalive deft-claudex-native-spawn deft-claude-native-spawn deft-bin-sync"
+
+# 캐시에서 헬퍼의 최신본 경로 찾기(claude 우선, 없으면 codex). $1=헬퍼 파일명(캐시상 이름)
+latest_cache() {
+  local name="$1" src
+  src=$(ls -1 ~/.claude/plugins/cache/bluehansl/deft/*/bin/"$name" 2>/dev/null | sort -V | tail -1)
+  [ -z "$src" ] && src=$(ls -1 ~/.codex/plugins/cache/bluehansl-codex/deft/*/bin/"$name" 2>/dev/null | sort -V | tail -1)
+  [ -z "$src" ] && src=$(ls -1 ~/.codex/plugins/cache/bluehansl/deft/*/bin/"$name" 2>/dev/null | sort -V | tail -1)
+  printf '%s' "$src"
+}
+
+# 한 헬퍼 동기: 캐시 최신본과 dest 가 다르거나 dest 부재면 cp. $1=캐시 파일명, $2=dest 파일명(기본 $1)
+sync_one() {
+  local cache_name="$1" dest_name="${2:-$1}" src
+  src=$(latest_cache "$cache_name")
+  [ -z "$src" ] && return 0   # 캐시에 없으면 skip(동봉 안 된 헬퍼)
+  if [ ! -f "$DEST/$dest_name" ] || ! cmp -s "$src" "$DEST/$dest_name"; then
+    cp "$src" "$DEST/$dest_name" && chmod +x "$DEST/$dest_name" \
+      && echo "INFO: $dest_name 동기 ($(basename "$(dirname "$(dirname "$src")")"))"
+  fi
+}
+
+if [ "$#" -gt 0 ]; then
+  TARGETS="$*"
+else
+  TARGETS="$ALL_HELPERS"
+fi
+
+for H in $TARGETS; do
+  case "$H" in
+    cmux) sync_one deft-cmux-shim cmux ;;   # cmux 는 deft-cmux-shim 을 cmux 로 설치
+    *)    sync_one "$H" "$H" ;;
+  esac
+done

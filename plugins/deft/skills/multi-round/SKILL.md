@@ -382,83 +382,37 @@ else
 fi
 echo "참가자 모드: $PARTICIPANTS_MODE"
 
-# B. cmux 환경 검출 — spawn 정책 분기
-# B-0. cmux CLI 가 PATH 에 없으면 deft wrapper 를 ~/.local/bin/cmux 로 설치 (조건부 gap-fill).
-#   신 cmux(2026-06~)는 `cmux` 를 PATH 바이너리가 아니라 셸 통합 precmd 훅(`_cmux_fix_path`)으로
-#   **첫 대화형 프롬프트에만** PATH 에 주입한다 → 비대화형 셸(Bash 도구)엔 `cmux` 부재 → bare cmux 깨짐.
-#   wrapper 는 매 호출 env(CMUX_BUNDLED_CLI_PATH 등)→표준경로로 진짜 cmux 를 해석해 exec(신·구·환경 무관).
-#   ⚠️ 조건부라 구버전(이름으로 동작)·기존 cmux 는 가리지 않는다(gap-fill, not shadow).
-if ! command -v cmux >/dev/null 2>&1; then
-  SRC=$(ls -1 ~/.claude/plugins/cache/bluehansl/deft/*/bin/deft-cmux-shim 2>/dev/null | sort -V | tail -1)
-  [ -z "$SRC" ] && SRC=$(ls -1 ~/.codex/plugins/cache/bluehansl-codex/deft/*/bin/deft-cmux-shim 2>/dev/null | sort -V | tail -1)
-  [ -n "$SRC" ] && mkdir -p ~/.local/bin && cp "$SRC" ~/.local/bin/cmux && chmod +x ~/.local/bin/cmux \
-    && echo "INFO: cmux CLI 가 PATH 에 없어 deft wrapper 를 ~/.local/bin/cmux 로 설치 (비대화형 셸 PATH 누락 대응)"
+# B. deft 헬퍼 동기 (갱신형 — 구버전 잔재 자동 최신화)
+# ⚠️ 종전엔 각 헬퍼를 `if ! command -v $H`(없으면 설치)로 깔았는데, ~/.local/bin 에 구버전 잔재가 있으면
+#    plugin update 를 해도 영원히 갱신 안 됐다(실측 배포 결함 — PATH 의 ~/.local/bin 이 캐시보다 앞서
+#    구버전이 최신 캐시를 가림). → deft-bin-sync 가 "캐시 sort -V tail 최신본 ↔ ~/.local/bin cmp,
+#    다르거나 없으면 cp" 로 **항상 최신화**한다. 부트스트랩(자기 자신)은 단순 cp.
+DEFT_SYNC_SRC=$(ls -1 ~/.claude/plugins/cache/bluehansl/deft/*/bin/deft-bin-sync 2>/dev/null | sort -V | tail -1)
+[ -z "$DEFT_SYNC_SRC" ] && DEFT_SYNC_SRC=$(ls -1 ~/.codex/plugins/cache/bluehansl-codex/deft/*/bin/deft-bin-sync 2>/dev/null | sort -V | tail -1)
+if [ -n "$DEFT_SYNC_SRC" ]; then
+  mkdir -p ~/.local/bin && cp "$DEFT_SYNC_SRC" ~/.local/bin/deft-bin-sync && chmod +x ~/.local/bin/deft-bin-sync
+  deft-bin-sync   # multi-round-bus·cmux-rebalancing·cmux-rebalance-guard·deft-model·deft-log·deft-claudex/claude-native-spawn 등 전체 갱신형 동기
+else
+  echo "WARN: deft-bin-sync 미발견(구버전 캐시) — 헬퍼 자동 동기 비활성"
 fi
+# cmux CLI gap-fill (deft-cmux-shim → ~/.local/bin/cmux). deft-bin-sync 가 처리하지만 명시 호출로 보강.
+command -v cmux >/dev/null 2>&1 || deft-bin-sync cmux 2>/dev/null
 HAVE_CMUX=0
 which cmux >/dev/null 2>&1 && cmux identify >/dev/null 2>&1 && HAVE_CMUX=1
 echo "cmux 환경: $([ "$HAVE_CMUX" -eq 1 ] && echo YES || echo NO)"
 
-# C. 버스 가용성 — node + multi-round-bus 헬퍼 (미설치 시 plugin 동봉본 자동 설치)
+# C. 버스 가용성 판정 — node + multi-round-bus (설치는 B 의 deft-bin-sync 가 이미 처리)
 HAVE_BUS=0
 if command -v node >/dev/null 2>&1; then
-  if ! command -v multi-round-bus >/dev/null 2>&1; then
-    SRC=$(ls -1 ~/.claude/plugins/cache/bluehansl/deft/*/bin/multi-round-bus 2>/dev/null | sort -V | tail -1)
-    [ -z "$SRC" ] && SRC=$(ls -1 ~/.codex/plugins/cache/bluehansl/deft/*/bin/multi-round-bus 2>/dev/null | sort -V | tail -1)
-    if [ -n "$SRC" ]; then
-      mkdir -p ~/.local/bin && cp "$SRC" ~/.local/bin/multi-round-bus && chmod +x ~/.local/bin/multi-round-bus
-      echo "INFO: multi-round-bus 자동 설치 완료 (~/.local/bin/)"
-    fi
-  fi
   command -v multi-round-bus >/dev/null 2>&1 && HAVE_BUS=1
 else
   echo "WARN: node 미설치 — 메시지 버스 비활성 (send/capture 폴백)"
 fi
 BUS_BIN=$(command -v multi-round-bus 2>/dev/null)
 echo "메시지 버스: $([ "$HAVE_BUS" -eq 1 ] && echo "YES ($BUS_BIN)" || echo NO)"
-
-# D. cmux-rebalancing 헬퍼 설치 확인 — 미설치 시 plugin 동봉본으로 자동 설치
-if ! command -v cmux-rebalancing >/dev/null 2>&1; then
-  SRC=$(ls -1 ~/.claude/plugins/cache/bluehansl/deft/*/bin/cmux-rebalancing 2>/dev/null | sort -V | tail -1)
-  [ -z "$SRC" ] && SRC=$(ls -1 ~/.codex/plugins/cache/bluehansl/deft/*/bin/cmux-rebalancing 2>/dev/null | sort -V | tail -1)
-  if [ -n "$SRC" ]; then
-    mkdir -p ~/.local/bin && cp "$SRC" ~/.local/bin/cmux-rebalancing && chmod +x ~/.local/bin/cmux-rebalancing
-    echo "INFO: cmux-rebalancing 자동 설치 완료 (~/.local/bin/)"
-  else
-    echo "WARN: cmux-rebalancing 미설치 + plugin 동봉본 없음 — pane 비율 자동 조정 비활성"
-  fi
-fi
-
-# D-2. cmux-rebalance-guard 설치 — 워커 spawn 중 cmux 재계산으로 Lead 비율이 틀어지는 것을 자동 교정
-#   (claude Agent tool 워커는 spawn ~1.4초 후 cmux 가 레이아웃 재계산하며 Lead 를 26%까지 깎는다 — 실측.
-#    guard 가 0.1초 폴링으로 틀어짐을 ~1초 내 교정하고 마지막 spawn 후 5초 무틀어짐이면 자동 종료. §Phase 3-A)
-if ! command -v cmux-rebalance-guard >/dev/null 2>&1; then
-  SRC=$(ls -1 ~/.claude/plugins/cache/bluehansl/deft/*/bin/cmux-rebalance-guard 2>/dev/null | sort -V | tail -1)
-  [ -z "$SRC" ] && SRC=$(ls -1 ~/.codex/plugins/cache/bluehansl/deft/*/bin/cmux-rebalance-guard 2>/dev/null | sort -V | tail -1)
-  [ -n "$SRC" ] && mkdir -p ~/.local/bin && cp "$SRC" ~/.local/bin/cmux-rebalance-guard && chmod +x ~/.local/bin/cmux-rebalance-guard
-fi
-
-# E. deft 공용 모델 ID 헬퍼(deft-model) 설치 — 모델 차단·버전업 시 단일 관리 지점
-if ! command -v deft-model >/dev/null 2>&1; then
-  SRC=$(ls -1 ~/.claude/plugins/cache/bluehansl/deft/*/bin/deft-model 2>/dev/null | sort -V | tail -1)
-  [ -z "$SRC" ] && SRC=$(ls -1 ~/.codex/plugins/cache/bluehansl-codex/deft/*/bin/deft-model 2>/dev/null | sort -V | tail -1)
-  [ -n "$SRC" ] && mkdir -p ~/.local/bin && cp "$SRC" ~/.local/bin/deft-model && chmod +x ~/.local/bin/deft-model
-fi
-
-# F. deft-log 진행 로그 헬퍼 설치 — 오케스트레이션 단계를 세션 로그로 남겨 사용자 관찰성 확보
-#    (무진행 침묵 방지 + readiness 차단 시 BLOCKED 기록 → 사후 추적. §진행 로그 — 관찰성)
-if ! command -v deft-log >/dev/null 2>&1; then
-  SRC=$(ls -1 ~/.claude/plugins/cache/bluehansl/deft/*/bin/deft-log 2>/dev/null | sort -V | tail -1)
-  [ -z "$SRC" ] && SRC=$(ls -1 ~/.codex/plugins/cache/bluehansl-codex/deft/*/bin/deft-log 2>/dev/null | sort -V | tail -1)
-  [ -n "$SRC" ] && mkdir -p ~/.local/bin && cp "$SRC" ~/.local/bin/deft-log && chmod +x ~/.local/bin/deft-log
-fi
-
-# G. deft-claudex-native-spawn 설치 — claudex(0.139.1+)를 Claude 네이티브 팀원으로 붙이는 헬퍼 (§claudex 네이티브 팀원)
-#    Lead=Claude 전용. claudex 가 binding 지원할 때만 네이티브 경로에 사용(미지원/claudex-Lead 면 버스 폴백이라 불요).
-if ! command -v deft-claudex-native-spawn >/dev/null 2>&1; then
-  SRC=$(ls -1 ~/.claude/plugins/cache/bluehansl/deft/*/bin/deft-claudex-native-spawn 2>/dev/null | sort -V | tail -1)
-  [ -n "$SRC" ] && mkdir -p ~/.local/bin && cp "$SRC" ~/.local/bin/deft-claudex-native-spawn && chmod +x ~/.local/bin/deft-claudex-native-spawn
-fi
 ```
+
+> **헬퍼 설치·갱신은 `deft-bin-sync` 단일 도구로 일원화**(claude-2.34.0~). 종전의 개별 `if ! command -v` 블록(D~G: cmux-rebalancing·cmux-rebalance-guard·deft-model·deft-log·deft-claudex-native-spawn 등)은 **"없으면 설치"라 구버전 잔재를 갱신 못 하던 결함**이 있어 제거했다. `deft-bin-sync` 는 캐시 최신본과 `cmp` 해 다르면 갱신하므로 plugin update 후 항상 최신 헬퍼가 쓰인다. (agent-teams·multi-check 도 동일.)
 
 **핵심**:
 - **참가자 CLI**: 어느 쪽이든 Lead 가 될 수 있음. mix 가 default. 한쪽만 있으면 그쪽만으로 진행 (abort 안 함. WARN 후 계속).

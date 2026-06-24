@@ -41,42 +41,20 @@ echo "Codex-family reviewer 이름: $CODEX_REVIEWER_NAME"
 # cmux CLI wrapper 설치 — cmux 가 PATH 에 없으면(신 cmux 는 대화형 precmd 훅으로만 PATH 주입 →
 #   비대화형 셸엔 부재) deft 동봉 wrapper 를 ~/.local/bin/cmux 로 설치(조건부 gap-fill, 구버전 안 가림).
 #   Lead 의 bare cmux(identify/focus-pane 등) 보호. wrapper 는 매 호출 env→표준경로로 진짜 cmux 해석.
-if ! command -v cmux >/dev/null 2>&1; then
-  SRC=$(ls -1 ~/.claude/plugins/cache/bluehansl/deft/*/bin/deft-cmux-shim 2>/dev/null | sort -V | tail -1)
-  [ -n "$SRC" ] && mkdir -p ~/.local/bin && cp "$SRC" ~/.local/bin/cmux && chmod +x ~/.local/bin/cmux \
-    && echo "INFO: cmux wrapper 를 ~/.local/bin/cmux 로 설치 (비대화형 셸 PATH 누락 대응)"
-fi
-# cmux-rebalancing 헬퍼 설치 확인 — 미설치 시 plugin 동봉본으로 자동 설치
-if ! command -v cmux-rebalancing >/dev/null 2>&1; then
-  SRC=$(ls -1 ~/.claude/plugins/cache/bluehansl/deft/*/bin/cmux-rebalancing 2>/dev/null | sort -V | tail -1)
-  if [ -n "$SRC" ]; then
-    mkdir -p ~/.local/bin && cp "$SRC" ~/.local/bin/cmux-rebalancing && chmod +x ~/.local/bin/cmux-rebalancing
-    echo "INFO: cmux-rebalancing 자동 설치 완료 (~/.local/bin/)"
-  fi
-fi
-# cmux-rebalance-watch 헬퍼 설치 — spawn 과 함께 백그라운드로 띄워 panes settle 즉시 rebalance(타이밍 당김)
-if ! command -v cmux-rebalance-watch >/dev/null 2>&1; then
-  SRC=$(ls -1 ~/.claude/plugins/cache/bluehansl/deft/*/bin/cmux-rebalance-watch 2>/dev/null | sort -V | tail -1)
-  [ -n "$SRC" ] && mkdir -p ~/.local/bin && cp "$SRC" ~/.local/bin/ && chmod +x ~/.local/bin/cmux-rebalance-watch
+# deft 헬퍼 동기 (갱신형 — 구버전 잔재 자동 최신화). 종전의 개별 `if ! command -v $H`(없으면 설치) 블록은
+#   ~/.local/bin 구버전 잔재를 plugin update 후에도 갱신 못 하던 결함이 있어 deft-bin-sync 로 일원화(claude-2.34.0~).
+#   deft-bin-sync 가 캐시 최신본과 cmp 해 다르면 cp → cmux(shim)·cmux-rebalancing·rebalance-watch·deft-model·
+#   deft-review·claude-bin-keepalive 등 전체를 항상 최신화. 부트스트랩(자기 자신)은 단순 cp.
+DEFT_SYNC_SRC=$(ls -1 ~/.claude/plugins/cache/bluehansl/deft/*/bin/deft-bin-sync 2>/dev/null | sort -V | tail -1)
+[ -z "$DEFT_SYNC_SRC" ] && DEFT_SYNC_SRC=$(ls -1 ~/.codex/plugins/cache/bluehansl-codex/deft/*/bin/deft-bin-sync 2>/dev/null | sort -V | tail -1)
+if [ -n "$DEFT_SYNC_SRC" ]; then
+  mkdir -p ~/.local/bin && cp "$DEFT_SYNC_SRC" ~/.local/bin/deft-bin-sync && chmod +x ~/.local/bin/deft-bin-sync
+  deft-bin-sync
+  command -v cmux >/dev/null 2>&1 || deft-bin-sync cmux 2>/dev/null   # cmux gap-fill 보강
+else
+  echo "WARN: deft-bin-sync 미발견(구버전 캐시) — 헬퍼 자동 동기 비활성"
 fi
 
-# 세션 바이너리 keepalive — 오래된 세션에서 자동 업데이트로 세션 버전 바이너리가 삭제되면
-# teammate spawn 이 "env: .../versions/<ver>: No such file or directory" 로 실패. 보존·복원으로 예방.
-if ! command -v claude-bin-keepalive >/dev/null 2>&1; then
-  SRC=$(ls -1 ~/.claude/plugins/cache/bluehansl/deft/*/bin/claude-bin-keepalive 2>/dev/null | sort -V | tail -1)
-  [ -n "$SRC" ] && mkdir -p ~/.local/bin && cp "$SRC" ~/.local/bin/ && chmod +x ~/.local/bin/claude-bin-keepalive
-fi
-# deft 공용 모델 ID 헬퍼(deft-model) 설치 — 모델 차단·버전업 시 단일 관리 지점
-if ! command -v deft-model >/dev/null 2>&1; then
-  SRC=$(ls -1 ~/.claude/plugins/cache/bluehansl/deft/*/bin/deft-model 2>/dev/null | sort -V | tail -1)
-  [ -n "$SRC" ] && mkdir -p ~/.local/bin && cp "$SRC" ~/.local/bin/ && chmod +x ~/.local/bin/deft-model
-fi
-# deft 리뷰어 실행 헬퍼(deft-review) 설치 — 리뷰어 CLI 호출(선택·플래그·모델)을 캡슐화해
-# 페르소나/pane 에 raw bash 노출 제거 + 구현 SSOT. 리뷰어가 `deft-review <engine>` 한 줄로 실행.
-if ! command -v deft-review >/dev/null 2>&1; then
-  SRC=$(ls -1 ~/.claude/plugins/cache/bluehansl/deft/*/bin/deft-review 2>/dev/null | sort -V | tail -1)
-  [ -n "$SRC" ] && mkdir -p ~/.local/bin && cp "$SRC" ~/.local/bin/ && chmod +x ~/.local/bin/deft-review
-fi
 if command -v claude-bin-keepalive >/dev/null 2>&1; then
   claude-bin-keepalive || echo "STOP_TEAM_SPAWN: 세션 바이너리 복원 불가(KEEPALIVE_HARDFAIL) — 이 세션의 teammate spawn 은 반드시 실패한다."
 fi

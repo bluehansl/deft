@@ -4,6 +4,16 @@
 
 형식은 [Keep a Changelog](https://keepachangelog.com/ko/1.1.0/) 를 따르며, 버전 체계는 [Semantic Versioning](https://semver.org/lang/ko/) 을 사용합니다 (`claude-X.Y.Z` / `codex-X.Y.Z` 접두).
 
+## [claude-2.34.0 / codex-1.18.0] - 2026-06-24
+
+> **헬퍼 자동설치 갱신형 전환** — `deft-bin-sync` 공통 도구로 일원화. 종전 Phase 0 자동설치는 "없으면 설치"라 `~/.local/bin` 구버전 잔재를 plugin update 후에도 갱신 못 하던 **배포 결함**(실측: ntpPush 없는 6/12 구버전 multi-round-bus 가 최신 캐시를 PATH 우선순위로 가림)을 해결.
+
+### Added
+- **`bin/deft-bin-sync`** (신규 공통 헬퍼, Claude·Codex 양측) — deft 가 `~/.local/bin` 에 까는 모든 헬퍼를 **캐시 최신본으로 동기(갱신형)**. 캐시 `sort -V tail` 최신본 ↔ `~/.local/bin` 내용을 `cmp` 해 다르거나 없으면 cp+chmod. claude/codex 캐시 양쪽 탐색. 인자 없으면 전체, 인자 주면 지정 헬퍼만(`deft-bin-sync cmux` 는 deft-cmux-shim→cmux 매핑).
+
+### Changed
+- **multi-round·agent-teams·multi-check Phase 0 자동설치 일원화** — 개별 `if ! command -v $H`(없으면 설치) 블록 ~40개를 **deft-bin-sync 부트스트랩 + 1회 호출**로 교체. "구버전 잔재가 있으면 영원히 갱신 안 됨" 결함 제거 → plugin update 후 항상 최신 헬퍼가 쓰인다. HAVE_CMUX/HAVE_BUS 판정·keepalive 게이트는 유지.
+
 ## [claude-2.33.0] - 2026-06-24
 
 > multi-round **작업 모드 신규**(순수 NTP mesh) + **Lead 자동주입 폴백 워치독** — 회의(board 브로드캐스트)에 더해 board 없는 점대점 분담 실행 모드를 추가하고, NTP 수신 간헐 실패를 inbox 직접 폴링으로 복구. (Lead=Claude NTP 고유 — Codex 포팅본 미적용, Claude 만 bump.)
