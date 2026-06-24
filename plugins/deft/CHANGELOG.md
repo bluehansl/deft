@@ -4,6 +4,14 @@
 
 형식은 [Keep a Changelog](https://keepachangelog.com/ko/1.1.0/) 를 따르며, 버전 체계는 [Semantic Versioning](https://semver.org/lang/ko/) 을 사용합니다 (`claude-X.Y.Z` / `codex-X.Y.Z` 접두).
 
+## [claude-2.35.0 / codex-1.19.0] - 2026-06-24
+
+> **rebalance-guard done-flag 종료 방식** — guard 종료 조건을 "시간(grace 5초)" → "Lead 의 spawn 완료 신호 플래그"로 전환. 느린 마지막 워커(4번째 Agent)의 재계산이 grace 후에 와서 guard 가 먼저 죽어 마지막 틀어짐을 놓치던 문제(실측 540px 잔존) 해결. multi-round 회의·작업 + agent-teams 공통 적용.
+
+### Changed
+- **`cmux-rebalance-guard` `--done-flag` 옵션 추가** (양측) — 6번째 인자로 "모든 spawn 완료" 신호 파일 경로. **설정 시 그 파일이 touch 되기 전엔 grace 무틀어짐이어도 종료하지 않고 비율을 계속 지킨다**(spawn 기간이 얼마든·부팅이 느리든 끝까지 커버). 플래그 touch 후 마지막 안정 확인하고 종료. 미설정 시 종전 grace 종료(하위호환). spawn 호출 반환 ≠ pane 재계산 완료라 시간으로 못 끊으므로 플래그가 정확.
+- **multi-round(회의 용례 1·작업 T-1)·agent-teams(§2-3) guard 발사 통일** — `GUARD_FLAG="$SESSION_DIR(또는 $LOG_DIR)/.spawn-done"; rm -f` → guard 발사(플래그 인자) → 모든 워커 spawn 반환 후 `touch "$GUARD_FLAG"`. 3개 스킬 공통 패턴.
+
 ## [claude-2.34.0 / codex-1.18.0] - 2026-06-24
 
 > **헬퍼 자동설치 갱신형 전환** — `deft-bin-sync` 공통 도구로 일원화. 종전 Phase 0 자동설치는 "없으면 설치"라 `~/.local/bin` 구버전 잔재를 plugin update 후에도 갱신 못 하던 **배포 결함**(실측: ntpPush 없는 6/12 구버전 multi-round-bus 가 최신 캐시를 PATH 우선순위로 가림)을 해결.

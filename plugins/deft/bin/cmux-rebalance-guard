@@ -10,26 +10,31 @@
 # cmux-rebalance-watch 와의 차이: watch 는 "pane 수 settle 후 1회" rebalance(첫 배치용). guard 는
 #   "매 틀어짐마다 교정 + grace 종료"(spawn 중 반복 재계산 대응 — claude Agent 혼합 구성에 필수).
 #
-# 사용: cmux-rebalance-guard <workspace-ref> [max-sec] [poll-sec] [lead-min-pct] [grace-sec]
+# 사용: cmux-rebalance-guard <workspace-ref> [max-sec] [poll-sec] [lead-min-pct] [grace-sec] [done-flag]
 #   <workspace-ref>  대상 워크스페이스 (예: workspace:5)
-#   [max-sec]        총 가동 시간 상한(기본 90초 — spawn 과정 커버 후 자동 종료)
+#   [max-sec]        총 가동 시간 상한(기본 90초 — 신호 누락 시 잔존 방지 안전망)
 #   [poll-sec]       폴링 간격(기본 0.1 — 틀어진 직후 즉시 감지)
 #   [lead-min-pct]   Lead 폭이 이 % 미만이면 틀어짐 판정(기본 50 — 2컬럼 목표 60%, 여유 둠)
-#   [grace-sec]      마지막 교정/안정 이후 추가 감시 윈도(기본 5초). 이 동안 무틀어짐이면 spawn 완료로 보고
-#                    조기 종료(= spawn 후 grace-sec 추가 모니터링 보장). max-sec 는 상한.
+#   [grace-sec]      종료 전 마지막 안정 확인 윈도(기본 5초). 이 동안 무틀어짐이면 종료.
+#   [done-flag]      (선택) Lead 의 "모든 spawn 완료" 신호 파일 경로. **설정 시: 이 파일이 생기기 전엔
+#                    grace 무틀어짐이어도 종료하지 않고 계속 비율을 지킨다**(spawn 기간 동안 절대 안 죽음).
+#                    파일이 touch 되면 그때부터 grace 무틀어짐 확인 후 종료 → spawn 이 얼마나 걸리든
+#                    (느린 4번째 워커 재계산 포함) 끝까지 커버. 미설정 시 종전대로 "마지막 안정 후 grace 종료"(하위호환).
 #
-# 통합 사용(권장): 워커 spawn 오케스트레이션 시작 직전 백그라운드로 1회 발사 →
-#   nohup cmux-rebalance-guard "$LEAD_WORKSPACE" 90 0.1 50 5 >/dev/null 2>&1 &
-#   이후 워커를 차례로 spawn 하면, 매 spawn 의 cmux 재계산 틀어짐을 워처가 ~1초 내 자동 교정하고
-#   마지막 spawn 후 5초 무틀어짐이면 스스로 종료한다(별도 정지 불요).
+# 통합 사용(권장 — done-flag 방식): Lead 가 워커 spawn 시작 직전 백그라운드로 발사 →
+#   FLAG="$TEAM_DIR/.spawn-done"; rm -f "$FLAG"
+#   nohup cmux-rebalance-guard "$LEAD_WORKSPACE" 90 0.1 50 5 "$FLAG" >/dev/null 2>&1 &
+#   ... 워커를 차례로 spawn ... → 마지막 워커 spawn 반환 후:  touch "$FLAG"
+#   → guard 는 spawn 진행 중엔 시간 무관하게 비율을 지키고, 플래그 후 마지막 재계산까지 잡고 종료.
 #
 # 출력: 감지·교정 이벤트만 한 줄씩(조용한 동안은 무출력)
 set -u
-WS="${1:?usage: cmux-rebalance-guard <workspace-ref> [max-sec] [poll-sec] [lead-min-pct] [grace-sec]}"
+WS="${1:?usage: cmux-rebalance-guard <workspace-ref> [max-sec] [poll-sec] [lead-min-pct] [grace-sec] [done-flag]}"
 MAXSEC="${2:-90}"
 POLL="${3:-0.1}"
 MINPCT="${4:-50}"
 GRACE="${5:-5}"
+DONE_FLAG="${6:-}"
 command -v cmux >/dev/null 2>&1 || { echo "ERROR: cmux 없음" >&2; exit 1; }
 command -v cmux-rebalancing >/dev/null 2>&1 || { echo "ERROR: cmux-rebalancing 없음" >&2; exit 1; }
 command -v jq >/dev/null 2>&1 || { echo "ERROR: jq 없음" >&2; exit 1; }
@@ -58,10 +63,17 @@ for i in $(seq 1 "$ITERS"); do
     DEBOUNCE=$(awk "BEGIN{print int(0.5/$POLL)}")   # rebalancing 직후 0.5초만 디바운스(이미 settle됨)
   else
     STABLE=$((STABLE+1))
-    # 마지막 안정 이후 grace-sec 동안 무틀어짐 → spawn 완료로 보고 조기 종료
+    # 종료 판정: grace-sec 동안 무틀어짐일 때.
+    #   - done-flag 설정 시: 플래그 파일이 **생긴 뒤에만** 종료 허용 → spawn 진행 중(플래그 전)엔
+    #     시간 무관하게 비율을 계속 지킨다(느린 마지막 워커 재계산까지 커버).
+    #   - done-flag 미설정 시: 종전대로 마지막 안정 후 grace 종료(하위호환).
     if [ "$STABLE" -ge "$GRACE_ITERS" ]; then
-      echo "$(date '+%H:%M:%S') cmux-rebalance-guard 안정 종료 (마지막 안정 후 ${GRACE}s 무틀어짐 — Lead ${PCT}%)"
-      exit 0
+      if [ -z "$DONE_FLAG" ] || [ -f "$DONE_FLAG" ]; then
+        REASON=$([ -n "$DONE_FLAG" ] && echo "spawn 완료 플래그 + ${GRACE}s 무틀어짐" || echo "마지막 안정 후 ${GRACE}s 무틀어짐")
+        echo "$(date '+%H:%M:%S') cmux-rebalance-guard 안정 종료 ($REASON — Lead ${PCT}%)"
+        exit 0
+      fi
+      # done-flag 설정됐는데 아직 플래그 없음 → 종료 안 함(STABLE 은 유지해 플래그 즉시 종료 가능). 비율 감시 계속.
     fi
   fi
   sleep "$POLL"

@@ -145,9 +145,12 @@ deft-log "$LOG_DIR" STEP "팀원 $N명 spawn — rebalance 워처 발사 (EXPECT
 Bash(run_in_background: true): cmux-rebalance-watch "$LEAD_REF" "$BASE" "$EXPECTED" "$FAST"
 # (권장) rebalance-guard 도 함께 발사 — watch 는 settle 즉시 1회지만, claude Agent 워커는 spawn 마다
 #   ~1.4초 후 cmux 재계산이 Lead 를 다시 깎는다(실측 60%→26%). guard 가 0.1초 폴링으로 매 틀어짐을
-#   ~1초 내 교정하고 마지막 spawn 후 5초 무틀어짐이면 자동 종료 → watch+guard 병행이 가장 안정적.
+#   ~1초 내 교정한다. **done-flag 방식**: guard 는 플래그가 touch 되기 전엔 시간 무관하게 비율을 지키고
+#   (느린 마지막 팀원 재계산까지 커버), 모든 spawn 후 touch 하면 마지막 안정 확인 후 종료.
 LEAD_WS=$(cmux identify | jq -r '.caller.workspace_ref // .focused.workspace_ref')
-Bash(run_in_background: true): cmux-rebalance-guard "$LEAD_WS" 90 0.1 50 5
+GUARD_FLAG="$LOG_DIR/.spawn-done"; rm -f "$GUARD_FLAG"
+Bash(run_in_background: true): cmux-rebalance-guard "$LEAD_WS" 90 0.1 50 5 "$GUARD_FLAG"
+# ⚠️ 모든 팀원 Agent spawn 이 반환된 직후 반드시:  touch "$GUARD_FLAG"  (guard 종료 신호)
 ```
 > **clean-grid vs robust**: `FAST=1`(BASE==1, Lead 단독)이면 단발 push 빠른 경로(squish 결정론·우측 행 이미 균등 — 실측), 기존 pane 이 있으면(BASE>1) robust 다회 수렴(섞임/비그리드/소유권 변형 위험 회피).
 > ⚠️ **BASE/EXPECTED 는 반드시 spawn 전에 캡처해 넘긴다** — 워처가 자기 시작 시점(=panes 생성 후)에 baseline 을 잡으면 값이 부풀려져 감지가 안 돼 cap 까지 헛돈다(실측 버그 — claude-2.22.1 수정). panes 는 한꺼번에가 아니라 **하나씩 순차 등장**하므로 EXPECTED(목표 수) 도달을 종료 신호로 쓰는 게 가장 정확하다(2.22.2).

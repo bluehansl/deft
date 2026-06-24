@@ -188,9 +188,12 @@ echo "$CLAUDE_CODE_SESSION_ID"   # Lead(현재 Claude Code 세션)의 UUID — 1
 먼저, 워커 spawn 을 시작하기 직전 **rebalance-guard 를 백그라운드로 1회 발사** — 이후 모든 워커 spawn 의 cmux 재계산 틀어짐을 자동 교정한다(claude Agent 워커는 spawn ~1.4초 후 Lead 비율을 깎으므로 필수):
 
 ```bash
-# 워커 spawn 오케스트레이션 시작 직전 1회. 마지막 spawn 후 5초 무틀어짐이면 스스로 종료(별도 정지 불요).
-nohup cmux-rebalance-guard "$DEFT_BASE_WORKSPACE" 90 0.1 50 5 >/dev/null 2>&1 &
+# done-flag 방식: guard 는 플래그가 touch 되기 전엔 시간 무관하게 비율을 지킨다(느린 마지막 워커
+#   재계산까지 커버). 마지막 워커 spawn 반환 후 플래그를 touch 하면 그때 마지막 안정 확인 후 종료.
+GUARD_FLAG="$SESSION_DIR/.spawn-done"; rm -f "$GUARD_FLAG"
+nohup cmux-rebalance-guard "$DEFT_BASE_WORKSPACE" 90 0.1 50 5 "$GUARD_FLAG" >/dev/null 2>&1 &
 ```
+> ⚠️ **모든 워커 spawn 이 끝난 직후 반드시 `touch "$GUARD_FLAG"`** — 이게 guard 종료 신호다. 빠뜨리면 guard 가 max-sec(90초)까지 살아있다 종료(잔존은 아니나 늦음). spawn 호출 반환 ≠ pane 재계산 완료라 시간으로 못 끊으므로 플래그가 정확하다.
 
 첫 claude 워커 (이 spawn 이 팀을 materialize → 여기서 team-id 를 얻고, 동시에 회의 참가자가 된다):
 
@@ -223,6 +226,13 @@ DEFT_BASE_WORKSPACE=workspace:<N> DEFT_BUS_DIR="$SESSION_DIR" \
 # 이후 claudex 워커는 .last-worker-pane 자동 연쇄(직전 claudex 아래로).
 # 팀 config 미등록 이름도 SendMessage 가 그대로 배달하므로 멤버 stub 선등록 불요.
 # 추가 claude 워커는 다시 Agent tool 로(자동배치 — 기존 우측 컬럼에 합류, 실측 정합 확인).
+```
+
+**모든 워커 spawn 이 끝나면 — guard 종료 신호 (필수)**:
+
+```bash
+# 마지막 워커 spawn 호출이 반환된 직후. guard 가 이 플래그를 보고 마지막 재계산까지 잡은 뒤 종료한다.
+touch "$SESSION_DIR/.spawn-done"
 ```
 
 **용례 2 — 기존 claudex 세션을 팀원으로 편입(resume)**
@@ -734,7 +744,7 @@ Lead 의 라운드 동작:
 
 - 첫 claude 워커 `Agent` tool spawn(팀 생성 겸 참가) → claudex 워커 `deft-claudex-native-spawn`(헬퍼 down). **§NTP 불변 하네스 H1~H4 그대로**(anchor/placeholder 금지).
 - ⚠️ 회의와 유일한 차이: 헬퍼에 **`DEFT_BUS_DIR` 를 설정하지 않는다**(board 버스 미주입 = 순수 NTP). claude 워커는 Agent tool 이라 어차피 버스 없음.
-- spawn 시작 시 `cmux-rebalance-guard` 발사(§Phase 3-A 와 동일 — 레이아웃 자동 교정).
+- spawn 시작 시 `cmux-rebalance-guard` 발사(§용례 1 과 동일 — done-flag 방식: `GUARD_FLAG="$SESSION_DIR/.spawn-done"; rm -f "$GUARD_FLAG"; nohup cmux-rebalance-guard "$DEFT_BASE_WORKSPACE" 90 0.1 50 5 "$GUARD_FLAG" &`). **모든 mate spawn 후 `touch "$GUARD_FLAG"`** 로 guard 종료.
 
 **(T-2) 작업 분배 — Lead↔mate 1:N**
 
