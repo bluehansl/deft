@@ -130,6 +130,23 @@ function cmuxKnock(surface) {
   }
 }
 
+// NTP inbox push — 회의 모드 워커(팀 멤버)의 깨우기. cmux send 노크 대신 팀 inbox 파일에
+// envelope 를 atomic append → 워커 watcher 가 자기 턴 경계에 자동 주입(노크 효과). cmux send
+// 의 focus/타이밍/lazy-init/유출 취약성을 제거(이슈1). board(데이터)는 무관 — 깨우기만 교체.
+function ntpPush(inboxPath, fromName) {
+  try {
+    let arr = [];
+    try { const j = JSON.parse(fs.readFileSync(inboxPath, 'utf8')); if (Array.isArray(j)) arr = j; } catch (_) { arr = []; }
+    arr.push({ from: fromName || 'lead', text: KNOCK_TEXT, summary: KNOCK_TEXT, timestamp: new Date().toISOString(), type: 'message', read: false });
+    const tmp = `${inboxPath}.deft-tmp-${process.pid}`;
+    fs.writeFileSync(tmp, JSON.stringify(arr));
+    fs.renameSync(tmp, inboxPath);
+    return true;
+  } catch (_) {
+    return false;
+  }
+}
+
 // knocks.json 항목 정규화 — 구버전(숫자 id)과 신버전({id, ts}) 모두 수용
 function normKnock(v) {
   if (typeof v === 'number') return { id: v, ts: 0 };
@@ -149,7 +166,7 @@ function knockOthers(dir, sender, msgId) {
 
   for (const [name, info] of Object.entries(participants)) {
     if (name === sender) continue;
-    if (!info || !info.surface) { result.skipped.push(`${name}(surface 없음)`); continue; }
+    if (!info || (!info.surface && !info.inbox)) { result.skipped.push(`${name}(surface/inbox 없음)`); continue; }
     const k = normKnock(knocks[name]);
     const lastRead = cursors[name] || 0;
     // 디바운스: 미확인 노크 존재 + 아직 신선(60초 미만) → skip. 60초 경과면 aged 재노크 (sent ≠ consumed 보정)
@@ -157,7 +174,9 @@ function knockOthers(dir, sender, msgId) {
       result.skipped.push(`${name}(미확인 노크 존재 — 디바운스)`);
       continue;
     }
-    if (cmuxKnock(info.surface)) {
+    // 회의 모드 팀원(inbox 등록)은 NTP inbox push, 그 외(surface 만)는 cmux 노크 — 하위호환
+    const woke = info.inbox ? ntpPush(info.inbox, sender) : cmuxKnock(info.surface);
+    if (woke) {
       knocks[name] = { id: msgId, ts: now };
       result.knocked.push(name);
     } else {
@@ -183,15 +202,16 @@ function knockOthers(dir, sender, msgId) {
 
 // ---------- 핵심 동작 ----------
 
-function doRegister(dir, name, surface, kind) {
+function doRegister(dir, name, surface, kind, inbox) {
   if (!name) fail('register: --name 필수');
   fs.mkdirSync(dir, { recursive: true });
   return withLock(dir, () => {
     const F = busFiles(dir);
     const participants = readJson(F.participants, {});
-    participants[name] = { surface: surface || null, kind: kind || 'worker' };
+    // inbox: 회의 모드 NTP 깨우기용 팀 inbox 경로(있으면 cmux 노크 대신 ntpPush). 없으면 surface 노크.
+    participants[name] = { surface: surface || null, kind: kind || 'worker', inbox: inbox || null };
     writeJson(F.participants, participants);
-    return { registered: name, surface: surface || null, kind: kind || 'worker' };
+    return { registered: name, surface: surface || null, kind: kind || 'worker', inbox: inbox || null };
   });
 }
 
@@ -589,7 +609,7 @@ function mcpServe(dir, selfName) {
 // ---------- CLI 파싱 ----------
 
 // 값을 받는 옵션 — 다음 토큰이 '--' 로 시작해도 무조건 값으로 소비 (본문이 '---' 로 시작하는 경우 등)
-const VALUE_OPTS = new Set(['session', 'from', 'to', 'type', 'content', 'name', 'surface', 'kind', 'as', 'limit', 'message-id', 'timeout', 'interval', 'reply-to']);
+const VALUE_OPTS = new Set(['session', 'from', 'to', 'type', 'content', 'name', 'surface', 'inbox', 'kind', 'as', 'limit', 'message-id', 'timeout', 'interval', 'reply-to']);
 // boolean 플래그 — 값 토큰을 소비하지 않음 (뒤따르는 positional 오흡수 방지)
 const FLAG_OPTS = new Set(['json', 'inject', 'full']);
 // short 옵션 → opts 키 매핑 — 다음 토큰을 무조건 값으로 소비 ('-o -' 의 '-' 포함)
@@ -635,7 +655,7 @@ function main() {
 
 사용법:
   multi-round-bus mcp                                          # stdio MCP 서버 (env MULTI_ROUND_SESSION_DIR, BUS_PARTICIPANT)
-  multi-round-bus register --session <dir> --name <n> [--surface surface:N] [--kind lead|worker]
+  multi-round-bus register --session <dir> --name <n> [--surface surface:N] [--inbox <팀inbox.json>] [--kind lead|worker]
   multi-round-bus post     --session <dir> --from <n> --to <n|all> [--type <t>] [--reply-to <id>] [--inject] --content <본문>
                            (--content 생략 시 stdin 에서 본문 읽음. --reply-to: 응답 대상 요청 메시지 id 연결.
                             --inject: 주입(페르소나/의제) 메시지 마킹 — transcript 발췌 대상. Lead CLI 전용)
@@ -660,7 +680,7 @@ function main() {
       mcpServe(dir, self);
       break;
     case 'register':
-      console.log(JSON.stringify(doRegister(dir, opts.name, opts.surface, opts.kind)));
+      console.log(JSON.stringify(doRegister(dir, opts.name, opts.surface, opts.kind, opts.inbox)));
       break;
     case 'post': {
       let content = opts.content;

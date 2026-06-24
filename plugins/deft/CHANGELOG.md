@@ -4,6 +4,20 @@
 
 형식은 [Keep a Changelog](https://keepachangelog.com/ko/1.1.0/) 를 따르며, 버전 체계는 [Semantic Versioning](https://semver.org/lang/ko/) 을 사용합니다 (`claude-X.Y.Z` / `codex-X.Y.Z` 접두).
 
+## [claude-2.32.0 / codex-1.17.0] - 2026-06-24
+
+> multi-round/agent-teams 워커 spawn **하네스 확정 + pane 레이아웃 자가교정 + kill 안전종료** — 실전 검증 세션에서 anchor/placeholder 우회 장치 제거, claudex 헬퍼 right→down 세로 스택, claude Agent 워커 spawn 시 cmux 비율 깨짐 자동 교정 워처(`cmux-rebalance-guard`), in-process 워커 좀비 핸들 방지 규칙을 확립. 모두 0.1초 pane-watch 모니터링으로 실측 확정.
+
+### Added
+- **`bin/cmux-rebalance-guard`** (신규 헬퍼, Claude·Codex 양측) — 워커 spawn 중 cmux 가 레이아웃을 재계산하며 Lead pane 비율을 깎는 것(2컬럼 60%→26%, claude Agent tool 워커 spawn ~1.4초 후 발생 — 실측)을 0.1초 폴링으로 ~1초 내 자동 교정. 마지막 spawn 후 grace-sec(기본 5초) 무틀어짐이면 자동 종료. `cmux-rebalance-watch`(settle 후 1회)와 달리 **매 재계산 반복 교정** — claude Agent 혼합 구성에 필수. Phase 0 자동 설치 + 워커 spawn 시작 시 백그라운드 1회 발사(multi-round 용례 1 / agent-teams §2-3).
+
+### Changed
+- **multi-round/SKILL.md §NTP 불변 하네스 규칙(H1~H4) 신규** — 우회 장치(anchor/placeholder/seed) 금지를 명시적 규칙으로 박음: H1 첫 워커=팀 생성자=참가자 / H2 "팀 생성 전용" Agent spawn 금지 / H3 첫 워커는 항상 claude(Agent tool) / H4 team-id 우회 생성 금지. (과거 `AGENTS.teams.md` 시절부터 anchor 없이 동작했음을 입증 — 실측 사고: placeholder 반복 생성.)
+- **`deft-claudex-native-spawn`** — pane 분할을 `right` 단일 → **표준 2컬럼 레이아웃**(첫 워커 우측 새 컬럼, 이후 직전 워커 pane focus→`down` 세로 스택)으로 교정. team dir `.last-worker-pane` 상태파일로 헬퍼 간 연쇄. cmux `--surface` 단독 ref 가 caller stale 환경(비대화형 Bash·resume 후)에서 not_found 되는 것을 `--workspace` 컨텍스트 + focus→down 우회로 해결(모든 `new-split`/`send`/`focus-pane` 호출에 `DEFT_BASE_WORKSPACE` 동반).
+- **multi-round·agent-teams/SKILL.md 종료 규칙 강화** — claude(Agent tool, in-process) 워커에 **SIGTERM/kill/pkill 폴백 절대 금지**. in-process 라 kill 이 통하지 않고 메인 세션 레지스트리에 **좀비 핸들**(`N teammate started` UI 잔재 — SendMessage·Esc·TaskStop·kill 다 안 먹어 Lead 세션 재시작만이 유일 해법)을 남긴다(실측 사고: SIGTERM 정리 → 10+ 좀비). `shutdown_request`→`shutdown_approved`/`teammate_terminated` 대기만 사용. claudex(외부 프로세스)는 pkill 폴백 유지(좀비 안 생김).
+- **회의 워커 subagent_type 규칙** — 반드시 `"claude"`(범용). `claude-code-guide`·`Explore` 등 제한 타입은 SendMessage 도구가 비활성이라 Lead 보고 불가 → 조용한 데드락(실측: 보고 누락의 진짜 원인).
+- **`multi-round-bus`** (Claude·Codex 양측 동기) — 깨우기 NTP(`ntpPush`) 기존 변경 유지 + 미러 동기.
+
 ## [claude-2.31.0] - 2026-06-24
 
 > multi-round 워커 **보고 채널 원칙** 강화 — Lead 가 요청한 작업은 항상 통신 도구(NTP `send_message` / 버스 `post_message`)로 보고하고, 사용자가 TUI 에 직접 친 것만 세션 출력으로 답한다. (워커가 결과를 세션에 출력만 하고 `send_message` 미호출 → Lead 미수신하던 실측 사고 차단.)

@@ -1,0 +1,121 @@
+#!/usr/bin/env bash
+# deft-claude-native-spawn — claudex(Lead) 팀에 **claude 를 네이티브 팀원으로** 붙인다.
+#
+# `deft-claudex-native-spawn` 의 **역방향**. Lead=claudex MVP 용:
+#   claudex 가 Lead(`--claude-team <id> --claude-team-agent team-lead`)로 떠서 자기 team inbox 를 watch 할 때,
+#   이 헬퍼로 claude 팀원을 cmux pane 에 기동하면 — claudex Lead 는 평범한 send_message(to:"<name>") 로
+#   claude 팀원과 네이티브 통신한다. (claude 팀원 spawn 플래그는 claude-mate-a 프로세스 실측.)
+#
+# 전제: Lead=claudex 팀이 이미 materialize 됨(team dir + config.json 존재, leadSessionId 포함).
+#   팀 materialize + claudex-Lead 기동은 별도(deft-claudex-lead 셋업 / 수동). 이 헬퍼는 claude 워커 추가만.
+#
+# 사용: deft-claude-native-spawn <team-id> <worker-name> [cwd] [model]
+#   <team-id>      session-<short> (claudex-Lead 가 바인딩한 팀)
+#   <worker-name>  claude 팀원 이름 (claudex Lead 가 send_message(to:...) 로 부를 이름)
+#   [cwd]          claude 워커 cwd (기본 $PWD)
+#   [model]        claude 모델 (기본 opus)
+#
+# 환경: CLAUDE_NATIVE_BIN(claude 경로 override, 기본 PATH claude) / CLAUDE_CONFIG_DIR(기본 ~/.claude)
+#   DEFT_LEAD_SESSION  --parent-session-id 오버라이드. Lead=Claude(회의/작업 모드)면 실제 Lead 세션
+#                      ($CLAUDE_CODE_SESSION_ID)을 줘야 onboarding 회피. 미설정 시 config leadSessionId(Lead=claudex 케이스).
+#   DEFT_BUS_DIR       (회의 모드) board 버스 세션 dir. 설정 시 --mcp-config bus 주입(팀+버스 공존). 미설정=순수 NTP.
+#   DEFT_BUS_BIN       multi-round-bus 경로 오버라이드(미설정 시 PATH).
+#   DEFT_BASE_WORKSPACE  pane 분할 대상 워크스페이스(예: workspace:10). cmux new-split 은 --surface 단독을
+#                      해석 못 한다(window 컨텍스트 필요) → 비대화형 Bash·resume 후 caller stale 환경에선
+#                      반드시 --workspace 로 분할해야 한다(실측: --surface 는 not_found). 미설정 시
+#                      cmux identify 의 caller→focused workspace_ref 폴백. Lead 워크스페이스 명시 권장.
+# 출력: JSON 한 줄 {spawned,team,surface,worker,leadSessionId,registered}
+set -u
+
+TEAM_ID="${1:?usage: deft-claude-native-spawn <team-id> <worker-name> [cwd] [model]}"
+WORKER="${2:?worker-name required}"
+CWD="${3:-$PWD}"
+MODEL="${4:-opus}"
+
+CLAUDE_BIN="${CLAUDE_NATIVE_BIN:-$(command -v claude 2>/dev/null || true)}"
+if [ -z "$CLAUDE_BIN" ] || [ ! -x "$CLAUDE_BIN" ]; then
+  echo "ERROR: claude 바이너리 없음. CLAUDE_NATIVE_BIN 으로 경로 지정." >&2; exit 1
+fi
+CLAUDE_HOME="${CLAUDE_CONFIG_DIR:-$HOME/.claude}"
+TEAM_DIR="$CLAUDE_HOME/teams/$TEAM_ID"
+CFG="$TEAM_DIR/config.json"
+if [ ! -f "$CFG" ]; then
+  echo "ERROR: 팀 config 없음($CFG). claudex-Lead 팀이 먼저 materialize 돼야 한다." >&2; exit 1
+fi
+command -v jq >/dev/null 2>&1 || { echo "ERROR: jq 필요" >&2; exit 1; }
+# Lead=Claude 면 DEFT_LEAD_SESSION($CLAUDE_CODE_SESSION_ID)을 줘야 onboarding 회피 — config leadSessionId 는
+# 팀 자체 id 라 claude 가 parent 를 못 찾아 OAuth onboarding 에 갇힌다(실측 함정). Lead=claudex 면 폴백.
+LEAD_SESSION="${DEFT_LEAD_SESSION:-$(jq -r '.leadSessionId // empty' "$CFG")}"
+[ -n "$LEAD_SESSION" ] || { echo "ERROR: parent-session 없음 (DEFT_LEAD_SESSION 또는 config leadSessionId)" >&2; exit 1; }
+
+# cmux 가드
+if ! command -v cmux >/dev/null 2>&1 || ! cmux identify >/dev/null 2>&1; then
+  echo "ERROR: cmux 환경 아님(pane 기동 불가)." >&2; exit 1
+fi
+LEAD_PANE="$(cmux identify 2>/dev/null | jq -r .caller.pane_ref)"
+
+# pane 분할 + 비율 정렬 + Lead focus 복원
+# base workspace: DEFT_BASE_WORKSPACE 우선, 없으면 caller→focused workspace_ref 폴백.
+# ⚠️ cmux new-split 은 --surface 단독 ref 를 해석 못 한다(window 컨텍스트 필요) → 비대화형 Bash·resume 후
+# caller stale 환경에선 --workspace 로만 분할 가능(실측: --surface 는 "not_found: Surface not found").
+BASE_WS="${DEFT_BASE_WORKSPACE:-$(cmux identify 2>/dev/null | jq -r '.caller.workspace_ref // .focused.workspace_ref // empty')}"
+[ -n "$BASE_WS" ] || { echo "ERROR: 대상 워크스페이스 불명 — DEFT_BASE_WORKSPACE 로 Lead 워크스페이스(예: workspace:10)를 명시하라." >&2; exit 1; }
+SPLIT="$(cmux new-split right --workspace "$BASE_WS" --focus false 2>&1)"
+SURF="$(printf '%s' "$SPLIT" | grep -oE 'surface:[0-9]+' | head -1)"
+[ -n "$SURF" ] || { echo "ERROR: pane 분할 실패(workspace=$BASE_WS): $SPLIT" >&2; exit 1; }
+# ⚠️ cmux send/send-key/focus-pane 도 surface/pane ref 해석에 workspace 컨텍스트가 필요하다(실측:
+# --surface 단독은 "invalid_params: Surface is not a terminal"). 모든 후속 호출에 WS_OPT 동반.
+WS_OPT=(--workspace "$BASE_WS")
+command -v cmux-rebalancing >/dev/null 2>&1 && cmux-rebalancing >/dev/null 2>&1
+cmux focus-pane --pane "$LEAD_PANE" "${WS_OPT[@]}" >/dev/null 2>&1
+
+# readiness 가드 (lazy-init send 유실 방지). pane 셸 $TMUX_PANE 도 best-effort 캡처.
+MARK="$TEAM_DIR/.ready-${WORKER}-$$"; PANEFILE="$TEAM_DIR/.pane-${WORKER}-$$"
+mkdir -p "$TEAM_DIR" 2>/dev/null; rm -f "$MARK" "$PANEFILE"
+cmux send --surface "$SURF" "${WS_OPT[@]}" "mkdir -p '$TEAM_DIR'; printf %s \"\$TMUX_PANE\" > '$PANEFILE' 2>/dev/null; touch '$MARK'"
+cmux send-key --surface "$SURF" "${WS_OPT[@]}" Enter
+ready=0; for _ in $(seq 1 15); do [ -f "$MARK" ] && { ready=1; break; }; sleep 1; done
+PANE_ID="$(cat "$PANEFILE" 2>/dev/null)"; rm -f "$MARK" "$PANEFILE"
+if [ "$ready" != "1" ]; then
+  echo "BLOCKED: pane 셸 미기동(lazy-init) — cmux 워크스페이스를 전면 활성화 후 재시도." >&2; exit 2
+fi
+
+# 팀 config members 에 claude 워커 등록 (idempotent, atomic). agentType=claude.
+REGISTERED=0
+if jq -e --arg n "$WORKER" 'any(.members[]?; .name==$n)' "$CFG" >/dev/null 2>&1; then
+  REGISTERED="already"
+else
+  TS="$(date +%s)000"
+  if jq --arg n "$WORKER" --arg tid "$TEAM_ID" --arg pane "$PANE_ID" --arg cwd "$CWD" --arg model "$MODEL" --argjson ts "$TS" \
+      '.members += [{agentId:($n+"@"+$tid), name:$n, color:"cyan", joinedAt:$ts, tmuxPaneId:$pane, subscriptions:[], agentType:"claude", model:$model, prompt:"claude 네이티브 팀원(deft-claude-native-spawn)", planModeRequired:false, cwd:$cwd, backendType:"tmux", isActive:true}]' \
+      "$CFG" > "$CFG.deft-tmp" 2>/dev/null && mv "$CFG.deft-tmp" "$CFG"; then
+    REGISTERED=1
+  else
+    rm -f "$CFG.deft-tmp" 2>/dev/null; echo "WARN: members 등록 실패" >&2
+  fi
+fi
+# 워커 자기 inbox 보장
+[ -f "$TEAM_DIR/inboxes/$WORKER.json" ] || { mkdir -p "$TEAM_DIR/inboxes"; printf '[]' > "$TEAM_DIR/inboxes/$WORKER.json"; }
+
+# 회의 모드 board 버스(선택): DEFT_BUS_DIR 있으면 --mcp-config bus 주입 →
+# claude 가 팀 멤버(NTP 깨우기·identity UI) + 버스 MCP(board) 공존. 작업 모드면 미설정 → 순수 NTP.
+BUS_OPT=""
+if [ -n "${DEFT_BUS_DIR:-}" ]; then
+  BUS_BIN_PATH="${DEFT_BUS_BIN:-$(command -v multi-round-bus 2>/dev/null || true)}"
+  if [ -n "$BUS_BIN_PATH" ]; then
+    MCPCFG="$TEAM_DIR/mcp-${WORKER}.json"
+    printf '{"mcpServers":{"bus":{"type":"stdio","command":"%s","args":["mcp"],"env":{"MULTI_ROUND_SESSION_DIR":"%s","BUS_PARTICIPANT":"%s"}}}}\n' "$BUS_BIN_PATH" "$DEFT_BUS_DIR" "$WORKER" > "$MCPCFG"
+    BUS_OPT=" --strict-mcp-config --mcp-config '$MCPCFG'"
+  else
+    echo "WARN: DEFT_BUS_DIR 설정됐으나 multi-round-bus 미발견 — board 버스 없이 팀원만." >&2
+  fi
+fi
+
+# claude 팀원 기동 (관측 플래그 + 선택적 board 버스). exec 로 종료 시 pane auto-close. CLAUDE_CONFIG_DIR 전파.
+LAUNCH="cd '$CWD' && CLAUDE_CONFIG_DIR='$CLAUDE_HOME' exec '$CLAUDE_BIN' --agent-id '$WORKER@$TEAM_ID' --agent-name '$WORKER' --team-name '$TEAM_ID' --parent-session-id '$LEAD_SESSION' --agent-type claude --agent-color cyan --dangerously-skip-permissions --model '$MODEL'$BUS_OPT"
+cmux send --surface "$SURF" "${WS_OPT[@]}" "$LAUNCH"
+cmux send-key --surface "$SURF" "${WS_OPT[@]}" Enter
+
+printf '{"spawned":"%s","team":"%s","surface":"%s","worker":"%s","leadSessionId":"%s","registered":"%s"}\n' \
+  "$WORKER" "$TEAM_ID" "$SURF" "$WORKER" "$LEAD_SESSION" "$REGISTERED"
+echo "다음: claudex Lead 는 send_message(to:\"$WORKER\") 로 claude 팀원과 네이티브 통신."

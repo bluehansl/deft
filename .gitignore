@@ -12,3 +12,6 @@
 !.claude/
 .claude/*
 !.claude/skills/
+
+# deft-test 런타임 로그(비추적)
+.claude/skills/deft-test/*.log

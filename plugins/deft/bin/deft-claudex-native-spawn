@@ -18,6 +18,13 @@
 #   CLAUDEX_NATIVE_BIN  claudex 바이너리 경로 오버라이드(미설정 시 PATH claudex). 0.139.1 설치 전
 #                       repo built 바이너리(codex-rs/target/debug|release/claudex)로 테스트할 때 사용.
 #   CLAUDE_CONFIG_DIR   Claude 홈(기본 ~/.claude). teams/<id>/inboxes 해석에 사용(claudex 도 동일 존중).
+#   DEFT_BUS_DIR        (회의 모드) board 버스 세션 dir. 설정 시 claudex 에 -c mcp_servers.bus 주입 →
+#                       팀 binding(NTP 깨우기·identity UI) + 버스 MCP(board) 공존. 미설정(작업 모드)=순수 NTP 팀원.
+#   DEFT_BUS_BIN        multi-round-bus 경로 오버라이드(미설정 시 PATH).
+#   DEFT_BASE_WORKSPACE pane 분할 대상 워크스페이스(예: workspace:10). cmux new-split 은 --surface 단독을
+#                       해석 못 한다(window 컨텍스트 필요) → 비대화형 Bash·resume 후 caller stale 환경에선
+#                       반드시 --workspace 로 분할해야 한다(실측: --surface 는 not_found). 미설정 시
+#                       cmux identify 의 caller→focused workspace_ref 폴백. Lead 워크스페이스 명시 권장.
 #
 # 출력: JSON 한 줄 {spawned,team,surface,inbox,bin} + 다음 안내.
 set -u
@@ -44,12 +51,34 @@ if ! command -v cmux >/dev/null 2>&1 || ! cmux identify >/dev/null 2>&1; then
 fi
 LEAD_PANE="$(cmux identify 2>/dev/null | jq -r .caller.pane_ref)"
 
-# 워커 pane 분할 (우측 새 컬럼) + 비율 정렬 + Lead focus 복원
-SPLIT="$(cmux new-split right --focus false 2>&1)"
+# 워커 pane 분할 — 표준 레이아웃(SKILL.md §3-A): 첫 워커는 우측 새 컬럼(right),
+# 이후 워커는 직전 워커 pane 아래로 세로 스택(down) → "Lead | 워커 상하 스택" 2컬럼 유지.
+# base workspace: DEFT_BASE_WORKSPACE 우선, 없으면 caller→focused workspace_ref 폴백.
+# ⚠️ cmux new-split/send/focus 는 --surface 단독 ref 를 해석 못 한다(비대화형 Bash·resume 후 caller stale
+#    환경 실측: --surface 는 "not_found"/"Surface is not a terminal"). → ref 호출엔 --workspace 컨텍스트 동반.
+# ⚠️ down 분할 대상 지정: --surface 가 안 되므로 "직전 워커 pane 을 focus → new-split down" 으로 우회
+#    (focused pane 기준 분할). 직전 워커 pane 은 team dir 상태파일(.last-worker-pane)로 헬퍼 간 공유 —
+#    NTP 헬퍼는 워커 1명씩 독립 호출이라 직전 surface 를 인자로 못 받기 때문.
+BASE_WS="${DEFT_BASE_WORKSPACE:-$(cmux identify 2>/dev/null | jq -r '.caller.workspace_ref // .focused.workspace_ref // empty')}"
+[ -n "$BASE_WS" ] || { echo "ERROR: 대상 워크스페이스 불명 — DEFT_BASE_WORKSPACE 로 Lead 워크스페이스(예: workspace:10)를 명시하라." >&2; exit 1; }
+WS_OPT=(--workspace "$BASE_WS")
+LASTPANE_FILE="$TEAM_DIR/.last-worker-pane"
+PREV_PANE="$(cat "$LASTPANE_FILE" 2>/dev/null)"
+if [ -n "$PREV_PANE" ] && cmux list-panes "${WS_OPT[@]}" --json 2>/dev/null | jq -e --arg p "$PREV_PANE" '.panes[]?|select(.ref==$p)' >/dev/null 2>&1; then
+  # 2번째+ 워커: 직전 워커 pane 아래로 (focus → down)
+  cmux focus-pane --pane "$PREV_PANE" "${WS_OPT[@]}" >/dev/null 2>&1
+  SPLIT="$(cmux new-split down "${WS_OPT[@]}" --focus false 2>&1)"
+else
+  # 첫 워커: 우측 새 컬럼
+  SPLIT="$(cmux new-split right "${WS_OPT[@]}" --focus false 2>&1)"
+fi
 SURF="$(printf '%s' "$SPLIT" | grep -oE 'surface:[0-9]+' | head -1)"
-[ -n "$SURF" ] || { echo "ERROR: pane 분할 실패: $SPLIT" >&2; exit 1; }
+[ -n "$SURF" ] || { echo "ERROR: pane 분할 실패(workspace=$BASE_WS): $SPLIT" >&2; exit 1; }
+# 새 워커 pane:ref 를 상태파일에 기록(다음 워커가 이 아래로 down) — surface→pane 매핑은 list-panes
+NEW_PANE="$(cmux list-panes "${WS_OPT[@]}" --json 2>/dev/null | jq -r --arg s "$SURF" '.panes[]?|select(.selected_surface_ref==$s)|.ref' 2>/dev/null | head -1)"
+[ -n "$NEW_PANE" ] && printf %s "$NEW_PANE" > "$LASTPANE_FILE"
 command -v cmux-rebalancing >/dev/null 2>&1 && cmux-rebalancing >/dev/null 2>&1
-cmux focus-pane --pane "$LEAD_PANE" >/dev/null 2>&1
+cmux focus-pane --pane "$LEAD_PANE" "${WS_OPT[@]}" >/dev/null 2>&1
 
 # readiness 가드 — cmux surface lazy-init send 유실 방지(화면 미렌더 pane 은 셸 미기동)
 MARK="$TEAM_DIR/.ready-${AGENT}-$$"
@@ -60,8 +89,8 @@ rm -f "$MARK"
 # (없으면 빈 값; 팀원↔claudex 라우팅은 name 기반이라 빈 paneId 여도 동작). touch 는 printf 실패와 무관하게 실행.
 PANEFILE="$TEAM_DIR/.pane-${AGENT}-$$"
 rm -f "$PANEFILE"
-cmux send --surface "$SURF" "mkdir -p '$TEAM_DIR'; printf %s \"\$TMUX_PANE\" > '$PANEFILE' 2>/dev/null; touch '$MARK'"
-cmux send-key --surface "$SURF" Enter
+cmux send --surface "$SURF" "${WS_OPT[@]}" "mkdir -p '$TEAM_DIR'; printf %s \"\$TMUX_PANE\" > '$PANEFILE' 2>/dev/null; touch '$MARK'"
+cmux send-key --surface "$SURF" "${WS_OPT[@]}" Enter
 ready=0
 for _ in $(seq 1 15); do [ -f "$MARK" ] && { ready=1; break; }; sleep 1; done
 PANE_ID="$(cat "$PANEFILE" 2>/dev/null)"
@@ -95,12 +124,25 @@ if [ -f "$CFG" ] && command -v jq >/dev/null 2>&1; then
   fi
 fi
 
-# claudex 네이티브 팀원 기동 (binding 플래그)
+# 회의 모드 board 버스(선택): DEFT_BUS_DIR 있으면 -c mcp_servers.bus 인라인 주입 →
+# claudex 가 팀 binding(NTP 깨우기·identity UI) + 버스 MCP(board check/post) 공존(이슈2 해소).
+# 작업 모드(순수 NTP)면 DEFT_BUS_DIR 미설정 → 버스 없이 팀원만. 인용은 deft-test L3 검증 형식.
+BUS_OPT=""
+if [ -n "${DEFT_BUS_DIR:-}" ]; then
+  BUS_BIN_PATH="${DEFT_BUS_BIN:-$(command -v multi-round-bus 2>/dev/null || true)}"
+  if [ -n "$BUS_BIN_PATH" ]; then
+    BUS_OPT=" -c \"mcp_servers.bus={command=\\\"$BUS_BIN_PATH\\\",args=[\\\"mcp\\\"],env={MULTI_ROUND_SESSION_DIR=\\\"$DEFT_BUS_DIR\\\",BUS_PARTICIPANT=\\\"$AGENT\\\"}}\""
+  else
+    echo "WARN: DEFT_BUS_DIR 설정됐으나 multi-round-bus 미발견 — board 버스 없이 팀원만 기동." >&2
+  fi
+fi
+
+# claudex 네이티브 팀원 기동 (binding 플래그 + 선택적 board 버스)
 # exec 로 셸을 claudex 로 대체 → claudex 가 shutdown 자기종료(process::exit)하면 pane 에 남는
 # 프로세스가 없어 cmux 가 pane 을 자동 close 한다(DoD: "프로세스 종료 + pane 정리"). force-kill·크래시 시도 동일.
-LAUNCH="cd '$CWD' && exec '$CLAUDEX_BIN' --dangerously-bypass-approvals-and-sandbox --claude-team '$TEAM_ID' --claude-team-agent '$AGENT'"
-cmux send --surface "$SURF" "$LAUNCH"
-cmux send-key --surface "$SURF" Enter
+LAUNCH="cd '$CWD' && exec '$CLAUDEX_BIN' --dangerously-bypass-approvals-and-sandbox --claude-team '$TEAM_ID' --claude-team-agent '$AGENT'$BUS_OPT"
+cmux send --surface "$SURF" "${WS_OPT[@]}" "$LAUNCH"
+cmux send-key --surface "$SURF" "${WS_OPT[@]}" Enter
 
 printf '{"spawned":"%s","team":"%s","surface":"%s","tmuxPaneId":"%s","inbox":"%s","bin":"%s","registered":"%s"}\n' \
   "$AGENT" "$TEAM_ID" "$SURF" "$PANE_ID" "$INBOX" "$CLAUDEX_BIN" "$REGISTERED"
