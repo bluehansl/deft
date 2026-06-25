@@ -4,6 +4,17 @@
 
 형식은 [Keep a Changelog](https://keepachangelog.com/ko/1.1.0/) 를 따르며, 버전 체계는 [Semantic Versioning](https://semver.org/lang/ko/) 을 사용합니다 (`claude-X.Y.Z` / `codex-X.Y.Z` 접두).
 
+## [claude-2.37.0] - 2026-06-25
+
+> **multi-round NTP 통신·출력 견고화 3건 (실측 발견)** — 루트에서 멀티라운드 '토론' 실측 중 발견한 결함을 스킬 하네스로 박음. ① claudex `send_message` 의 수신자 키가 `to` 가 아니라 `target` (소스 확정)인데 스킬 문서가 `to` 로 잘못 안내 → AI 별 키 분기 명시. ② 송신 도구가 `success:true` 를 반환해도 Lead inbox 0건·자동주입 미도착인 사고(claude·claudex 공통)를 실측 → Lead 능동 폴링 강제 + 워커 재보고 규약. ④ Lead 가 spawn 헬퍼·cmux·team-id 등 내부 메커니즘을 사용자 대화에 중계하던 문제 → 출력 레지스터 규약(의미 이벤트만). (③ claude 워커 config 미등록 의혹은 실측에서 정상 등록 확인 — 코드 결함 아님, 죽은 세션의 누락은 spawn 중도 실패 흔적.) Claude 측 전용.
+
+### Fixed
+- **claudex `send_message` 키 정정 — `to` → `target` (SKILL.md §NTP, codex-participant.md)** — claudex(codex fork)의 `send_message` 는 `{target, message}` 두 키만 받는다(`#[serde(deny_unknown_fields)]`, 소스 `SendMessageArgs` 확정). 기존 문서가 `send_message(to:…)` 로 안내해 claudex 가 `to` 로 부르면 도구 호출 실패. **Lead `SendMessage`=`to` / claudex `send_message`=`target`** 분기를 표로 명시하고, claudex 페르소나에 정확한 호출 형식(`send_message(target:"team-lead", message:…)`)과 `to`/`recipient` 금지를 박음.
+
+### Changed
+- **Lead 능동 폴링 강제 — "송신 success ≠ 전달" (SKILL.md §NTP·보고 규칙)** — claude·claudex 워커 모두 송신 도구가 `success:true` 를 반환해도 `team-lead.json` 0건·자동주입 미도착인 porter 수신 사고를 실측(2026-06-25). 송신 성공 신호는 inbox 적재 시도까지만 보장 → Lead 는 자동주입에 의존하지 말고 `team-lead.json` 직접 폴링, 미수신 시 워커에 재보고 요청(권고 → 필수 하네스로 격상). 양 워커 페르소나(claude/codex-participant.md)에 "보고 후 출력만 반복 금지, 재요청 시 도구 재호출" 추가.
+- **Lead 출력 레지스터 규약 신설 (SKILL.md §진행 로그 + Workflow 전 Phase 포인터)** — Lead 가 사용자 대화 화면에 출력하는 것을 **의미 이벤트(소환 페르소나·진행 마일스톤·중간/최종 결과)만**으로 한정. spawn 헬퍼·cmux 명령·rebalance·상태파일·team-id·버전 게이트 등 오케스트레이션 디테일은 `orchestration.log` 로만 남기고 대화에 중계 금지. 불가피한 프로세스 언급은 사용자 친화 문구로 변환. (에이전트/cmux UI 가 이미 pane·워커 상태를 시각화하므로 텍스트는 의미만 담당 — 실측 피드백.)
+
 ## [claude-2.36.2] - 2026-06-25
 
 > **multi-check reviewer 견고화 2건 (풀사이클 테스트 발견)** — ① reviewer 가 spawn 후 첫 턴에 idle 로 멈추던 문제(즉시 실행 지시 추가) ② reviewer 가 shutdown_request 에 prose 로만 응답해 SIGKILL 필요했던 문제(shutdown_response 도구 호출 강조). Claude 측 전용(Codex multi-check reviewer 는 종료 메커니즘이 달라 무관).

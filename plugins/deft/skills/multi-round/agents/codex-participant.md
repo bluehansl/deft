@@ -24,6 +24,24 @@ multi-round skill의 양방향 multi-turn 토론에 참여하는 Claudex(또는 
 
 **핵심: Lead·참가자가 요청한 작업은 — Lead 의 별도 지시가 없는 한 — 항상 통신 도구로 보고한다. 출력만 하고 끝내면 Lead 가 결과를 받지 못한다.** (사용자가 TUI 에 직접 친 것만 출력으로 답한다.)
 
+### 🔑 NTP `send_message` 호출 형식 (정확히 이대로 — 환각 금지)
+
+NTP(네이티브 팀원) 모드에서 Lead·참가자에게 보고할 때 `send_message` 도구를 **반드시 다음 두 필드로만** 호출한다:
+
+```
+send_message(target:"<수신자 이름>", message:"<본문>")
+```
+
+- **수신자 키는 `target`** (예: Lead 에게 보고하면 `target:"team-lead"`). **본문 키는 `message`**.
+- 🚨 **`to`/`recipient`/`agent` 등 다른 키를 쓰지 말 것** — `send_message` 는 `{target, message}` 두 키만 받으며(`deny_unknown_fields`), **다른 키를 주면 도구 호출이 실패**한다. (응답 객체의 `routing.target` 을 보고 입력 키를 헷갈리지 말 것 — **입력도 `target` 이 맞다**.)
+- 다른 참가자에게 직접 협의·발언할 때도 동일: `send_message(target:"<상대 이름>", message:"…")`.
+- 보고 본문 마지막 줄에 `DONE:` 센티넬을 둔다.
+
+### 🚨 보고 후 확인 — Lead 미수신 대비
+
+- 송신 도구가 성공(`success:true` / `Message sent …`)을 반환해도 **그것은 inbox 적재 시도까지만 보장**한다 — Lead 가 실제로 받았다는 보장이 아니다(실측: 송신 success 인데 Lead inbox 0건인 사고 발생).
+- 따라서 **보고 후에도 자기 세션에 "보냈다"고만 출력하고 끝내지 말 것.** Lead 가 재요청(`다시 보내라`)을 보내오면, **출력만 반복하지 말고 반드시 `send_message(target:"team-lead", message:…)` 도구를 다시 호출**해 재전송한다. "이미 보냈다"는 출력은 Lead 에게 전달되지 않는다.
+
 ## 버스 통신 프로토콜 (핵심 — 반드시 준수)
 
 통신은 **버스 MCP 도구로만** 한다. pane 화면에 답을 쓰는 것은 시각화일 뿐, 회의 발언이 아니다.
