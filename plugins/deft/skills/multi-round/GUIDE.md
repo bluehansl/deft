@@ -1,20 +1,20 @@
 # multi-round — 사람용 가이드
 
-> 여러 AI(Claude / Claudex / Codex)가 한 주제에 대해 **N라운드에 걸쳐 양방향으로 의견을 주고받으며 합의에 도달**하는 멀티턴 회의 도구. **메시지 버스(브로드캐스트 보드 + 노크)** 기반 — 워커는 cmux pane 의 살아있는 TUI, 통신 본문은 버스 보드, 깨우기는 한 줄 노크.
+> 여러 AI(Claude / Claudex / Codex)가 **두 통신 모드**로 협업하는 멀티턴 도구. ① **회의 모드** — 한 주제에 N라운드 양방향으로 의견을 주고받으며 합의에 도달(board 브로드캐스트 + 노크). ② **작업 모드** — board 없이 NTP mesh 로 일을 분담 실행(Lead↔mate 1:N + mate↔mate N:N). 워커는 cmux pane 의 살아있는 TUI.
 
 ## 한 줄 컨셉
 
-**AI 회의실** — 여러 AI를 한 회의실에 모아놓고, 모두가 합의할 때까지 의견을 주고받게 한다. 사용자(=회의 의장)는 주제를 던지고, 마지막에 정리된 결론을 받는다.
+**AI 회의실 + 작업반** — 여러 AI를 한 자리에 모아, **회의 모드**에선 모두가 합의할 때까지 의견을 주고받게 하고(사용자=의장, 결론을 받음), **작업 모드**에선 일을 나눠 각자 실행하게 한다(사용자=PM, 취합본을 받음). 트리거로 자동 분기 — "회의/토론" → 회의, "작업지시/의뢰" → 작업.
 
 ---
 
 ## 목차
 
-1. [Before You Start — 5개 체크박스](#1-before-you-start)
-2. [Quick Start — 5분 안에 첫 회의](#2-quick-start)
-3. [회의 모드 4종 — 언제 무엇을 쓰나](#3-회의-모드-4종)
+1. [Before You Start — 체크박스](#1-before-you-start)
+2. [Quick Start — 5분 안에 첫 회의/작업](#2-quick-start)
+3. [통신 모드 — 회의 4종 + 작업 모드](#3-통신-모드)
 4. [도구 선택 기준 — 이 말 하면 이 도구](#4-도구-선택-기준)
-5. [동작 원리 — MCP 양방향 통신](#5-동작-원리)
+5. [동작 원리 — 회의(board 2채널) / 작업(NTP mesh)](#5-동작-원리)
 6. [보안 가드 상세](#6-보안-가드-상세)
 7. [트러블슈팅 — 실패 모드 표](#7-트러블슈팅)
 8. [FAQ](#8-faq)
@@ -31,7 +31,7 @@
 - [ ] **cmux 환경 여부 확인** — cmux 안이면 메시지 버스 경로(Phase 3-A)가 기본. cmux 외부에서는 claudex MCP conversation(Phase 3-C)
 - [ ] **node 설치 여부** — 메시지 버스 헬퍼(`multi-round-bus`)가 node 스크립트. 없으면 send/capture 폴백(Phase 3-B)으로 자동 강등. 버스 헬퍼 자체는 skill 첫 실행 시 plugin 동봉본이 `~/.local/bin/` 으로 자동 설치됨 — **사용자 환경 파일(`settings.json` 등) 등록은 일절 불필요**
 - [ ] **참가자 수** — 기본 워커 3명(주제 맞춤 페르소나별). 1명/4명+ 를 원하면 요청에 명시 (예: "워커 1명으로 회의")
-- [ ] **회의 모드 결정 의도 정리** — 4지선다 메뉴 보고 고를지, 명시적으로 "토론해줘"·"분담해서" 등 키워드로 줄지
+- [ ] **통신 모드 결정** — **회의**("회의"/"미팅"/"논의"/"토론" → 합의 도달) vs **작업**("작업지시"/"작업요청"/"의뢰" → 일 분담 실행). 회의면 추가로 4지선다(consult/dialogue/collaborate/debate) 메뉴 또는 키워드로 형태 결정
 - [ ] **종료 조건 결정** — 기본 "모든 AI 합의"로 자동 진행. 다른 조건 원하면 "max-round=10" / "한쪽 항복까지" 등 명시
 - [ ] **work-id 연계 확인** — 회의는 기본적으로 작업(work-id)에 연계됨. 입력에 티켓 번호 등이 있으면 자동 감지, 없으면 1회 질문. **독립 토론을 원하면 "독립 토론"이라고 명시**. work-id 규약 미설정이면 최초 1회 메뉴로 결정 (agent-teams 와 공유)
 - [ ] **`cmux-rebalancing` 헬퍼** — PATH 에 있는지 확인 (`which cmux-rebalancing`). 없으면 skill 첫 실행 시 plugin 동봉본이 `~/.local/bin/` 으로 자동 설치됨. 워커 spawn 후 Lead/워커 pane 비율 재조정에 사용 (cmux 환경 한정)
@@ -69,6 +69,14 @@ skill 실행 시 사용하는 세션·메타·hooks는 모두 **`~/.claude/plugi
 4. 라운드 1 시작 → 합의 도달까지 자동 진행
 5. 합의된 결론 Lead가 종합해서 보고
 
+**작업 모드 1줄 — 일 분담 실행**:
+
+```
+이 코드베이스 3개 모듈 보안 점검을 멀티 라운드로 작업 지시해줘
+```
+
+→ "작업 지시" 트리거 → **작업 모드**(board 없는 NTP mesh). Lead가 각 mate 에게 담당을 개별 지시(1:N), mate 끼리 의존 있으면 직접 협의(N:N), 결과를 `work.md` 에 취합. 회의처럼 전원 공개 토론이 아니라 **각자 자기 일**을 한다.
+
 ### 2-2. 5단계 흐름
 
 | 단계 | 사용자 동작 | Lead 동작 |
@@ -93,9 +101,13 @@ skill 실행 시 사용하는 세션·메타·hooks는 모두 **`~/.claude/plugi
 
 ---
 
-## 3. 회의 모드 4종
+## 3. 통신 모드
 
-회의 모드가 사용자 입력에서 명확하지 않으면 다음 메뉴가 그대로 출력됩니다:
+multi-round 는 먼저 **회의 vs 작업** 두 통신 모드로 갈린다 (트리거 자동 판정 — "회의"/"토론" → 회의, "작업지시"/"의뢰" → 작업). 회의 모드는 다시 4종 형태가 있다.
+
+### 회의 모드 4종
+
+회의 모드 형태가 사용자 입력에서 명확하지 않으면 다음 메뉴가 그대로 출력됩니다:
 
 ```
 회의 형태를 골라 주세요:
@@ -136,6 +148,19 @@ skill 실행 시 사용하는 세션·메타·hooks는 모두 **`~/.claude/plugi
 - **신호**: `ACK / STATUS / DONE / DISSENT / CONCEDE`
 - **흐름**: 라운드 1 양쪽 입장 → 라운드 2~N 강하게 반박 → 한쪽 CONCEDE → 종료
 
+### 3-5. 작업 모드 — 일 분담 실행 (회의 아님)
+
+회의 4종과 **별개의 통신 모드**다. 트리거가 "작업지시"/"작업요청"/"의뢰" 면 발동.
+
+- **목적**: 합의가 아니라 **분담 실행** — 여러 AI가 일을 나눠 각자 수행하고 결과를 모은다.
+- **통신**: **board 없는 순수 NTP mesh**. 회의처럼 전원 공개 브로드캐스트가 아니라, Lead↔mate **1:N**(개별 지시) + mate↔mate **N:N**(직접 협의) 점대점.
+- **흐름**: (1) Lead가 각 mate 에 담당 범위·산출물 형식·보고 규칙을 개별 지시 → (2) 각 mate 자기 작업 수행, mate 간 의존 있으면 서로 직접 보고 → (3) Lead가 결과를 `work.md` 에 단독 취합.
+- **회의와 차이**: 회의는 같은 주제를 **전원이 함께** 논의(board 공유), 작업은 **각자 다른 일**을 수행(각자 자기 것만 봄). board 가 없으므로 워커 상호 노출도 없다.
+- **agent-teams 연계**: 작업 산출은 agent-teams 와 **같은 `work.md`**(같은 work-id)에 쌓여, 이후 agent-teams 가 이어받을 수 있다. (collaborate 회의 모드가 "분담 검토·리뷰"까지라면, 작업 모드는 "분담 실행·취합"이 목적 — 실제 파일 수정·테스트가 필요하면 agent-teams 로 승격.)
+- **종료**: 회의(자동 진행)와 동일하게 mate 보고를 받아 다음 지시 또는 종료 판단.
+
+> 📌 **이름은 "멀티 라운드"지만 작업 모드는 라운드 토론이 아니다** — 분담→실행→취합의 mesh 협업이다. "라운드"는 회의 모드의 개념.
+
 ---
 
 ## 4. 도구 선택 기준
@@ -146,9 +171,9 @@ skill 실행 시 사용하는 세션·메타·hooks는 모두 **`~/.claude/plugi
 
 | 항목 | `multi-check` | **`multi-round`** | Agent Teams (Claude 내장) |
 |---|---|---|---|
-| 통신 방식 | **1회성** fan-out (응답 비교) | **지속 N라운드** 양방향 | 지속 multi-turn |
+| 통신 방식 | **1회성** fan-out (응답 비교) | **회의**: 지속 N라운드 양방향 / **작업**: NTP mesh 분담 | 지속 multi-turn |
 | AI 조합 | Codex / Claude / Gemini 동시 | **Claude + Claudex mix** (또는 Codex/Claude) | **Claude끼리만** |
-| 의존성·기반 | CLI 직접 호출 (MCP 무관) | **메시지 버스 + cmux pane** (팀기능 무관) | Claude 팀 기능 베이스, MCP 불필요 |
+| 의존성·기반 | CLI 직접 호출 (MCP 무관) | **회의: board 버스 / 작업: NTP** + cmux pane | Claude 팀 기능 베이스, MCP 불필요 |
 | 종료 | 1라운드 답변 비교 | 합의 또는 사용자 개입 | 작업 완료 |
 | 결과물 | 답변 비교 표 | 합의된 결정 | 코드·파일·PR |
 | 무거움 | 가벼움 | 중간 | 무거움 |
@@ -165,6 +190,8 @@ skill 실행 시 사용하는 세션·메타·hooks는 모두 **`~/.claude/plugi
 | "AI끼리 합의될 때까지 주고받아" | `multi-round` | 합의 종료 조건 명시 |
 | "두 명한테 분담시켜서 한쪽 결과 다른 쪽이 리뷰" | `multi-round` (collaborate) | 분담·상호 리뷰 |
 | "한쪽 의견이 맞다고 결론날 때까지 반박" | `multi-round` (debate) | 반박 토론 |
+| "이 조사/분석 **작업 지시**해줘 — 셋이 나눠서" | `multi-round` (작업 모드) | "작업지시"/"의뢰" → board 없는 NTP mesh 분담 |
+| "이 리서치 여러 AI한테 **의뢰**해서 취합해줘" | `multi-round` (작업 모드) | 분담 실행·취합 (합의 아님) |
 | "기능 X 만들어 — backend / frontend / qa 셋 만들어 분담" | Agent Teams | 코드 분담·파일 작업 |
 | "이 PR 두 명 시각으로 사인오프받아" | Agent Teams (`review-fix-signoff-loop`) | 사인오프 루프 |
 
@@ -178,25 +205,52 @@ skill 실행 시 사용하는 세션·메타·hooks는 모두 **`~/.claude/plugi
 
 ## 5. 동작 원리
 
-### 5-1. 통신 구조 (핵심) — 메시지 버스
+### 5-1. 통신 구조 (핵심) — 모드별로 다르다
+
+통신 구조는 **모드 종속**이다. 회의는 board 브로드캐스트(2채널 공존), 작업은 순수 NTP mesh.
+
+#### 회의 모드 — board 버스 + NTP 이름표 2채널 공존 (`claude-2.43.0+`)
+
+회의 워커는 **두 채널을 동시에** 가진다 — 이름표·노크는 NTP(네이티브 팀원 binding), 토론 본문은 board 버스.
 
 ```
-[Lead pane (Claude Code)]     [Worker1 pane (claudex TUI)]    [Worker2 pane ...]
-        │ bin 헬퍼 Bash 호출           │ MCP 도구                      │ MCP 도구
-        ▼                             ▼                               ▼
+[Lead pane (Claude Code)]   [Worker1 pane @logistics]   [Worker2 pane @seller ...]
+        │                          │  ▲ 이름표(@name)          │  ▲ 이름표(@name)
+        │ ① board 게시/회수         │  │ NTP binding            │  │ NTP binding
+        ▼                          ▼  │ (--claude-team-agent)   ▼  │
    ┌──────────────────────────────────────────────────────────────────┐
-   │            메시지 버스 (회의 세션 디렉토리 공유 보드)                │
-   │   board.jsonl — 모든 발언이 게시되는 보드 (전원 공개·브로드캐스트)    │
-   │   participants.json — 참가자 레지스트리 (이름 + pane surface)       │
+   │   ① board 버스 (board.jsonl) — 토론 본문 전부, 전원 공개·브로드캐스트  │  ← 데이터 채널
    └──────────────────────────────────────────────────────────────────┘
-      게시될 때마다: 발신자 제외 전원의 pane 에 "[bus] 메시지 확인" 노크
+   ┌──────────────────────────────────────────────────────────────────┐
+   │   ② NTP (팀 inbox) — pane 이름표 + 깨우기 노크(ntpPush — 빠른 전파)   │  ← 제어 채널
+   └──────────────────────────────────────────────────────────────────┘
+      게시될 때마다: 발신자 제외 전원을 ntpPush(팀 inbox 자동주입)로 깨움
 ```
 
-- **채널 분리**: 본문 전부는 버스 보드(데이터 채널), pane 으로는 노크 한 줄만(제어 채널) — `cmux send` 의 줄바꿈 조기 제출·캡처 노이즈 문제가 구조적으로 없음.
-- **워커 = pane 의 살아있는 TUI 본체** — 지속 대화가 유지되고, 사용자가 pane 으로 가서 직접 개입 가능. MCP 는 pane 에 노출되지 않는 순수 배관.
-- **수신자 지정 + 전원 공개**: Lead 가 수신자(예: worker1)를 지정해 게시해도 보드는 전원에게 보임. 수신자만 작업·응답하고, 나머지는 컨텍스트로 검토하다가 기여할 내용이 있을 때만 자발 발언 — **회의실 메타포**.
-- **노크가 턴을 굴림**: 게시 → 전원 노크 → 깨어난 참가자가 보드 확인 → 응답 게시 → 다시 전원 노크 (Lead 포함 — Lead 도 폴링 없이 깨어남). 연속 게시 시 미확인 노크가 있는 참가자에겐 노크 생략(디바운스) — 깨어나면 밀린 메시지를 한 번에 읽음.
-- Lead 는 버스 헬퍼를 Bash 로 직접 호출하고(MCP 등록 불필요), 워커는 spawn 명령에 인라인 주입된 MCP 도구(`check_messages`/`post_message`)로 같은 보드에 접근.
+- **2채널 공존 원리**(`DEFT_BUS_DIR` 주입): 워커를 `--claude-team-agent` binding(NTP)으로 띄우되 board 버스 MCP 를 함께 주입 → ① NTP 가 **pane 이름표(`@name`) + 노크**를, ② board 가 **토론 본문(전원 열람)**을 담당. 이름표가 안 뜨거나 노크가 느리면 binding 누락(과거 회귀 — RATIONALE R-16).
+- **노크 = ntpPush**: 팀 inbox 에 직접 적재해 워커 턴 경계에 자동 주입 — `cmux send` 노크보다 빠르고 focus/lazy-init 취약성이 없다. (register 에 `--inbox` 경로를 줘야 ntpPush 활성 — 안 주면 느린 cmux 노크 폴백.)
+- **응답 채널 = board `post_message` 전용**: 모든 워커(claude·claudex)는 응답을 **board 에 post** 한다. NTP 로 Lead 에 "보고"하면 다른 워커가 그 입장을 board 에서 못 봐 토론이 깨진다(claude 워커가 두 채널을 다 가져 혼동하던 버그 — `claude-2.44.0` 에서 board 전용 강제). board 가 단일 진실 소스.
+- **첫 워커만 예외**: 첫 워커는 Claude `Agent` tool 로 띄워(팀 생성 겸 참가) board MCP 직결이 안 되므로, board 본문은 Lead 가 `SendMessage` 로 중계하고 응답은 `team-lead.json` 직접 회수.
+- **수신자 지정 + 전원 공개**: Lead 가 수신자(예: worker1)를 지정해 게시해도 board 는 전원에게 보임. 수신자만 작업·응답, 나머지는 검토하다 기여할 내용 있을 때만 자발 발언 — **회의실 메타포**.
+- **워커 = pane 의 살아있는 TUI 본체** — 지속 대화 유지, 사용자가 pane 으로 가서 직접 개입 가능.
+
+#### 작업 모드 — 순수 NTP mesh (board 없음)
+
+```
+        ┌─────────────── Lead ───────────────┐
+        │ ① 1:N 개별 지시 (SendMessage)        │
+        ▼                ▼                    ▼
+   [mate A] ◄────────► [mate B] ◄────────► [mate C]
+        └── ② N:N 직접 협의 (mate↔mate) ──────┘
+           ③ 각 mate 보고 → Lead 가 work.md 취합
+```
+
+- board 가 없어 **각 mate 는 자기 작업만** 본다(전원 공개 아님). Lead↔mate(1:N) + mate↔mate(N:N) 모두 NTP 점대점(`SendMessage`/`send_message`).
+- 회의의 board 다이어그램과 달리 **공유 보드가 없다** — 그래서 워커 상호 노출도 없고, 취합은 Lead 가 `work.md` 로 단독 수행.
+
+#### 공통
+
+- Lead 는 헬퍼를 Bash 로 직접 호출하고(MCP 등록 불필요), 워커는 spawn 명령에 인라인/`--mcp-config` 주입된 도구로 접근. 사용자 환경 파일(`settings.json` 등)은 건드리지 않는다.
 
 ### 5-2. 라운드 진행 자동화
 
@@ -224,13 +278,15 @@ skill 실행 시 사용하는 세션·메타·hooks는 모두 **`~/.claude/plugi
 
 ### 5-3. 통신 우선순위 (환경·구성별)
 
+> **전송계층은 모드 종속**: **회의 모드는 board 브로드캐스트가 본질이라 무조건 MCP 버스**(claudex 가 NTP 네이티브를 지원해도 board 강제 — 안 그러면 워커 상호 노출이 사라져 토론이 자문으로 퇴화). 회의 속도는 버스의 ntpPush(팀 inbox 자동주입)가 책임진다. **작업 모드는 board 가 불필요**하므로 NTP 네이티브 점대점을 우선한다. 아래 표는 *회의 모드* 기준.
+
 | 참가자 구성 | 1순위 | 2순위 | 3순위 |
 |---|---|---|---|
-| **AI mix 또는 전원 claudex/codex** (cmux 환경) | **Phase 3-A. 메시지 버스** — pane TUI 워커 + 보드 + 자동 노크 | Phase 3-B. send/capture 폴백 | `multi-check` 사용 안내 후 중단 |
-| **전원 Claude** (Lead + 워커 모두) | **팀메이트 기능** (Claude 팀 기능 통신) | 메시지 버스 (claude CLI 워커) | `multi-check` 사용 안내 후 중단 |
+| **AI mix 또는 전원 claudex/codex** (cmux 환경) | **Phase 3-A. 메시지 버스** — pane TUI 워커 + board + ntpPush 노크 (회의 워커는 NTP 이름표 2채널 공존) | Phase 3-B. send/capture 폴백 | `multi-check` 사용 안내 후 중단 |
+| **전원 Claude** (Lead + 워커 모두) | **메시지 버스** (board 강제 — 첫 워커 Agent tool + 나머지 헬퍼) | — | `multi-check` 사용 안내 후 중단 |
 | **cmux 외부 환경** | Phase 3-C. claudex MCP conversation (stateful 지속 대화) | `multi-check` 사용 안내 후 중단 | — |
 
-하위로 내려가는 조건: 상위 경로의 전제(버스 헬퍼·node·cmux·팀 기능)가 충족되지 않을 때 — 내려갈 때마다 사유 1줄 보고. **헤드리스 1-shot + 컨텍스트 재전송 방식은 어떤 경우에도 쓰지 않음** (멀티라운드는 지속 대화가 본질 — 그게 필요 없으면 `multi-check` 가 올바른 도구).
+하위로 내려가는 조건: 상위 경로의 전제(버스 헬퍼·node·cmux)가 충족되지 않을 때 — 내려갈 때마다 사유 1줄 보고. **헤드리스 1-shot + 컨텍스트 재전송 방식은 어떤 경우에도 쓰지 않음** (멀티라운드는 지속 대화가 본질 — 그게 필요 없으면 `multi-check` 가 올바른 도구).
 
 ---
 
@@ -262,6 +318,8 @@ multi-round skill 내부에 다음 가드가 강제됩니다.
 | 워커가 버스 도구 호출 시 승인 프롬프트가 뜸 / 호출이 취소됨 | MCP 도구 호출 승인 elicitation (claudex/codex 기본 동작) | spawn 명령의 `--disable tool_call_mcp_elicitation` 포함 확인. 이미 뜬 프롬프트는 워커 pane 에서 1회 승인 | §Phase 3-A (4) |
 | 분할 직후 send 한 명령이 사라짐 (워커 미기동) | cmux lazy-init — surface 가 화면에 렌더될 때 쉘 기동 | cmux 창을 화면에 보이게 한 뒤 readiness 마커 가드(§Phase 3-A (3.5)) 통과 후 재전송 | §Phase 3-A (3.5) |
 | 워커가 보드는 읽는데 발언(post)을 못 함 — 회의 정지 | 워커 pane 이 don't ask 등 제한 권한 모드 — 버스 도구가 allowlist 에 없어 자동 거부 | claude 워커 spawn 에 `--allowedTools mcp__bus__*` 3종 포함 확인 (스킬 기본). 이미 떠 있는 pane 은 shift+tab 으로 모드 전환 후 노크 재전송 | §Phase 3-A (4) |
+| claude 워커가 board 를 읽고 인용까지 하는데 응답은 Lead 에게만 가고 다른 워커가 못 봄 | claude 워커가 NTP+board 두 채널을 다 가져 응답을 board 가 아니라 NTP `SendMessage` 로 "보고"함 (claude-2.44.0 이전 회귀) | 플러그인을 `claude-2.44.0+` 로 업데이트(`/plugin` → `/reload-plugins`) — 페르소나·의제·헬퍼에 "회의 응답=board post 전용" 강제됨. 이미 떠 있는 워커는 pane 에 "응답은 post_message 로 board 에 게시하라" 1회 입력 | §5-1 응답 채널 |
+| 추가 claude 워커가 첫 워커 아래로 안 쌓이고 Lead 옆 새 컬럼이 생김 (1:1:N) | `deft-claude-native-spawn` pane 스택 로직 누락 (claude-2.44.0 이전) | `claude-2.44.0+` 로 업데이트 — claude 헬퍼도 `.last-worker-pane` 연쇄로 첫 워커 아래 세로 스택 | §5-1 |
 | 워커 무응답인데 Lead 가 모름 (조용한 데드락) | Lead 는 노크로만 깨어남 — 아무도 post 안 하면 정지 | post 직후 `multi-round-bus watch` 백그라운드 워치독 (스킬 기본 절차) — timeout 시 재노크 + STALLED 진단 | §Phase 4-A |
 | claudex 워커가 버스 도구 호출마다 승인 다이얼로그를 띄움 | claudex/codex 에 MCP 도구 영구 신뢰 설정 부재 (실측) | spawn 명령의 `--dangerously-bypass-approvals-and-sandbox` 포함 확인 (스킬 기본 — 회의 워커 한정). 이미 뜬 다이얼로그는 "2. Allow for this session" 으로 도구당 1회 승인 | §Phase 3-A (4) |
 | Lead surface 캡처 실패 (LEAD_SURFACE 빈값) | `cmux identify`가 caller surface 못 잡음 | 환경 변수 `CMUX_SURFACE_ID` 확인. 없으면 사용자가 직접 surface id 제공 | §6 가드 #5 |
@@ -288,7 +346,13 @@ A. **스킬을 시작한 쪽**. Claude Code에서 발동하면 Lead=Claude. Clau
 A. 그 쪽만으로 진행. mix는 아니지만 회의 자체는 가능 (시각 다양성 ↓).
 
 ### Q5. `agent-teams` 와 어떻게 다른가?
-A. `agent-teams` = **Claude 끼리만, Claude 팀 기능 베이스**. `multi-round` = **Claude + Claudex mix, 메시지 버스 + cmux pane**. 결정적 차이는 AI 다양성 (Codex/Claudex vs Claude 시각 차) + 의존성. `multi-round` 의 `collaborate` 모드(분담 협업) 는 **분담 검토·설계·독립 의견 후 상호 리뷰** 까지로 제한. 실제 파일 수정·테스트가 필요하면 `agent-teams` 로 승격.
+A. `agent-teams` = **Claude 끼리만, Claude 팀 기능 베이스**. `multi-round` = **Claude + Claudex mix** — 회의 모드는 board 버스, 작업 모드는 NTP mesh. 결정적 차이는 AI 다양성 (Codex/Claudex vs Claude 시각 차) + 의존성. `multi-round` 의 `collaborate` 회의 모드(분담 협업)와 작업 모드(분담 실행)는 **분담 검토·설계·취합**까지로 제한 — 실제 파일 수정·테스트가 필요하면 `agent-teams` 로 승격. (작업 모드 산출은 agent-teams 와 같은 `work.md`·work-id 라 그대로 이어받을 수 있다.)
+
+### Q5-1. "회의 모드"와 "작업 모드"는 어떻게 갈리나?
+A. **트리거 키워드로 자동 판정**. "회의"/"미팅"/"논의"/"토론" → **회의 모드**(같은 주제를 전원이 board 에서 함께 논의, 합의 도달). "작업지시"/"작업요청"/"의뢰" → **작업 모드**(각자 다른 일을 NTP 점대점으로 분담 실행, board 없음). 회의는 "결론 하나로 모으기", 작업은 "일 나눠서 끝내기".
+
+### Q5-2. 회의 워커 pane 에 `@이름` 라벨이 뜨는데 이게 뭔가?
+A. 회의 워커는 **NTP(네이티브 팀원) binding + board 버스 2채널을 동시에** 가진다(`claude-2.43.0+`). `@logistics` 같은 pane 이름표는 NTP binding(`--claude-team-agent`)의 표시이고, 토론 본문은 board 로 오간다. 이름표가 **안 뜨거나** 노크가 느리면 binding 누락(과거 회귀) — 최신 버전에서 정상화됨. 워커 응답은 board 에 post 되므로 다른 워커 화면에서도 서로의 입장이 보인다(claude·claudex 모두).
 
 ### Q6. cmux 환경 안인데 pane 이 안 보여요
 A. cmux 환경 안에서는 pane 워커 + 메시지 버스가 default. pane 이 보이지 않는다면 Phase 0 의 `HAVE_CMUX` 검출이 실패한 경우. `cmux identify` 가 정상 작동하는지 확인 후 재실행.

@@ -4,6 +4,16 @@
 
 형식은 [Keep a Changelog](https://keepachangelog.com/ko/1.1.0/) 를 따르며, 버전 체계는 [Semantic Versioning](https://semver.org/lang/ko/) 을 사용합니다 (`claude-X.Y.Z` / `codex-X.Y.Z` 접두).
 
+## [claude-2.44.1 / codex-1.20.2] - 2026-06-25
+
+> **문서·메타 정비** — ① plugin.json/marketplace 의 `homepage`/`repository`/`websiteURL` 을 실제 repo(`github.com/bluehansl/deft`)로 정정(기존 `bluehansl-plugins` 오기 — 설치엔 무관하나 혼동 방지). ② README/GUIDE 소개 정확도 향상 — multi-round 에 "작업 모드"(NTP mesh 분담) 설명 추가, multi-round/agent-teams 한 줄 설명 보강.
+
+### Fixed
+- **GitHub URL 오기 정정 (claude·codex plugin.json 5곳)** — `github.com/bluehansl/bluehansl-plugins` → `github.com/bluehansl/deft`. 실제 git remote 와 일치시켜 개발팀 설치·열람 시 혼동 제거.
+
+### Changed
+- **README/GUIDE 소개 보강** — multi-round 가 회의/작업 2모드임을 명시(작업 모드=board 없는 NTP mesh 분담), multi-round·agent-teams FQN 설명 구체화.
+
 ## [claude-2.44.0] - 2026-06-25
 
 > **회의 워커 실측 검증 후 2건 버그 수정 — claude 워커 pane 스택 + board write 강제** — 2.43.0 배포 후 사용자가 다른 워크스페이스 날것 실행으로 검증한 결과(R-16 2채널 공존·이름표·ntpPush 정상 확인), 두 가지 결함이 드러나 수정. ① 추가 claude CLI 워커가 첫 워커 아래로 스택되지 않고 Lead 옆 새 컬럼을 만들어 1:1:N 으로 깨짐 ② claude 워커가 board 를 읽기는 하나 응답을 board `post_message` 가 아니라 NTP `SendMessage` 로 Lead 에 보고 → 다른 워커가 그 입장을 board 에서 못 봄(브로드캐스트 실패). 작업 모드(NTP mesh) 호환 유지하며 회의 모드 한정으로 수정.
