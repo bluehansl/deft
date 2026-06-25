@@ -80,6 +80,14 @@
 - 회의 워커 `subagent_type` 은 반드시 `"claude"` — claude-code-guide/Explore 등 제한 타입은 SendMessage 비활성이라 조용한 데드락.
 - `--allowedTools` 누락 시 제한 모드에서 post 자동 거부 → "수신만 되고 발신 불가" 반쪽 참가자(회의 데드락 직접 원인).
 
+### R-15. cmux send 3대 규약 (zsh 환경 실측 — 버스 경로 워커 부팅)
+- **사고**: 버스 경로(claude CLI + claudex 인라인 MCP)에서 워커를 pane 에 띄울 때 — pane 분할은 됐으나 ① 입력창에 직전 send 잔여물이 남아 명령 오염(touch 텍스트가 prompt 에 박힌 채 실행 안 됨) ② MCP 인라인(`-c 'mcp_servers...'`)이 수백 자라 cmux send 한 번에 셸 미도달·유실 ③ `surface:N` 의 콜론이 `${pair%%:*}` 파싱을 깨고 zsh 위치파라미터(`set -- $row`)가 비표준이라 어긋남 — 세 가지가 겹쳐 워커가 안 떴다(2026-06-25, 사용자 세션 자체 보정으로 성공).
+- **지침 (3대 규약)**:
+  1. **send 전 입력창 클리어** — 매 `cmux send` 직전 `send-key C-u`. 잔여 텍스트·Enter 미전달 잔재 제거.
+  2. **긴 명령은 `.sh` + `source`** — 부팅 명령을 `$SESSION_DIR/boot-<name>.sh` 에 저장, pane 엔 `source …` 한 줄만 send. 짧은 명령(touch 등)만 직접 send.
+  3. **colon ref·zsh 파싱 회피** — 루프·구분자 파싱 금지, 워커별 surface ref 명시적 나열.
+- **불일치 메모**: 헬퍼(`deft-claudex-native-spawn`)는 readiness 마커·`--workspace` 동반은 내장하나 C-u·source 파일화는 없다(헬퍼 NTP 경로는 LAUNCH 가 짧고 send 1회뿐이라 덜 취약). 버스 경로는 send 가 길고 많아 이 3규약이 특히 필요.
+
 ### R-11. lazy-init readiness — fail-fast 게이트
 - cmux 는 surface 가 화면에 렌더될 때 쉘을 기동(lazy-init). 미기동 pane 에 send 하면 입력이 조용히 유실되거나, 사용자가 그새 다른 pane 으로 전환 시 잘못된 pane 에 명령이 들어간다.
 - **실측**: FOMC 멀티라운드 셋업 차단 사례. → readiness 마커 확인 전 부팅 금지, 타임아웃 시 BLOCKED + 사용자 보고(무진행 침묵 금지).

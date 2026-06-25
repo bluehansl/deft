@@ -4,6 +4,13 @@
 
 형식은 [Keep a Changelog](https://keepachangelog.com/ko/1.1.0/) 를 따르며, 버전 체계는 [Semantic Versioning](https://semver.org/lang/ko/) 을 사용합니다 (`claude-X.Y.Z` / `codex-X.Y.Z` 접두).
 
+## [claude-2.42.0] - 2026-06-25
+
+> **버스 경로 워커 부팅 견고화 — cmux send 3대 규약 (사용자 세션 자체 보정 → 일반화)** — 다른 워크스페이스·zsh 환경에서 버스 경로(claude CLI + claudex 인라인 MCP)로 워커를 pane 에 띄울 때, pane 분할은 됐으나 ① 입력창 잔여 텍스트로 명령 오염(touch 텍스트가 prompt 에 박힌 채 실행 안 됨) ② MCP 인라인(수백 자) 직접 send 시 유실 ③ `surface:N` 콜론이 zsh 파싱(`${pair%%:*}`/`set --`) 깨뜨림 — 세 가지가 겹쳐 워커가 안 떴다. 사용자 세션이 자체 보정으로 성공한 패턴을 스킬에 일반화. (근거: RATIONALE R-15)
+
+### Fixed
+- **cmux send 3대 규약 (Phase 3-A (3.5)~(5))** — ① **send 전 `send-key C-u`(입력창 클리어)** 매 send 직전 ② **긴 부팅 명령은 `boot-<name>.sh` 저장 → `source` 한 줄만 send**(MCP 인라인 직접 send 유실 방지) ③ **colon ref·zsh 파싱 회피** — 루프·구분자 금지, surface ref 명시적 나열. 헬퍼(deft-claudex-native-spawn)는 readiness·--workspace 는 내장하나 C-u·source 는 없어(NTP 경로는 send 짧고 1회라 덜 취약) 버스 경로에 특히 필요.
+
 ## [claude-2.41.1] - 2026-06-25
 
 > **문서 정리 — 설계 근거 RATIONALE.md / 보류 PENDING.md 분리 (사용자 요청)** — SKILL.md 에 누적된 일지형 실측 사고·근거 주석을 별도 `RATIONALE.md`(R-1~R-14)로 이관하고, SKILL.md 는 간결한 지침 + `(근거: RATIONALE R-N)` 참조만 남김. 진행 중·보류 항목은 `PENDING.md` 로 관리. multi-round 1차 적용(핵심 일지형 6건 축약 + deft-test L4 연계 제거). agent-teams·multi-check 정리는 PENDING 에 등재(후속).
