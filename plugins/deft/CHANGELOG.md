@@ -4,6 +4,14 @@
 
 형식은 [Keep a Changelog](https://keepachangelog.com/ko/1.1.0/) 를 따르며, 버전 체계는 [Semantic Versioning](https://semver.org/lang/ko/) 을 사용합니다 (`claude-X.Y.Z` / `codex-X.Y.Z` 접두).
 
+## [claude-2.41.0] - 2026-06-25
+
+> **🔴 크리티컬 — multi-round 가 다른 워크스페이스에서 동작 불가하던 잠복버그 수정 (2.5.0~2.40.0)** — 사용자가 새 워크스페이스에 pane 을 만들고 거기서 claude 를 띄워 스킬을 실행하자, **pane 은 분할됐으나 워커가 안 뜨고 `touch`/CLI 부팅 명령이 워커 pane 이 아니라 Lead pane 으로 폴백 입력**되는 문제 발생. 원인: Phase 3-A 의 모든 `cmux send`/`send-key`/`focus-pane`/`new-split`/`close-surface` 가 `--workspace` 동반 없이 `--surface` 단독으로 호출 → caller stale 환경(다른 워크스페이스에서 스킬 실행·resume 후·비대화형)에서 surface ref 해석 실패 → caller(Lead) 로 폴백. **2.5.0(버스 아키텍처 도입)부터 잠복**했으나, 모든 테스트가 Lead 와 같은 워크스페이스에서 돌아 우연히 안 터졌다(처음으로 다른 워크스페이스에서 날것 실행되며 드러남). NTP 헬퍼(`deft-claudex-native-spawn`)는 이미 이 패턴으로 고쳐져 있었으나(CHANGELOG 154) 버스 경로 send 엔 전파가 누락. **영향: multi-round 한정** — agent-teams·multi-check 는 Agent tool 이 pane 생성+기동을 원자적으로 처리해 `cmux send` 단계가 없어 구조적으로 안전.
+
+### Fixed
+- **Phase 3-A 모든 cmux 호출에 `--workspace "$LEAD_WORKSPACE"` 동반 강제** — `LEAD_WORKSPACE`/`LEAD_PANE` 를 `cmux identify` 로 **런타임 발견**(세션 고유값 하드코딩 없음 — 어느 워크스페이스·PC·세션에서나 동작)하고, `WS=(--workspace "$LEAD_WORKSPACE")` 배열을 (2) pane 분할 ~ (5) 페르소나 주입 + Phase 5 정리(close-surface·focus-pane)의 모든 send/send-key/focus-pane/new-split/close-surface 에 동반.
+- **SESSION_DIR 일관성 가드 신설** — Claude Code Bash 는 호출 간 셸 변수가 유지 안 돼, 모델이 SESSION_DIR 공유를 위해 **공유 고정 임시파일(`/tmp/.mr_session_dir`)을 즉흥 생성 → 이전 세션 값 잔재로 오염**되던 사고 방지. 세션 고유 파일 저장·재사용 또는 리터럴 절대경로 직접 박기로 명시. `mapfile`/`readarray`(bash 전용 — zsh 깨짐) 경고 추가. SESSION_TAG 를 분→초 단위(`%H%M%S`)로 격상(충돌 방지).
+
 ## [claude-2.40.0] - 2026-06-25
 
 > **회의 모드 board 브로드캐스트 회귀 복원 — 회의=MCP 버스 강제 (실측 진단)** — "토론"을 요청했는데 워커 간 브로드캐스트(board 공유)가 안 일어나고 각자 Lead 에 1:1 보고만 한 사고를 파일 레벨로 진단. 정상 회의(13:35 세션)는 board.jsonl + `to:"all"` + 워커 간 #번호 인용으로 토론했으나, 출력 개선 작업 중 회의 spawn 이 **NTP 직접회수 경로(board 없음, r*-collected.jsonl)로 전환되어 star 로 퇴화**. 근본 원인은 통신 우선순위 매트릭스가 claudex 0.139.1+ 면 모드 무관하게 NTP 1순위를 골라, 회의 모드인데도 board 없는 경로로 간 것. **버스에는 이미 "board 공유 + `ntpPush`(cmux 노크 대신 팀 inbox 자동주입 전파)"가 구현돼 있어(13:35 검증됨)**, 새 인프라 없이 회의를 버스로 되돌리면 board(공유 진실 소스)+속도(ntpPush) 둘 다 성립. NTP fan-out(워커가 전원 복제 전송)은 공유 타임라인을 못 만들어(파편화) 진짜 broadcast 가 아님 — 단일 허브(버스) board 가 정답.
