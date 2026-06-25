@@ -4,6 +4,14 @@
 
 형식은 [Keep a Changelog](https://keepachangelog.com/ko/1.1.0/) 를 따르며, 버전 체계는 [Semantic Versioning](https://semver.org/lang/ko/) 을 사용합니다 (`claude-X.Y.Z` / `codex-X.Y.Z` 접두).
 
+## [claude-2.38.2] - 2026-06-25
+
+> **버스 경로 Lead 데드락 수정 — foreground blocking sleep 폴링 금지 (실측 발견)** — 별도 독립 세션(Sonnet 4.6, MCP 버스 경로)에서 회의 실행 중 Lead 가 라운드 응답 대기를 `for i in $(seq 1 16); do sleep 30; … done` 같은 **foreground blocking 루프**로 구현 → 그 Bash 가 끝날 때까지(최대 8분) 모델 턴 전체가 블록 → 워커 응답·노크가 도착해도 다음 행동으로 못 넘어가는 무한 대기(사용자가 ESC 로 Bash 를 죽여야 큐의 노크를 그제서야 처리). NTP(②)와 무관한 버스 경로 별개 결함. claudex 무관 — 스킬만 수정.
+
+### Fixed
+- **foreground blocking sleep 폴링 금지 명시 (Phase 4-A + Workflow 전 Phase 공통)** — Lead 는 응답 대기를 긴 foreground `sleep` 루프로 돌리지 말 것. 올바른 대기 = **짧은 단발 확인(check/read 1회) 후 턴 종료** → 다음 노크/메시지가 다음 턴을 깨운다. 무응답 감시는 **반드시 `run_in_background`/`&`**(데드락 워치독). "응답 올 때까지 기다린다"를 코드(sleep)로 구현 금지 — 기다림은 턴 종료 + 노크 재진입으로 이뤄진다.
+- **종료 데드락 주의 추가** — 합의 도달 + 워커 전원 "Lead 종합 대기" 상태면 더 이상 Lead 를 깨울 노크가 없으므로, 또 응답을 기다리면 영구 대기 → 즉시 Phase 5(종합·종료)로 진행하도록 명시.
+
 ## [claude-2.38.1] - 2026-06-25
 
 > **Lead 직접 회수 타이밍 정밀화 (재재테스트 발견)** — 2.38.0 의 직접 회수 하네스를 실측(claude2 회의)으로 검증하니 **방향은 맞으나 타이밍 결함**이 드러났다 — ① 회수 루프를 SendMessage **직후** 시작하면 워커 응답을 watcher(750ms)가 먼저 비워 놓침(입장 본문 대신 idle_notification 만 잡힘) ② 한 명 잡고 break 하면 나머지 발신자 응답 유실 ③ idle_notification 등 제어 메시지가 회수 필터를 통과. 회수 루프를 **백그라운드로 먼저 띄운 뒤 SendMessage**(선점)하니 입장 본문 회수 성공 입증.
