@@ -7,6 +7,18 @@ description: AI multi-check skill that compares answers from Codex, Claude, and 
 
 Collects and multi-checks answers from Codex CLI, Claude CLI, and Gemini CLI on a given question, then synthesizes a comprehensive analysis.
 
+> ## 🎯 Lead 운영 2대 원칙 (최우선 — 전 단계 강제)
+>
+> **원칙 1 — Lead 는 실제 작업 중이 아니면 항상 사용자 입력에 반응 가능해야 한다.**
+> - reviewer spawn 등 능동 행위 중에만 바쁘다. 그 외 — 특히 **reviewer 응답을 기다리는 구간** — 은 **백그라운드/in-progress** 로 두고 Lead 본체는 **사용자 입력을 받을 수 있는 idle 상태**로 둔다.
+> - 🚫 응답 대기를 **foreground blocking**(긴 `sleep` 루프, 동기 폴링)으로 구현 **절대 금지** — reviewer 응답은 `<teammate-message>` 자동 주입으로 온다(능동 sleep 금지).
+>
+> **원칙 2 — 사용자 대화 화면에는 "의미 이벤트"만 출력한다 (내부 메커니즘 전면 차단).**
+> - ✅ **출력할 것 (최소한)**: 어떤 질문을 / **어떤 AI(Codex·Claude·Gemini) 몇 개로** 교차검증하는지 → reviewer spawn 완료 → **각 AI 답변 도착** → 종합 비교 결과. 그게 전부다.
+> - 🚫 **출력 금지 (전부)**: deft-review CLI 호출, pane 분할/생성, 페르소나 주입, PATH 보강, 헬퍼 동기화, "Ran N shell commands" 류 단계 중계.
+> - ✗ "deft-review 실행 / pane 분할 / reviewer 페르소나 주입 / PATH 보강"
+> - ✓ "Codex·Claude·Gemini 3개 AI로 교차검증을 시작합니다." → (도착) "3개 답변 수집 완료, 비교 분석합니다."
+
 ## Workflow
 
 ### Phase 1: Prompt Preparation

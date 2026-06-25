@@ -7,6 +7,19 @@ description: 'Claude Code 내장 팀 기능으로 다중 Claude 에이전트 팀
 
 Claude Code **내장 팀 기능**(`Agent` + `SendMessage` + `Task*` — 팀은 첫 `Agent` spawn 시 **암묵적으로 자동 생성**)으로 다중 Claude 에이전트 팀을 구성·운영하는 skill. Lead(팀장 겸 기획)가 역할별 팀원(backendDev/frontendDev/qa 등)을 spawn해 분석→구현→검증을 분담하고, 단계 게이트·페르소나·영속 작업노트로 일관성과 연속성을 보장한다.
 
+> ## 🎯 Lead 운영 2대 원칙 (최우선 — 전 단계 강제)
+>
+> **원칙 1 — Lead 는 실제 작업 중이 아니면 항상 사용자 입력에 반응 가능해야 한다.**
+> - 실제 작업(팀원 spawn·페르소나 생성·파일 편집 등 능동 행위) 중에만 바쁘다. 그 외 — 특히 **팀원 응답·구현 완료를 기다리는 구간** — 은 **반드시 백그라운드/in-progress** 로 두고 Lead 본체는 **사용자 입력을 받을 수 있는 idle 상태**로 둔다.
+> - 🚫 응답 대기를 **foreground blocking**(긴 `sleep` 루프, 동기 폴링 등)으로 구현 **절대 금지** — 그 동안 Lead 가 마비돼 사용자 입력·팀원 메시지 모두 못 받는다. 팀원 응답은 `<teammate-message>` 자동 주입으로 다음 턴에 온다(능동 sleep 금지).
+>
+> **원칙 2 — 사용자 대화 화면에는 "의미 이벤트"만 출력한다 (내부 메커니즘 전면 차단).**
+> - ✅ **출력할 것 (최소한)**: 어떤 요청으로 / **몇 명이 어떤 역할로** 생성되는지 → 작업 시작 → **팀원 spawn 완료** → 단계 전환(요건분석/구현/검증) → **중간 결과·완료**. 그게 전부다.
+> - 🚫 **출력 금지 (전부)**: pane 분할/생성, 페르소나 주입, 헬퍼 동기화, 레이아웃 정렬·readiness, team-id, rebalance, "Ran N shell commands" 류 단계 중계.
+> - 기준: 에이전트/cmux UI 가 pane·팀원 상태를 이미 시각화하므로, 대화 텍스트는 **사용자가 궁금한 의미**(누가·무엇을·어떤 결과)만 담는다.
+> - ✗ "pane 4개 분할 완료 / 레이아웃 정렬 / backendDev 페르소나 주입 / readiness 확인"
+> - ✓ "백엔드·프론트·QA 3명으로 팀을 구성해 IT-14610 코딩 작업을 시작합니다." → (스폰 후) "팀원 3명 준비 완료, 요건 분석을 시작합니다."
+
 > **팀 모델(현행 Claude Code)**: 과거의 명시적 `TeamCreate`/`TeamDelete` 도구는 폐지됐다. 현재는 첫 `Agent` spawn 시 `~/.claude/teams/session-<id>/` 팀이 **자동 생성**되고 **세션 종료 시 자동 삭제**된다(공식 문서 동작). `Agent` 의 `team_name` 인자는 deprecated(무시됨). 팀원 통신·정리 메커니즘(`SendMessage`·shutdown)은 그대로다.
 
 > **팀원 모델**: 모두 **Claude Opus (`opus`)** — 동질 시각, 컨벤션 강제 일관. Agent tool 호출 시 alias `opus` (§4-3).

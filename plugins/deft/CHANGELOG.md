@@ -4,6 +4,16 @@
 
 형식은 [Keep a Changelog](https://keepachangelog.com/ko/1.1.0/) 를 따르며, 버전 체계는 [Semantic Versioning](https://semver.org/lang/ko/) 을 사용합니다 (`claude-X.Y.Z` / `codex-X.Y.Z` 접두).
 
+## [claude-2.39.0] - 2026-06-25
+
+> **Lead 운영 2대 원칙 신설 — 전 스킬 공통(반응성 + 의미 이벤트 출력)** — 사용자 요구: ① Lead 세션은 실제 작업 중이 아니면 항상 사용자 입력에 반응 가능해야 하고(팀원 응답 대기는 백그라운드/in-progress) ② 출력은 CLI 생성·bus·pane·페르소나 주입 등 내부 메커니즘을 빼고 "어떤 요청으로 몇 명이 어떤 페르소나로 생성·작업 시작·spawn 완료·회의 시작·중간 결과" 같은 최소 의미 이벤트만. multi-round 만 부분 적용돼 있던 것을 **3개 스킬(multi-round/agent-teams/multi-check) 최상단에 동일 강제 박스로 통일**.
+
+### Added
+- **multi-round/agent-teams/multi-check SKILL.md 최상단 "Lead 운영 2대 원칙" 박스** — 각 스킬 첫 단락 직후에 최우선 규약으로 배치(워크플로 세부보다 먼저 읽힘).
+  - 원칙 1(반응성): 응답 대기 foreground blocking 금지, 백그라운드/idle 강제 — Lead 가 사용자 입력에 항상 반응.
+  - 원칙 2(의미 이벤트만): 출력할 것(요청→인원·페르소나→작업 시작→spawn 완료→회의 시작→중간 결과)과 출력 금지(CLI 부팅·버스 등록·pane 분할·페르소나 주입·헬퍼 동기화·레이아웃 정렬·"Ran N shell commands")를 ✗/✓ 예시와 함께 명시.
+- agent-teams·multi-check 은 기존에 출력 레지스터 규약이 **전무**했어 신규 도입. multi-round 는 본문 §Lead 출력 레지스터 규약에 더해 상단 강제 요약 추가(실측상 본문만으론 모델이 늦게·약하게 적용 — CLI/pane/bus 중계가 계속 노출됨).
+
 ## [claude-2.38.2] - 2026-06-25
 
 > **버스 경로 Lead 데드락 수정 — foreground blocking sleep 폴링 금지 (실측 발견)** — 별도 독립 세션(Sonnet 4.6, MCP 버스 경로)에서 회의 실행 중 Lead 가 라운드 응답 대기를 `for i in $(seq 1 16); do sleep 30; … done` 같은 **foreground blocking 루프**로 구현 → 그 Bash 가 끝날 때까지(최대 8분) 모델 턴 전체가 블록 → 워커 응답·노크가 도착해도 다음 행동으로 못 넘어가는 무한 대기(사용자가 ESC 로 Bash 를 죽여야 큐의 노크를 그제서야 처리). NTP(②)와 무관한 버스 경로 별개 결함. claudex 무관 — 스킬만 수정.
