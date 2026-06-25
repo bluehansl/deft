@@ -4,6 +4,15 @@
 
 형식은 [Keep a Changelog](https://keepachangelog.com/ko/1.1.0/) 를 따르며, 버전 체계는 [Semantic Versioning](https://semver.org/lang/ko/) 을 사용합니다 (`claude-X.Y.Z` / `codex-X.Y.Z` 접두).
 
+## [claude-2.38.1] - 2026-06-25
+
+> **Lead 직접 회수 타이밍 정밀화 (재재테스트 발견)** — 2.38.0 의 직접 회수 하네스를 실측(claude2 회의)으로 검증하니 **방향은 맞으나 타이밍 결함**이 드러났다 — ① 회수 루프를 SendMessage **직후** 시작하면 워커 응답을 watcher(750ms)가 먼저 비워 놓침(입장 본문 대신 idle_notification 만 잡힘) ② 한 명 잡고 break 하면 나머지 발신자 응답 유실 ③ idle_notification 등 제어 메시지가 회수 필터를 통과. 회수 루프를 **백그라운드로 먼저 띄운 뒤 SendMessage**(선점)하니 입장 본문 회수 성공 입증.
+
+### Fixed
+- **회수 순서 역전 — "회수 루프 먼저(`&`) → SendMessage 나중"** — SendMessage 직후 회수는 수 초 지각해 watcher 에 본문을 뺏긴다. 회수 루프를 백그라운드로 선행 기동해 inbox 를 선점 감시한 뒤 워커에 요청한다.
+- **기대 발신자 전원 모일 때까지 break 금지** — 한 명 회수 후 끊으면 그 뒤 도착분 유실(실측 — dbtuning 놓침). `EXPECTED_REPLIES` 전원 충족까지 루프 유지.
+- **회수 필터 정정** — idle_notification·shutdown 등 제어 메시지를 회수 대상에서 제외(`.text` 가 idle_notification 포함이면 skip). 실제 보고 본문만 `COLLECT` 에 모은다.
+
 ## [claude-2.38.0] - 2026-06-25
 
 > **NTP 수신 격상 — 자동주입 신뢰 폐기, Lead 직접 회수를 1차 경로로 (재테스트 근원 규명)** — 2.37.0 배포 후 재테스트(회의 claude2+claudex2)에서 ② "송신≠전달"의 근원이 소스+실측으로 규명됐다. 워커 메시지는 `team-lead.json` 에 정상 적재되나(고빈도 폴링으로 `read:false` 포착), **Claude Code(Lead) 런타임 watcher 가 읽어 비운 뒤 turn 경계(mailbox delivery phase=NextTurn)에서 대화 주입을 누락**해 유실된다(Lead transcript 자동주입 0건 확정). drain 주체는 Lead 런타임이고 claudex watcher 는 자기 inbox 만 건드려 무죄 — 즉 **claudex 수정 불필요, 스킬만 수정**. 2.37.0 의 "느린 폴링 권고"로는 부족(watcher 750ms 주기보다 느리면 빈 inbox 만 봄)해 **고빈도 선점 직접 회수**로 격상.
