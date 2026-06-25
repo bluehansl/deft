@@ -4,6 +4,13 @@
 
 형식은 [Keep a Changelog](https://keepachangelog.com/ko/1.1.0/) 를 따르며, 버전 체계는 [Semantic Versioning](https://semver.org/lang/ko/) 을 사용합니다 (`claude-X.Y.Z` / `codex-X.Y.Z` 접두).
 
+## [claude-2.39.2] - 2026-06-25
+
+> **종료 프로토콜 강화 — 평문 종료 요청 금지, 구조화 shutdown_request 필수 (실측 사고)** — 회의 종료 시 Lead 가 claude 워커에게 "정리하고 종료해 주세요" 같은 **평문 문자열**로 종료를 요청 → 워커는 그걸 *일반 메시지*로 받아 **보고만 하고 프로세스는 안 내려감**(claudex 워커는 종료됐으나 claude 워커 잔존). 워커가 직접 "shutdown 은 shutdown_response(approve:true)를 받아야 내려간다 — 평문은 응답만 가능, terminate 못 함"이라고 올바르게 거부. claude 워커(in-process)는 kill 도 금지라 **구조화 `shutdown_request` 가 유일한 종료 수단**인데 평문으로 보내 영영 안 죽은 것.
+
+### Fixed
+- **평문 종료 요청 금지 명시 (multi-round/agent-teams/multi-check 3개 스킬)** — 종료 신호는 반드시 `SendMessage(to:"<name>", message:{type:"shutdown_request", reason:"…"})` 구조화 객체로. "정리하고 종료해 주세요" 류 평문 문자열 절대 금지(워커가 보고만 하고 프로세스 안 내려감 — 실측). 안 죽었으면 kill 이 아니라 구조화 shutdown_request 를 다시 보낸다. (SendMessage 스키마상 `message` 가 평문/구조화 둘 다 받아 모델이 평문으로 보내던 함정 차단.)
+
 ## [claude-2.39.1] - 2026-06-25
 
 > **2대 원칙 정밀화 — announce 지점 고정 + 회수 백그라운드 완결 (실측 피드백)** — 2.39.0 적용 후에도 ① spawn 을 단계별로 쪼개 매번 중계("첫 워커 spawn / team-id 확인 / 두 번째 추가 / claudex 2명 추가 / pane 기록 / N번째 기동 완료")하고 ② 회수 루프를 foreground `wait` 로 기다려 메인이 멈춤(`Flummoxing… 1m+`)이 남았다. 출력 규약을 **블랙리스트("이건 출력 금지") → 화이트리스트("이 고정 지점에서만 출력")** 로 격상하고, 회수 대기를 **foreground `wait` → `run_in_background` + done-flag** 로 전환.

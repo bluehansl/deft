@@ -201,6 +201,8 @@ Bash(run_in_background: true): cmux-rebalance-watch "$LEAD_REF" "$BASE" "$EXPECT
 SendMessage(to: "<방금 보고한 리뷰어 이름>", message: {type: "shutdown_request"})
 ```
 
+> 🚨 **`message` 는 반드시 구조화 객체(`{type:"shutdown_request"}`) — 평문 종료 금지**: "종료해 주세요" 같은 평문 문자열은 리뷰어가 *일반 메시지*로 받아 보고만 하고 프로세스가 안 내려간다(claude 리뷰어는 kill 도 금지라 구조화 shutdown_request 가 유일 종료 수단 — 실측). 안 죽었으면 kill 이 아니라 구조화 shutdown_request 를 다시 보낸다.
+
 > Lead 는 그동안 자체 분석(§Lead Analysis)을 이어가고, 남은 리뷰어 보고를 계속 받는다. rebalance 는 순차 close 마다 호출하면 깜빡임이 생기므로 **최종 1회(Phase 5 ④)만** 한다.
 
 전원 보고가 모이면 아래 형식으로 synthesize:
