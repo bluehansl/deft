@@ -4,6 +4,14 @@
 
 형식은 [Keep a Changelog](https://keepachangelog.com/ko/1.1.0/) 를 따르며, 버전 체계는 [Semantic Versioning](https://semver.org/lang/ko/) 을 사용합니다 (`claude-X.Y.Z` / `codex-X.Y.Z` 접두).
 
+## [claude-2.42.1] - 2026-06-25
+
+> **회의 워커 이름표·NTP 노크 회귀 진단 — 헬퍼 2채널 공존 절차 확정(RATIONALE R-16, 구현 대기)** — 2.40.0 에서 회의 워커를 "빈 pane + CLI 직접부팅"으로 띄우며 `--claude-team-agent` binding 을 빠뜨려 ① pane 이름표(`@logistics`) 사라짐 ② NTP 노크(ntpPush)→cmuxKnock 폴백. 원래(첨부 이미지·사용자 재실측) claudex 는 `--claude-team … --claude-team-agent … -c mcp_servers.bus` 로 binding+버스 공존했다. 사용자 세션이 NTP(이름표·노크)+버스(board 토론) 2채널 공존을 재현·성공하고 정확한 띄우기 절차를 제공 → RATIONALE R-16 으로 보존, Phase 3-A 재작성은 PENDING 등재(약 120줄 교체라 정밀 실행).
+
+### Added
+- **RATIONALE R-16** — 회의 워커 NTP binding + 버스 board 2채널 공존 원리·띄우기 절차(첫 워커 Agent tool team 생성 → 나머지 헬퍼 DEFT_BUS_DIR 주입)·시행착오 교훈(team 디렉토리 rm 금지·DEFT_LEAD_SESSION 필수) 보존.
+- **PENDING — Phase 3-A 재작성 설계** 등재(인프라 준비 완료 확인: deft-claude-native-spawn·deft-claudex-native-spawn + DEFT_BUS_DIR·DEFT_LEAD_SESSION 처리 내장).
+
 ## [claude-2.42.0] - 2026-06-25
 
 > **버스 경로 워커 부팅 견고화 — cmux send 3대 규약 (사용자 세션 자체 보정 → 일반화)** — 다른 워크스페이스·zsh 환경에서 버스 경로(claude CLI + claudex 인라인 MCP)로 워커를 pane 에 띄울 때, pane 분할은 됐으나 ① 입력창 잔여 텍스트로 명령 오염(touch 텍스트가 prompt 에 박힌 채 실행 안 됨) ② MCP 인라인(수백 자) 직접 send 시 유실 ③ `surface:N` 콜론이 zsh 파싱(`${pair%%:*}`/`set --`) 깨뜨림 — 세 가지가 겹쳐 워커가 안 떴다. 사용자 세션이 자체 보정으로 성공한 패턴을 스킬에 일반화. (근거: RATIONALE R-15)

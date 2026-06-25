@@ -80,6 +80,25 @@
 - 회의 워커 `subagent_type` 은 반드시 `"claude"` — claude-code-guide/Explore 등 제한 타입은 SendMessage 비활성이라 조용한 데드락.
 - `--allowedTools` 누락 시 제한 모드에서 post 자동 거부 → "수신만 되고 발신 불가" 반쪽 참가자(회의 데드락 직접 원인).
 
+### R-16. 회의 워커 = NTP binding + 버스 board 2채널 공존 (이름표 + 토론, 실측 확정)
+- **사고**: 2.40.0 에서 회의 워커를 "빈 pane + CLI 직접부팅"(`claudex -c mcp_servers.bus`, `claude --model …`)으로 띄우며 **`--claude-team-agent` binding 을 빠뜨림** → ① pane 이름표(`@logistics`) 사라짐 ② NTP 노크(ntpPush) 대신 cmuxKnock(느림) 폴백. 원래(첨부 이미지 정상) claudex 는 `--claude-team … --claude-team-agent … -c mcp_servers.bus` 로 떠서 binding+버스 공존했다(2026-06-25 사용자 세션 재확인).
+- **2채널 공존 원리** (사용자 실측 확정):
+  | 채널 | 용도 | 매체 |
+  |---|---|---|
+  | **NTP**(네이티브 팀원) | pane 이름표(`@name`) + 노크 깨우기 | Claude 팀 inbox(`--claude-team` binding) |
+  | **MCP 버스**(board) | 토론 본문 전부(브로드캐스트 — 전원 열람) | `board.jsonl` + `multi-round-bus` MCP |
+  → **NTP 로 띄우되 `DEFT_BUS_DIR` 주입**하면 같은 워커가 두 채널을 동시에 갖는다(이름표·노크=NTP, 본문=버스).
+- **띄우는 절차** (실측 성공 — team-id: 첫 워커 Agent spawn 만이 생성, §H1·H4):
+  1. **첫 워커 = claude `Agent` tool**(team 생성) → 반환 `<name>@session-<id>` 에서 team-id 획득. 이 워커는 board MCP 직결 불가 → board 는 Lead 가 `SendMessage` 로 중계.
+  2. 첫 워커 pane:ref 를 `~/.claude/teams/<TID>/.last-worker-pane` 에 기록(헬퍼가 그 아래로 스택).
+  3. **나머지 워커 = 헬퍼**(전부 `DEFT_BUS_DIR` 주입 → 이름표+board 공존):
+     - claudex: `DEFT_BASE_WORKSPACE=<ws> DEFT_BUS_DIR=<SD> deft-claudex-native-spawn <TID> <name>`
+     - claude CLI: `DEFT_LEAD_SESSION=$CLAUDE_CODE_SESSION_ID DEFT_BASE_WORKSPACE=<ws> DEFT_BUS_DIR=<SD> deft-claude-native-spawn <TID> <name> "" opus`
+     - `DEFT_BUS_DIR` 설정 시 헬퍼가 자동 주입: claudex→`-c 'mcp_servers.bus={…}'`, claude→`--strict-mcp-config --mcp-config <bus>.json`.
+  4. board 등록(`multi-round-bus register --name <w> --surface <surf>`) + 의제 게시(`post --inject`) → 발신자 제외 전원 노크, board 전원 공개 → 토론 성립.
+  5. 응답 회수 2경로: board 워커는 `multi-round-bus check --as lead`, Agent 워커(첫 워커)는 `team-lead.json` 직접 회수(R-1·R-2).
+- **시행착오 교훈**: ① 이름표 위해 순수 NTP(board 없이) 띄우면 토론이 자문으로 퇴화 → 회의=board 강제(R-7) ② **활성 team 디렉토리 `rm` 금지** — 런타임이 team-id 참조 못 해 spawn 에러(복구로 해결) ③ claude 헬퍼는 `DEFT_LEAD_SESSION=$CLAUDE_CODE_SESSION_ID` 필수(onboarding 회피).
+
 ### R-15. cmux send 3대 규약 (zsh 환경 실측 — 버스 경로 워커 부팅)
 - **사고**: 버스 경로(claude CLI + claudex 인라인 MCP)에서 워커를 pane 에 띄울 때 — pane 분할은 됐으나 ① 입력창에 직전 send 잔여물이 남아 명령 오염(touch 텍스트가 prompt 에 박힌 채 실행 안 됨) ② MCP 인라인(`-c 'mcp_servers...'`)이 수백 자라 cmux send 한 번에 셸 미도달·유실 ③ `surface:N` 의 콜론이 `${pair%%:*}` 파싱을 깨고 zsh 위치파라미터(`set -- $row`)가 비표준이라 어긋남 — 세 가지가 겹쳐 워커가 안 떴다(2026-06-25, 사용자 세션 자체 보정으로 성공).
 - **지침 (3대 규약)**:
