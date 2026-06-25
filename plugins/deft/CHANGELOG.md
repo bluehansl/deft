@@ -4,6 +4,13 @@
 
 형식은 [Keep a Changelog](https://keepachangelog.com/ko/1.1.0/) 를 따르며, 버전 체계는 [Semantic Versioning](https://semver.org/lang/ko/) 을 사용합니다 (`claude-X.Y.Z` / `codex-X.Y.Z` 접두).
 
+## [claude-2.42.2] - 2026-06-25
+
+> **Phase 3-A 재작성 작업 의뢰서 추가(HANDOFF)** — 회의 워커 2채널 공존 복원 작업을 리줌 없는 새 세션에 인계하기 위한 자기완결 의뢰서 `HANDOFF-phase3a-rewrite.md` 신설. 목표·배경·정답 절차(R-16)·제약(pane 구성 유지·하드코딩 금지)·검증 방법(R-8 맹점 — bash 직접 금지, 별도 세션 날것 실행)·작업 절차·버전 규약을 담음. 실제 Phase 3-A 코드 재작성은 새 세션이 이 의뢰서로 수행.
+
+### Added
+- **`HANDOFF-phase3a-rewrite.md`** — Phase 3-A 재작성 작업 의뢰서(새 세션 인계용).
+
 ## [claude-2.42.1] - 2026-06-25
 
 > **회의 워커 이름표·NTP 노크 회귀 진단 — 헬퍼 2채널 공존 절차 확정(RATIONALE R-16, 구현 대기)** — 2.40.0 에서 회의 워커를 "빈 pane + CLI 직접부팅"으로 띄우며 `--claude-team-agent` binding 을 빠뜨려 ① pane 이름표(`@logistics`) 사라짐 ② NTP 노크(ntpPush)→cmuxKnock 폴백. 원래(첨부 이미지·사용자 재실측) claudex 는 `--claude-team … --claude-team-agent … -c mcp_servers.bus` 로 binding+버스 공존했다. 사용자 세션이 NTP(이름표·노크)+버스(board 토론) 2채널 공존을 재현·성공하고 정확한 띄우기 절차를 제공 → RATIONALE R-16 으로 보존, Phase 3-A 재작성은 PENDING 등재(약 120줄 교체라 정밀 실행).
