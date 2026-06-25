@@ -4,6 +4,17 @@
 
 형식은 [Keep a Changelog](https://keepachangelog.com/ko/1.1.0/) 를 따르며, 버전 체계는 [Semantic Versioning](https://semver.org/lang/ko/) 을 사용합니다 (`claude-X.Y.Z` / `codex-X.Y.Z` 접두).
 
+## [claude-2.41.1] - 2026-06-25
+
+> **문서 정리 — 설계 근거 RATIONALE.md / 보류 PENDING.md 분리 (사용자 요청)** — SKILL.md 에 누적된 일지형 실측 사고·근거 주석을 별도 `RATIONALE.md`(R-1~R-14)로 이관하고, SKILL.md 는 간결한 지침 + `(근거: RATIONALE R-N)` 참조만 남김. 진행 중·보류 항목은 `PENDING.md` 로 관리. multi-round 1차 적용(핵심 일지형 6건 축약 + deft-test L4 연계 제거). agent-teams·multi-check 정리는 PENDING 에 등재(후속).
+
+### Added
+- **`RATIONALE.md` 신설** — deft 가드·규약의 "왜"(실측 사고·재현 조건·소스 확정)를 R-1~R-14 로 보존. 가드를 미래에 되돌리려는 사람이 먼저 읽도록. SKILL.md 본문은 지침만, 근거는 여기 참조.
+- **`PENDING.md` 신설** — 진행 중·보류 항목 추적(상태 플래그). 완료 시 CHANGELOG 이관.
+
+### Changed
+- **multi-round SKILL.md 일지형 주석 축약** — NTP 자동주입 누락 근원·회수 순서·전송계층 모드종속·회의 버스강제·foreground 데드락·kill 금지·codex 프롬프트 등 장문 사고 서술을 RATIONALE 참조로 축약(운영 지침은 본문 유지). deft-test L4 연계 표기 제거.
+
 ## [claude-2.41.0] - 2026-06-25
 
 > **🔴 크리티컬 — multi-round 가 다른 워크스페이스에서 동작 불가하던 잠복버그 수정 (2.5.0~2.40.0)** — 사용자가 새 워크스페이스에 pane 을 만들고 거기서 claude 를 띄워 스킬을 실행하자, **pane 은 분할됐으나 워커가 안 뜨고 `touch`/CLI 부팅 명령이 워커 pane 이 아니라 Lead pane 으로 폴백 입력**되는 문제 발생. 원인: Phase 3-A 의 모든 `cmux send`/`send-key`/`focus-pane`/`new-split`/`close-surface` 가 `--workspace` 동반 없이 `--surface` 단독으로 호출 → caller stale 환경(다른 워크스페이스에서 스킬 실행·resume 후·비대화형)에서 surface ref 해석 실패 → caller(Lead) 로 폴백. **2.5.0(버스 아키텍처 도입)부터 잠복**했으나, 모든 테스트가 Lead 와 같은 워크스페이스에서 돌아 우연히 안 터졌다(처음으로 다른 워크스페이스에서 날것 실행되며 드러남). NTP 헬퍼(`deft-claudex-native-spawn`)는 이미 이 패턴으로 고쳐져 있었으나(CHANGELOG 154) 버스 경로 send 엔 전파가 누락. **영향: multi-round 한정** — agent-teams·multi-check 는 Agent tool 이 pane 생성+기동을 원자적으로 처리해 `cmux send` 단계가 없어 구조적으로 안전.
