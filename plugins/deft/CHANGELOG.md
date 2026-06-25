@@ -4,6 +4,17 @@
 
 형식은 [Keep a Changelog](https://keepachangelog.com/ko/1.1.0/) 를 따르며, 버전 체계는 [Semantic Versioning](https://semver.org/lang/ko/) 을 사용합니다 (`claude-X.Y.Z` / `codex-X.Y.Z` 접두).
 
+## [claude-2.40.0] - 2026-06-25
+
+> **회의 모드 board 브로드캐스트 회귀 복원 — 회의=MCP 버스 강제 (실측 진단)** — "토론"을 요청했는데 워커 간 브로드캐스트(board 공유)가 안 일어나고 각자 Lead 에 1:1 보고만 한 사고를 파일 레벨로 진단. 정상 회의(13:35 세션)는 board.jsonl + `to:"all"` + 워커 간 #번호 인용으로 토론했으나, 출력 개선 작업 중 회의 spawn 이 **NTP 직접회수 경로(board 없음, r*-collected.jsonl)로 전환되어 star 로 퇴화**. 근본 원인은 통신 우선순위 매트릭스가 claudex 0.139.1+ 면 모드 무관하게 NTP 1순위를 골라, 회의 모드인데도 board 없는 경로로 간 것. **버스에는 이미 "board 공유 + `ntpPush`(cmux 노크 대신 팀 inbox 자동주입 전파)"가 구현돼 있어(13:35 검증됨)**, 새 인프라 없이 회의를 버스로 되돌리면 board(공유 진실 소스)+속도(ntpPush) 둘 다 성립. NTP fan-out(워커가 전원 복제 전송)은 공유 타임라인을 못 만들어(파편화) 진짜 broadcast 가 아님 — 단일 허브(버스) board 가 정답.
+
+### Fixed
+- **통신 우선순위 매트릭스 모드 종속화** — 회의 모드는 claudex 유무 무관 **MCP 버스 강제**(board 보장, 속도는 ntpPush). NTP 네이티브 1순위는 **작업 모드 전용**으로 격리. 전송계층이 모드를 따르도록 표를 회의/작업 2개로 분리.
+- **§Lead 직접회수 적용 범위 축소** — "회의+작업 공통" → **작업 모드 + 종료 대기 전용**. 회의 라운드 수신에 직접회수를 쓰면 board 를 우회해 워커 상호 노출이 사라짐(회귀 원인)을 명시.
+- **회의=버스 강제 가드 신설 (Phase 2)** — 회의 모드면 어떤 이유로도 NTP 직접회수로 안 띄우고 버스로 spawn, 후 `board.jsonl` 생성 확인(없으면 BLOCKED). 같은 회귀 재발 차단.
+
+> 출력 개선(2.39.x: announce 고정·foreground 금지·평문종료 금지)은 그대로 유지 — 이번 수정은 회의 전송계층만 복원.
+
 ## [claude-2.39.2] - 2026-06-25
 
 > **종료 프로토콜 강화 — 평문 종료 요청 금지, 구조화 shutdown_request 필수 (실측 사고)** — 회의 종료 시 Lead 가 claude 워커에게 "정리하고 종료해 주세요" 같은 **평문 문자열**로 종료를 요청 → 워커는 그걸 *일반 메시지*로 받아 **보고만 하고 프로세스는 안 내려감**(claudex 워커는 종료됐으나 claude 워커 잔존). 워커가 직접 "shutdown 은 shutdown_response(approve:true)를 받아야 내려간다 — 평문은 응답만 가능, terminate 못 함"이라고 올바르게 거부. claude 워커(in-process)는 kill 도 금지라 **구조화 `shutdown_request` 가 유일한 종료 수단**인데 평문으로 보내 영영 안 죽은 것.
