@@ -4,6 +4,16 @@
 
 형식은 [Keep a Changelog](https://keepachangelog.com/ko/1.1.0/) 를 따르며, 버전 체계는 [Semantic Versioning](https://semver.org/lang/ko/) 을 사용합니다 (`claude-X.Y.Z` / `codex-X.Y.Z` 접두).
 
+## [claude-2.38.0] - 2026-06-25
+
+> **NTP 수신 격상 — 자동주입 신뢰 폐기, Lead 직접 회수를 1차 경로로 (재테스트 근원 규명)** — 2.37.0 배포 후 재테스트(회의 claude2+claudex2)에서 ② "송신≠전달"의 근원이 소스+실측으로 규명됐다. 워커 메시지는 `team-lead.json` 에 정상 적재되나(고빈도 폴링으로 `read:false` 포착), **Claude Code(Lead) 런타임 watcher 가 읽어 비운 뒤 turn 경계(mailbox delivery phase=NextTurn)에서 대화 주입을 누락**해 유실된다(Lead transcript 자동주입 0건 확정). drain 주체는 Lead 런타임이고 claudex watcher 는 자기 inbox 만 건드려 무죄 — 즉 **claudex 수정 불필요, 스킬만 수정**. 2.37.0 의 "느린 폴링 권고"로는 부족(watcher 750ms 주기보다 느리면 빈 inbox 만 봄)해 **고빈도 선점 직접 회수**로 격상.
+>
+> 부수 확인: ①(claudex `send_message(target:…)` 형식)·④(Lead 출력 레지스터)는 재테스트에서 **정상 작동 입증**.
+
+### Changed
+- **§Lead 직접 회수 신설 (구 §폴백 워치독 격상) — 자동주입을 1차 경로에서 강등** — Lead 는 `<teammate-message>` 자동주입을 신뢰하지 말고, 워커에 `SendMessage` 한 **직후부터 `team-lead.json` 을 0.5초 간격 고빈도로 직접 read 해 회수**한다(잡는 즉시 `COLLECT` 파일로 복사 — watcher 가 비워도 보존). turn 경계 누락을 Bash 직접 읽기로 구조적 우회. 근원(NextTurn phase 누락)·메커니즘·회수 루프 예시 명문화.
+- **자동주입 단정 표현 보정 (용례 3·NTP 보고 규칙)** — "팀원 응답은 자동 주입된다 — 정상 경로에선 inbox 수동 확인 안 함" → "자동주입은 보너스 채널일 뿐, **Lead 직접 회수가 1차 경로**"로 전면 수정. 작업 모드(T-5) 참조도 §Lead 직접 회수로 통일.
+
 ## [claude-2.37.0] - 2026-06-25
 
 > **multi-round NTP 통신·출력 견고화 3건 (실측 발견)** — 루트에서 멀티라운드 '토론' 실측 중 발견한 결함을 스킬 하네스로 박음. ① claudex `send_message` 의 수신자 키가 `to` 가 아니라 `target` (소스 확정)인데 스킬 문서가 `to` 로 잘못 안내 → AI 별 키 분기 명시. ② 송신 도구가 `success:true` 를 반환해도 Lead inbox 0건·자동주입 미도착인 사고(claude·claudex 공통)를 실측 → Lead 능동 폴링 강제 + 워커 재보고 규약. ④ Lead 가 spawn 헬퍼·cmux·team-id 등 내부 메커니즘을 사용자 대화에 중계하던 문제 → 출력 레지스터 규약(의미 이벤트만). (③ claude 워커 config 미등록 의혹은 실측에서 정상 등록 확인 — 코드 결함 아님, 죽은 세션의 누락은 spawn 중도 실패 흔적.) Claude 측 전용.
