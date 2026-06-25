@@ -9,15 +9,22 @@ Collects and multi-checks answers from Codex CLI, Claude CLI, and Gemini CLI on 
 
 > ## 🎯 Lead 운영 2대 원칙 (최우선 — 전 단계 강제)
 >
-> **원칙 1 — Lead 는 실제 작업 중이 아니면 항상 사용자 입력에 반응 가능해야 한다.**
-> - reviewer spawn 등 능동 행위 중에만 바쁘다. 그 외 — 특히 **reviewer 응답을 기다리는 구간** — 은 **백그라운드/in-progress** 로 두고 Lead 본체는 **사용자 입력을 받을 수 있는 idle 상태**로 둔다.
-> - 🚫 응답 대기를 **foreground blocking**(긴 `sleep` 루프, 동기 폴링)으로 구현 **절대 금지** — reviewer 응답은 `<teammate-message>` 자동 주입으로 온다(능동 sleep 금지).
+> **원칙 1 — Lead 본체는 즉각 반응 우선. 대기는 전부 백그라운드.**
+> - 메인 세션의 단 하나의 목표는 **사용자 질의에 즉각 반응할 수 있는 idle 상태 유지**다. reviewer spawn 을 **실행하는 순간에만** 바쁘고, **reviewer 응답을 기다리는 구간**은 메인을 점유하지 않는다.
+> - 🚫 **대기를 foreground 로 구현 절대 금지** (긴 `sleep` 루프·동기 폴링). reviewer 응답은 `<teammate-message>` 자동 주입으로 **다음 턴**에 온다 — Lead 가 능동 sleep 으로 기다리지 말 것.
 >
-> **원칙 2 — 사용자 대화 화면에는 "의미 이벤트"만 출력한다 (내부 메커니즘 전면 차단).**
-> - ✅ **출력할 것 (최소한)**: 어떤 질문을 / **어떤 AI(Codex·Claude·Gemini) 몇 개로** 교차검증하는지 → reviewer spawn 완료 → **각 AI 답변 도착** → 종합 비교 결과. 그게 전부다.
-> - 🚫 **출력 금지 (전부)**: deft-review CLI 호출, pane 분할/생성, 페르소나 주입, PATH 보강, 헬퍼 동기화, "Ran N shell commands" 류 단계 중계.
-> - ✗ "deft-review 실행 / pane 분할 / reviewer 페르소나 주입 / PATH 보강"
-> - ✓ "Codex·Claude·Gemini 3개 AI로 교차검증을 시작합니다." → (도착) "3개 답변 수집 완료, 비교 분석합니다."
+> **원칙 2 — 출력은 "고정된 announce 지점"에서만. 단계 중계 전면 금지.**
+> - 사용자는 스킬을 **직접 의도해서** 호출했다 — 상세 진행 보고가 불필요하다. Lead 가 말하는 지점을 **아래로 고정**하고 그 사이는 말없이 연속 실행한다:
+>
+>   | # | 유일한 announce 지점 | 예시 |
+>   |---|---|---|
+>   | 1 | **교차검증 시작 예고** — 질문 + 어떤 AI 몇 개 | "Codex·Claude·Gemini 3개 AI로 교차검증을 시작합니다." |
+>   | 2 | **답변 수집 완료 → 종합** | "3개 답변 수집 완료 — 비교 분석합니다." |
+>   | 3 | **종합 비교 결과** | (합의/차이/권장안) |
+>   | 4 | **사용자 개입 필요 시** | 무엇이 필요한지만 |
+>
+> - 🚫 **위 외 일체 출력 금지** — "reviewer spawn / deft-review 실행 / pane 분할 / 페르소나 주입 / PATH 보강" 같은 단계 나레이션 금지. spawn 은 1번 예고 후 **전부 한 번에 조용히** 실행하고 2번에서 완료만 알린다.
+> - 🚫 **내부 메커니즘 출력 금지**: deft-review CLI·pane 분할·페르소나 주입·헬퍼 동기화·"Ran N shell commands".
 
 ## Workflow
 

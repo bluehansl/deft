@@ -4,6 +4,14 @@
 
 형식은 [Keep a Changelog](https://keepachangelog.com/ko/1.1.0/) 를 따르며, 버전 체계는 [Semantic Versioning](https://semver.org/lang/ko/) 을 사용합니다 (`claude-X.Y.Z` / `codex-X.Y.Z` 접두).
 
+## [claude-2.39.1] - 2026-06-25
+
+> **2대 원칙 정밀화 — announce 지점 고정 + 회수 백그라운드 완결 (실측 피드백)** — 2.39.0 적용 후에도 ① spawn 을 단계별로 쪼개 매번 중계("첫 워커 spawn / team-id 확인 / 두 번째 추가 / claudex 2명 추가 / pane 기록 / N번째 기동 완료")하고 ② 회수 루프를 foreground `wait` 로 기다려 메인이 멈춤(`Flummoxing… 1m+`)이 남았다. 출력 규약을 **블랙리스트("이건 출력 금지") → 화이트리스트("이 고정 지점에서만 출력")** 로 격상하고, 회수 대기를 **foreground `wait` → `run_in_background` + done-flag** 로 전환.
+
+### Fixed
+- **출력 announce 지점 고정 (3개 스킬 공통)** — Lead 가 대화에 말하는 지점을 스킬별 5개 내외로 **고정**(① 시작 예고: 요청+인원+페르소나 한 번에 ② 스폰 완료→시작 ③ 중간 결과 ④ 최종 결론 ⑤ 사용자 개입). 그 사이 spawn·통신 단계는 **한 턴에 묶어 말없이 연속 실행** — "첫 워커 spawn합니다 / 두 번째 추가 / pane 기록" 류 단계 나레이션 전면 금지.
+- **회수 루프 foreground `wait` 제거 (multi-round)** — 회수 스크립트를 `run_in_background:true` 로 던지고 메인 턴은 즉시 종료, 완료는 `*.done` 플래그 → harness 가 다음 턴을 깨워 COLLECT 를 읽게 함. 기존 `wait "$RECV_PID"` 가 메인을 수십 초~수 분 블록하던 `Flummoxing…` 멈춤 해소(원칙 1 — 메인은 즉각 반응 우선).
+
 ## [claude-2.39.0] - 2026-06-25
 
 > **Lead 운영 2대 원칙 신설 — 전 스킬 공통(반응성 + 의미 이벤트 출력)** — 사용자 요구: ① Lead 세션은 실제 작업 중이 아니면 항상 사용자 입력에 반응 가능해야 하고(팀원 응답 대기는 백그라운드/in-progress) ② 출력은 CLI 생성·bus·pane·페르소나 주입 등 내부 메커니즘을 빼고 "어떤 요청으로 몇 명이 어떤 페르소나로 생성·작업 시작·spawn 완료·회의 시작·중간 결과" 같은 최소 의미 이벤트만. multi-round 만 부분 적용돼 있던 것을 **3개 스킬(multi-round/agent-teams/multi-check) 최상단에 동일 강제 박스로 통일**.
