@@ -4,6 +4,19 @@
 
 형식은 [Keep a Changelog](https://keepachangelog.com/ko/1.1.0/) 를 따르며, 버전 체계는 [Semantic Versioning](https://semver.org/lang/ko/) 을 사용합니다 (`claude-X.Y.Z` / `codex-X.Y.Z` 접두).
 
+## [claude-2.43.0] - 2026-06-25
+
+> **multi-round 회의 워커 2채널 공존 복원 — Phase 3-A 헬퍼 기반 재작성(회귀 수정, R-16 구현)** — 2.40.0 회귀("빈 pane + CLI 직접부팅"으로 `--claude-team-agent` binding 누락 → pane 이름표 사라짐 + NTP 노크 ntpPush→cmuxKnock 폴백)를 RATIONALE R-16 의 실측 확정 절차로 교체했다. 회의 워커가 다시 **NTP binding(이름표 `@name`·ntpPush) + MCP 버스 board(토론 본문) 2채널을 동시에** 갖는다. 인프라(`deft-claudex-native-spawn`·`deft-claude-native-spawn`·`multi-round-bus`)는 이미 준비돼 있어 스킬 절차만 정정. `claude-2.42.2` 의 의뢰서(`HANDOFF-phase3a-rewrite.md`)대로 수행.
+
+### Changed
+- **`skills/multi-round/SKILL.md` Phase 3-A (2)~(5) 전면 재작성** (약 142줄 교체):
+  - 워커 부팅을 **"빈 pane + CLI 직접부팅" → "첫 워커 Agent tool + 나머지 헬퍼(`DEFT_BUS_DIR` 주입)"** 로 전환. `DEFT_BUS_DIR` 설정 시 헬퍼가 `--claude-team-agent`(NTP) + 버스 MCP(board) 를 함께 주입 → 2채널 공존(근거: R-16).
+  - **(2)** 첫 워커 = `Agent` tool(팀 생성·TID 획득, board MCP 직결 불가 → `SendMessage` 중계). **(3)** 첫 워커 pane:ref 를 `.last-worker-pane` 기록(헬퍼가 그 아래로 세로 스택 — pane 레이아웃 유지). **(4)** 나머지 워커 = `deft-claudex-native-spawn`/`deft-claude-native-spawn` 헬퍼(JSON 출력에서 `.surface` 캡처). **(5)** board `register --inbox <팀inbox>` (ntpPush 스위치) + `post --inject` 의제 게시 + 응답 회수 2경로(헬퍼 워커=board `check`, 첫 워커=`team-lead.json` 직접 회수).
+  - 🔑 **`--inbox` 가 ntpPush 의 스위치**임을 명시(버스 `info.inbox ? ntpPush : cmuxKnock`) — 헬퍼로 띄운 워커 inbox 경로를 register 에 줘야 느린 cmuxKnock 대신 빠른 ntpPush.
+  - 폐기된 "빈 pane + CLI 직접부팅" 경로는 `<details>` 접이식으로 보존(회귀 재발 방지 — 왜 폐기됐는지 명시).
+- **§운영 용례 1 보강** — claudex 워커 블록에 2채널 공존 효과(`DEFT_BUS_DIR`) 주석, 추가 claude CLI 워커(`deft-claude-native-spawn`, `DEFT_LEAD_SESSION` 필수) 경로, 회의 모드 board 등록 단계 추가. Phase 3-A 가 용례 1 을 단일 소스로 참조(중복 제거).
+- **§Phase 5-B 정리** — 워커 유형별 종료 분기 명시: 첫 워커(Agent tool)=`shutdown_request`(close-surface·kill 금지, R-5), 헬퍼 워커=캡처한 `WSURF_*` surface close. 옛 `W*_SURFACE`/`(3.5)` dangling 참조 정정.
+
 ## [claude-2.42.2] - 2026-06-25
 
 > **Phase 3-A 재작성 작업 의뢰서 추가(HANDOFF)** — 회의 워커 2채널 공존 복원 작업을 리줌 없는 새 세션에 인계하기 위한 자기완결 의뢰서 `HANDOFF-phase3a-rewrite.md` 신설. 목표·배경·정답 절차(R-16)·제약(pane 구성 유지·하드코딩 금지)·검증 방법(R-8 맹점 — bash 직접 금지, 별도 세션 날것 실행)·작업 절차·버전 규약을 담음. 실제 Phase 3-A 코드 재작성은 새 세션이 이 의뢰서로 수행.
