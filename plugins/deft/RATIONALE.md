@@ -98,6 +98,9 @@
   4. board 등록(`multi-round-bus register --name <w> --surface <surf>`) + 의제 게시(`post --inject`) → 발신자 제외 전원 노크, board 전원 공개 → 토론 성립.
   5. 응답 회수 2경로: board 워커는 `multi-round-bus check --as lead`, Agent 워커(첫 워커)는 `team-lead.json` 직접 회수(R-1·R-2).
 - **시행착오 교훈**: ① 이름표 위해 순수 NTP(board 없이) 띄우면 토론이 자문으로 퇴화 → 회의=board 강제(R-7) ② **활성 team 디렉토리 `rm` 금지** — 런타임이 team-id 참조 못 해 spawn 에러(복구로 해결) ③ claude 헬퍼는 `DEFT_LEAD_SESSION=$CLAUDE_CODE_SESSION_ID` 필수(onboarding 회피).
+- **후속 실측 (claude-2.44.0 — 2.43.0 배포 후 사용자 날것 검증에서 드러난 2건)**:
+  - **(가) claude 헬퍼 pane 스택 누락 → 1:1:N 레이아웃**: `deft-claude-native-spawn` 이 무조건 `new-split right`(새 컬럼) 해서 추가 claude 워커가 첫 워커 아래로 안 쌓이고 Lead 옆 새 컬럼을 만들었다(claudex 헬퍼엔 있던 `.last-worker-pane` focus→down 연쇄가 claude 헬퍼엔 통째로 없었음). → 두 헬퍼를 **동일 `.last-worker-pane` 프로토콜**로 맞춰 혼합 회의도 단일 컬럼 스택(Lead 1 : 워커 N) 유지.
+  - **(나) claude 워커가 board read 만·write 는 NTP 로 샘**: claude 워커는 NTP binding + board 버스를 **둘 다** 가져 응답 채널이 모호하다 — board 노크를 받아 읽고 다른 워커 발언을 인용까지 하면서도, 응답은 `post_message`(board)가 아니라 `SendMessage`(NTP)로 Lead 에 "보고"해 다른 워커가 그 입장을 board 에서 못 봤다(브로드캐스트 실패 — claudex 워커 vc 화면에 claude 입장 부재로 확인). 원인은 페르소나 §보고 채널 원칙의 "받은 채널로 답"을 claude 가 NTP 쪽으로 적용한 것. claudex 는 board MCP 만 통신 수단이라 이 문제가 없음(선택지 없음). → **회의 모드 한정 board 강제**(페르소나 "회의 모드=board post 전용·SendMessage 금지" + 의제 `응답 채널: board` 명시 + 헬퍼 `--allowedTools mcp__bus__*` 이중 안전망). **작업 모드(NTP mesh)는 board 없으니 `SendMessage` 보고 그대로** — 의제에 `응답 채널: board` 가 없는 것으로 모드를 구분.
 
 ### R-15. cmux send 3대 규약 (zsh 환경 실측 — 버스 경로 워커 부팅)
 - **사고**: 버스 경로(claude CLI + claudex 인라인 MCP)에서 워커를 pane 에 띄울 때 — pane 분할은 됐으나 ① 입력창에 직전 send 잔여물이 남아 명령 오염(touch 텍스트가 prompt 에 박힌 채 실행 안 됨) ② MCP 인라인(`-c 'mcp_servers...'`)이 수백 자라 cmux send 한 번에 셸 미도달·유실 ③ `surface:N` 의 콜론이 `${pair%%:*}` 파싱을 깨고 zsh 위치파라미터(`set -- $row`)가 비표준이라 어긋남 — 세 가지가 겹쳐 워커가 안 떴다(2026-06-25, 사용자 세션 자체 보정으로 성공).

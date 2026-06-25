@@ -4,6 +4,20 @@
 
 형식은 [Keep a Changelog](https://keepachangelog.com/ko/1.1.0/) 를 따르며, 버전 체계는 [Semantic Versioning](https://semver.org/lang/ko/) 을 사용합니다 (`claude-X.Y.Z` / `codex-X.Y.Z` 접두).
 
+## [claude-2.44.0] - 2026-06-25
+
+> **회의 워커 실측 검증 후 2건 버그 수정 — claude 워커 pane 스택 + board write 강제** — 2.43.0 배포 후 사용자가 다른 워크스페이스 날것 실행으로 검증한 결과(R-16 2채널 공존·이름표·ntpPush 정상 확인), 두 가지 결함이 드러나 수정. ① 추가 claude CLI 워커가 첫 워커 아래로 스택되지 않고 Lead 옆 새 컬럼을 만들어 1:1:N 으로 깨짐 ② claude 워커가 board 를 읽기는 하나 응답을 board `post_message` 가 아니라 NTP `SendMessage` 로 Lead 에 보고 → 다른 워커가 그 입장을 board 에서 못 봄(브로드캐스트 실패). 작업 모드(NTP mesh) 호환 유지하며 회의 모드 한정으로 수정.
+
+### Fixed
+- **`bin/deft-claude-native-spawn` pane 스택 로직 누락(1:1:N 레이아웃 버그)**: 무조건 `new-split right`(새 컬럼) 하던 것을 `deft-claudex-native-spawn` 과 **동일한 `.last-worker-pane` 연쇄**(직전 워커 pane focus → `new-split down`, 새 pane:ref 기록)로 교체. 두 헬퍼가 같은 상태파일 프로토콜을 공유해 **혼합 회의(claude+claudex)에서도 순서 무관 단일 컬럼 스택** → Lead 1 : 워커 N 레이아웃. (회의·작업 모드 공통 — `DEFT_BUS_DIR` 무관.)
+- **claude 워커가 board 에 write 안 함(NTP 로 새는 버그)**: claude 워커는 NTP binding + board 버스를 둘 다 가져 응답 채널이 모호 → 페르소나 24행("받은 채널로 답")을 NTP 쪽으로 적용해 `SendMessage` 보고로 샜다. **회의 모드 한정 board 강제**를 3중으로 박음:
+  - `agents/claude-participant.md` — "회의 모드 = board `post_message` 전용, `SendMessage` 보고 금지(board 단일 진실 소스)" 규칙 추가. 작업 모드 NTP 보고는 명시 보존(의제에 `응답 채널: board` 없으면 작업 모드).
+  - `skills/multi-round/SKILL.md` 워커 prompt 표준 inject — "응답 채널: board(post_message) 전용, claude 워커도 board 에 post" 명시(페르소나 트리거).
+  - `bin/deft-claude-native-spawn` — board 버스 주입(`DEFT_BUS_DIR`) 시 `--allowedTools mcp__bus__*` 추가(권한 거부 fallback 차단 이중 안전망, 근거: RATIONALE R-10).
+
+### 호환성
+- **작업 모드(Phase 4-T) 무영향**: `--allowedTools`·board 강제는 `DEFT_BUS_DIR`(회의) 분기 내에만 적용. 작업 모드는 board 미주입이라 NTP `SendMessage` 보고 경로 그대로 유지.
+
 ## [claude-2.43.0] - 2026-06-25
 
 > **multi-round 회의 워커 2채널 공존 복원 — Phase 3-A 헬퍼 기반 재작성(회귀 수정, R-16 구현)** — 2.40.0 회귀("빈 pane + CLI 직접부팅"으로 `--claude-team-agent` binding 누락 → pane 이름표 사라짐 + NTP 노크 ntpPush→cmuxKnock 폴백)를 RATIONALE R-16 의 실측 확정 절차로 교체했다. 회의 워커가 다시 **NTP binding(이름표 `@name`·ntpPush) + MCP 버스 board(토론 본문) 2채널을 동시에** 갖는다. 인프라(`deft-claudex-native-spawn`·`deft-claude-native-spawn`·`multi-round-bus`)는 이미 준비돼 있어 스킬 절차만 정정. `claude-2.42.2` 의 의뢰서(`HANDOFF-phase3a-rewrite.md`)대로 수행.

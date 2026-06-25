@@ -54,18 +54,34 @@ if ! command -v cmux >/dev/null 2>&1 || ! cmux identify >/dev/null 2>&1; then
 fi
 LEAD_PANE="$(cmux identify 2>/dev/null | jq -r .caller.pane_ref)"
 
-# pane 분할 + 비율 정렬 + Lead focus 복원
+# 워커 pane 분할 — 표준 레이아웃(SKILL.md §3-A): 첫 워커는 우측 새 컬럼(right),
+# 이후 워커는 직전 워커 pane 아래로 세로 스택(down) → "Lead | 워커 상하 스택" 2컬럼 유지.
+# (claudex 헬퍼와 동일 — 혼합 회의에서 claude·claudex 워커가 같은 우측 컬럼에 함께 쌓이게 한다.
+#  이게 없으면 claude 워커가 매번 Lead 옆 새 컬럼을 만들어 1:1:N 으로 깨진다 — 실측 버그.)
 # base workspace: DEFT_BASE_WORKSPACE 우선, 없으면 caller→focused workspace_ref 폴백.
-# ⚠️ cmux new-split 은 --surface 단독 ref 를 해석 못 한다(window 컨텍스트 필요) → 비대화형 Bash·resume 후
-# caller stale 환경에선 --workspace 로만 분할 가능(실측: --surface 는 "not_found: Surface not found").
+# ⚠️ cmux new-split/send/focus 는 --surface 단독 ref 를 해석 못 한다(비대화형 Bash·resume 후 caller stale
+#    환경 실측: --surface 는 "not_found"/"Surface is not a terminal"). → ref 호출엔 --workspace 컨텍스트 동반.
+# ⚠️ down 분할 대상 지정: --surface 가 안 되므로 "직전 워커 pane 을 focus → new-split down" 으로 우회
+#    (focused pane 기준 분할). 직전 워커 pane 은 team dir 상태파일(.last-worker-pane)로 헬퍼 간 공유 —
+#    NTP 헬퍼는 워커 1명씩 독립 호출이라 직전 surface 를 인자로 못 받기 때문.
 BASE_WS="${DEFT_BASE_WORKSPACE:-$(cmux identify 2>/dev/null | jq -r '.caller.workspace_ref // .focused.workspace_ref // empty')}"
 [ -n "$BASE_WS" ] || { echo "ERROR: 대상 워크스페이스 불명 — DEFT_BASE_WORKSPACE 로 Lead 워크스페이스(예: workspace:10)를 명시하라." >&2; exit 1; }
-SPLIT="$(cmux new-split right --workspace "$BASE_WS" --focus false 2>&1)"
+WS_OPT=(--workspace "$BASE_WS")
+LASTPANE_FILE="$TEAM_DIR/.last-worker-pane"
+PREV_PANE="$(cat "$LASTPANE_FILE" 2>/dev/null)"
+if [ -n "$PREV_PANE" ] && cmux list-panes "${WS_OPT[@]}" --json 2>/dev/null | jq -e --arg p "$PREV_PANE" '.panes[]?|select(.ref==$p)' >/dev/null 2>&1; then
+  # 2번째+ 워커: 직전 워커 pane 아래로 (focus → down)
+  cmux focus-pane --pane "$PREV_PANE" "${WS_OPT[@]}" >/dev/null 2>&1
+  SPLIT="$(cmux new-split down "${WS_OPT[@]}" --focus false 2>&1)"
+else
+  # 첫 워커: 우측 새 컬럼
+  SPLIT="$(cmux new-split right "${WS_OPT[@]}" --focus false 2>&1)"
+fi
 SURF="$(printf '%s' "$SPLIT" | grep -oE 'surface:[0-9]+' | head -1)"
 [ -n "$SURF" ] || { echo "ERROR: pane 분할 실패(workspace=$BASE_WS): $SPLIT" >&2; exit 1; }
-# ⚠️ cmux send/send-key/focus-pane 도 surface/pane ref 해석에 workspace 컨텍스트가 필요하다(실측:
-# --surface 단독은 "invalid_params: Surface is not a terminal"). 모든 후속 호출에 WS_OPT 동반.
-WS_OPT=(--workspace "$BASE_WS")
+# 새 워커 pane:ref 를 상태파일에 기록(다음 워커가 이 아래로 down) — surface→pane 매핑은 list-panes
+NEW_PANE="$(cmux list-panes "${WS_OPT[@]}" --json 2>/dev/null | jq -r --arg s "$SURF" '.panes[]?|select(.selected_surface_ref==$s)|.ref' 2>/dev/null | head -1)"
+[ -n "$NEW_PANE" ] && printf %s "$NEW_PANE" > "$LASTPANE_FILE"
 command -v cmux-rebalancing >/dev/null 2>&1 && cmux-rebalancing >/dev/null 2>&1
 cmux focus-pane --pane "$LEAD_PANE" "${WS_OPT[@]}" >/dev/null 2>&1
 
@@ -105,7 +121,10 @@ if [ -n "${DEFT_BUS_DIR:-}" ]; then
   if [ -n "$BUS_BIN_PATH" ]; then
     MCPCFG="$TEAM_DIR/mcp-${WORKER}.json"
     printf '{"mcpServers":{"bus":{"type":"stdio","command":"%s","args":["mcp"],"env":{"MULTI_ROUND_SESSION_DIR":"%s","BUS_PARTICIPANT":"%s"}}}}\n' "$BUS_BIN_PATH" "$DEFT_BUS_DIR" "$WORKER" > "$MCPCFG"
-    BUS_OPT=" --strict-mcp-config --mcp-config '$MCPCFG'"
+    # --allowedTools: board 도구 사전 허용 — --dangerously-skip-permissions 가 있어도 명시해 두면
+    #   제한 모드 폴백·향후 권한 정책 변경 시에도 post_message 거부로 "수신만 되고 발신 불가" 반쪽
+    #   참가자가 되는 것을 막는다(근거: RATIONALE R-10 — 옛 버스 경로 워커에 있던 가드).
+    BUS_OPT=" --strict-mcp-config --mcp-config '$MCPCFG' --allowedTools mcp__bus__check_messages,mcp__bus__post_message,mcp__bus__list_participants"
   else
     echo "WARN: DEFT_BUS_DIR 설정됐으나 multi-round-bus 미발견 — board 버스 없이 팀원만." >&2
   fi
