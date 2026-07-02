@@ -5,7 +5,7 @@
 #       쓰는 모델 ID 를 한 곳에서 결정한다. 모델 차단·버전업 시 이 파일(또는 환경변수)만
 #       고치면 전 스킬에 반영되어, 여러 파일을 일일이 수정하다 누락할 위험이 사라진다.
 #
-# 사용: deft-model claude   # Claude 계열 모델 ID (기본 opus)
+# 사용: deft-model claude   # Claude 계열 모델 ID (기본 claude-fable-5)
 #       deft-model codex    # Codex 계열 모델 ID (기본 gpt-5.5)
 #
 # 오버라이드: 환경변수 DEFT_CLAUDE_MODEL / DEFT_CODEX_MODEL 가 있으면 그 값을 우선 사용.
@@ -13,8 +13,12 @@
 # 이력:
 #   - 2026-06: Claude Fable 5(`claude-fable-5`) 가 사용 불가로 확인되어 기본값을 opus 로 운용.
 #     Fable 복구 시 아래 CLAUDE_DEFAULT 를 claude-fable-5 로 되돌리면 전 스킬이 자동 복귀.
+#   - 2026-07: Fable 5 재개방 → CLAUDE_DEFAULT 를 claude-fable-5 로 복귀.
+#     ⚠️ 이 변수는 CLI 실행 경로(`claude --model "$(deft-model claude)"`)만 자동 전환한다.
+#        Agent tool 로 띄우는 팀원/첫워커의 `model:` 인자는 enum(sonnet/opus/haiku/fable)만 받아
+#        이 변수를 읽지 못한다 → 각 SKILL 의 `model:` 리터럴은 alias `fable` 로 직접 지정한다(codex-1.21.0 복원).
 
-CLAUDE_DEFAULT="opus"        # ← Claude 계열 기본 모델. Fable 복구 시 여기만 수정.
+CLAUDE_DEFAULT="claude-fable-5"   # ← Claude 계열 기본 모델(CLI 경로). 차단 시 opus 로 되돌린다.
 CODEX_DEFAULT="gpt-5.5"      # ← Codex 계열 기본 모델.
 
 case "${1:-claude}" in

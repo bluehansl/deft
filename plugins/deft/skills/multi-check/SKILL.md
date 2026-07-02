@@ -127,7 +127,7 @@ Agent(
   description: "Run Codex CLI analysis (GPT-5.5, xhigh reasoning)",
   name: "<$CODEX_REVIEWER_NAME>",     # claudex 있으면 claudex-reviewer, 없으면 codex-reviewer (실제 CLI 반영)
   subagent_type: "claude",            # 범용. 페르소나는 prompt 인라인으로 주입
-  model: "haiku",                     # 얇은 래퍼(CLI 실행·중계만). ※ 생략 시 fable(차단)로 떠 실패 — 반드시 명시
+  model: "haiku",                     # 얇은 래퍼(CLI 실행·중계만). ※ 생략 시 기본 fable 로 떠 의도(경량 래퍼)와 달라짐 — 반드시 haiku 명시
   mode: "dontAsk",
   run_in_background: true,
   prompt: "<$PERSONA_DIR/codex-reviewer.md 전문 인라인>\n\n---\n[검토 대상]\n<composed prompt with context>"
@@ -284,7 +284,7 @@ cmux focus-pane --pane "$(cmux identify | jq -r .caller.pane_ref)" 2>/dev/null
 | API error (ModelNotFoundError, etc.) | Skip that model, note in results |
 | Timeout (agent doesn't respond in 120s) | Synthesize with available results |
 | All CLIs fail | Compare Lead analysis against error context |
-| 리뷰어가 spawn 직후 무응답 | `model` 미지정 시 팀원이 `fable`(차단)로 떠 조용히 실패 — `model:"haiku"` 명시를 확인. 그래도 무응답이면 해당 모델 skip 후 진행 |
+| 리뷰어가 spawn 직후 무응답 | `model` 미지정 시 기본 `fable` 로 떠 의도한 경량 `haiku` 래퍼가 아님 — `model:"haiku"` 명시를 확인. 그래도 무응답이면 해당 모델 skip 후 진행 |
 | Reviewer dies right after spawn (e.g. binary path error) | Close its dead pane (`cmux top --processes` 로 프로세스 0 확인 후 `cmux close-surface`) → respawn → **rebalancing 재호출** — 죽은 pane 을 방치하면 레이아웃·식별 혼란 |
 
 ## Prompt Composition Rules

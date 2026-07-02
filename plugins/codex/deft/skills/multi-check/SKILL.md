@@ -222,7 +222,7 @@ GEMINI_POLICY_ALLOW_READONLY=true gemini -p "<prompt>" -m gemini-3-flash-preview
 기본 명령:
 
 ```bash
-claude -p "<prompt>" --model "$(deft-model claude 2>/dev/null||echo opus)" --permission-mode dontAsk --output-format text
+claude -p "<prompt>" --model "$(deft-model claude 2>/dev/null||echo claude-fable-5)" --permission-mode dontAsk --output-format text
 ```
 
 - Claude reviewer는 optional이다.

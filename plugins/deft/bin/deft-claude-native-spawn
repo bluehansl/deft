@@ -13,7 +13,7 @@
 #   <team-id>      session-<short> (claudex-Lead 가 바인딩한 팀)
 #   <worker-name>  claude 팀원 이름 (claudex Lead 가 send_message(to:...) 로 부를 이름)
 #   [cwd]          claude 워커 cwd (기본 $PWD)
-#   [model]        claude 모델 (기본 opus)
+#   [model]        claude 모델 (기본 fable)
 #
 # 환경: CLAUDE_NATIVE_BIN(claude 경로 override, 기본 PATH claude) / CLAUDE_CONFIG_DIR(기본 ~/.claude)
 #   DEFT_LEAD_SESSION  --parent-session-id 오버라이드. Lead=Claude(회의/작업 모드)면 실제 Lead 세션
@@ -30,7 +30,7 @@ set -u
 TEAM_ID="${1:?usage: deft-claude-native-spawn <team-id> <worker-name> [cwd] [model]}"
 WORKER="${2:?worker-name required}"
 CWD="${3:-$PWD}"
-MODEL="${4:-opus}"
+MODEL="${4:-fable}"
 
 CLAUDE_BIN="${CLAUDE_NATIVE_BIN:-$(command -v claude 2>/dev/null || true)}"
 if [ -z "$CLAUDE_BIN" ] || [ ! -x "$CLAUDE_BIN" ]; then

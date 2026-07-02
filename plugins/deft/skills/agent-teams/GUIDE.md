@@ -74,11 +74,11 @@ SKILL.md의 규약을 **실전 시나리오**로 풀어쓴 보조 문서. 처음
 # TeamCreate 불요(폐지) — 첫 Agent spawn 시 ~/.claude/teams/session-<id>/ 가 자동 생성됨
 # config.json 의 name(session-<id>) 을 확인해 work.md ## META "현재 team-name" 에 기록
 
-Agent(name="backendDev", subagent_type="claude", model="opus",
+Agent(name="backendDev", subagent_type="claude", model="fable",
       prompt=<§4-3 템플릿 + agents/backendDev.md 경로 + work-id=PAY-321>)
-Agent(name="frontendDev", subagent_type="claude", model="opus", ...)
-Agent(name="qa", subagent_type="claude", model="opus", ...)
-# team_name 인자는 넣지 않는다(deprecated/무시). model:"opus" 필수 — 미지정 시 fable(차단)로 떠서 실패.
+Agent(name="frontendDev", subagent_type="claude", model="fable", ...)
+Agent(name="qa", subagent_type="claude", model="fable", ...)
+# team_name 인자는 넣지 않는다(deprecated/무시). model:"fable" 명시 — 팀원은 Lead 모델 미상속.
 ```
 > `cmux claude-teams` 환경이라 pane 분할은 자동(§2-2). Lead는 cmux 명령 호출 불필요. 첫 팀원 분할 직후 `cmux-rebalancing` 1회(§2-3).
 

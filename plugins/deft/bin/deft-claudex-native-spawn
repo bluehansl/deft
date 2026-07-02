@@ -114,7 +114,7 @@ if [ -f "$CFG" ] && command -v jq >/dev/null 2>&1; then
   else
     TS="$(date +%s)000"
     if jq --arg n "$AGENT" --arg tid "$TEAM_ID" --arg pane "$PANE_ID" --arg cwd "$CWD" --argjson ts "$TS" \
-        '.members += [{agentId:($n+"@"+$tid), name:$n, color:"cyan", joinedAt:$ts, tmuxPaneId:$pane, subscriptions:[], agentType:"claude", model:"opus", prompt:"claudex 네이티브 팀원(deft-claudex-native-spawn)", planModeRequired:false, cwd:$cwd, backendType:"tmux", isActive:true}]' \
+        '.members += [{agentId:($n+"@"+$tid), name:$n, color:"cyan", joinedAt:$ts, tmuxPaneId:$pane, subscriptions:[], agentType:"claude", model:"fable", prompt:"claudex 네이티브 팀원(deft-claudex-native-spawn)", planModeRequired:false, cwd:$cwd, backendType:"tmux", isActive:true}]' \
         "$CFG" > "$CFG.deft-tmp" 2>/dev/null && mv "$CFG.deft-tmp" "$CFG"; then
       REGISTERED=1
     else

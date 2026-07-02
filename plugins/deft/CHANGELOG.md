@@ -4,6 +4,21 @@
 
 형식은 [Keep a Changelog](https://keepachangelog.com/ko/1.1.0/) 를 따르며, 버전 체계는 [Semantic Versioning](https://semver.org/lang/ko/) 을 사용합니다 (`claude-X.Y.Z` / `codex-X.Y.Z` 접두).
 
+## [claude-2.45.0 / codex-1.21.0] - 2026-07-02
+
+> **Claude Fable 5 재개방 → 전 스킬 모델 Fable 5 복원** — 2026-06 차단으로 opus 로 운용하던 Claude 워커·팀원·리뷰어·첫워커 모델을 Fable 5 로 원복. CLI 실행 경로는 `deft-model`(SSOT) `CLAUDE_DEFAULT`=`claude-fable-5` 로, Agent tool 경로는 enum alias `fable` 리터럴로 전환. `claude --model claude-fable-5` 와 Agent tool `model:"fable"`(spawn→런타임→SendMessage) 양쪽 실호출 검증 완료. multi-check 의 haiku 얇은 래퍼는 의도대로 유지.
+
+### Changed
+- **`bin/deft-model` (Claude+Codex) `CLAUDE_DEFAULT` `opus`→`claude-fable-5`** — CLI 경로(`claude --model "$(deft-model claude)"`)가 전 스킬 자동 복귀(멀티체크 리뷰어·회의 send/capture 폴백·claude CLI 워커). `DEFT_CLAUDE_MODEL` override·codex 기본(gpt-5.5) 무영향.
+- **Agent tool `model:` 리터럴 `opus`→`fable`** — Agent tool enum 제약(sonnet/opus/haiku/fable, 풀 ID 불가)이라 alias 사용: agent-teams 팀원(SKILL §2·§4-3·GUIDE + `agents/*.md` 8종 모델 메타), multi-round 첫 워커(Phase 3-A·용례 1).
+- **native-spawn 기본/인자 `opus`→`fable`** — `bin/deft-claude-native-spawn` 기본 모델(`${4:-fable}`) + multi-round 헬퍼 호출 인자. `bin/deft-claudex-native-spawn` 팀 config 멤버 메타도 `fable`.
+- **`||echo opus` 폴백 → `||echo claude-fable-5`** — deft-model 미설치 시 폴백도 Fable 로 통일(`bin/deft-review`·multi-check `claude-reviewer.md`·multi-round SKILL, 양 포트).
+- **스테일 "차단됨" 설명 현행화** — fable 이 더 이상 차단이 아니므로 agent-teams(SKILL/GUIDE)·multi-check 의 "미지정 시 fable(차단) 실패" 문구를 정정(모델은 그대로).
+
+### 검증
+- `claude --model claude-fable-5 -p …` exit 0(`FABLE_OK`) · alias `fable` 도 CLI 수용.
+- Agent tool `model:"fable"` 프로브: spawn 성공 → 런타임 → `SendMessage`(`FABLE_AGENT_OK`) 수신 확인. 과거 opus 전환 원인(fable 차단) 해소 확정.
+
 ## [claude-2.44.1 / codex-1.20.2] - 2026-06-25
 
 > **문서·메타 정비** — ① plugin.json/marketplace 의 `homepage`/`repository`/`websiteURL` 을 실제 repo(`github.com/bluehansl/deft`)로 정정(기존 `bluehansl-plugins` 오기 — 설치엔 무관하나 혼동 방지). ② README/GUIDE 소개 정확도 향상 — multi-round 에 "작업 모드"(NTP mesh 분담) 설명 추가, multi-round/agent-teams 한 줄 설명 보강.
