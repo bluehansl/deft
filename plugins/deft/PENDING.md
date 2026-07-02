@@ -35,3 +35,14 @@
   - **하지 않는 것(기각)**: (A) 페르소나 생성 보조 스킬 신설 — 단일 플러그인 유지비 영구반복 + no-overlink 위반 + "언제 뭘 쓸지" 4번째 결정축 혼란. (B) harness 상시 병용 — 빌드타임 메타툴 vs 런타임 일회성 시점 부정합 → 예외/고급 흐름 문서화만.
   - **불변식**: deft 정체성 3축(이종 AI 연계·work-id 영속·본업 컨벤션 강제) **무손상** — 흡수는 "기존 Lead 판단을 어휘로 보강"까지만. 균형추 memory `feedback_no_overlink_deft`.
   - **1차 분석 수정 반영**: A(6대 패턴) [상]→**[중]**(설계 렌즈로만, 런타임 엔진 아님). 실효 우선순위 **B ≳ C > A**.
+
+- [ ] **모델 지정 전면 변수화 — `deft-model` SSOT 단일화 (멀티체크 haiku 제외)** (2026-07-02 가능여부 판단 완료 · 구현 대기)
+  - **판단**: 가능. 모델 지정이 2종 — ① **CLI 실행**(`claude --model`)은 이미 `deft-model` 참조(일부 리터럴만 잔존) → `$(deft-model claude)` 로 완전 자동화 가능 / ② **Agent tool `model:`**(팀원·첫워커, alias `fable` ~10곳)은 도구 호출이라 `$()` 런타임 치환 불가 → "SSOT 참조" 관례로만 단일화.
+  - **제약**: Agent enum 은 alias(`fable`)만, CLI 는 풀 ID(`claude-fable-5`)도 수용 — 두 표기 공존이라 deft-model 이 둘 다 내보내야 함.
+  - **설계 (승인 시)**:
+    - [ ] `deft-model` 에 alias 차원 추가: `deft-model claude`→`claude-fable-5`(CLI), `deft-model claude alias`→`fable`(Agent enum). 양 포트. (모델 교체 시 여기 2값만)
+    - [ ] CLI 리터럴 → `$(deft-model claude)`: `bin/deft-claude-native-spawn` 기본(`${4:-fable}`), multi-round 헬퍼 호출 인자. 완전 자동 전파.
+    - [ ] Agent tool 문서 ~10곳 축약: 단일 선언 1곳 + 나머지(agent-teams SKILL/GUIDE·`agents/*.md` 8종·multi-round 첫워커)는 그 선언 참조. SKILL 이 "Lead 는 spawn 시 `deft-model claude alias` 로 모델 결정" 명시.
+  - **범위 제외**: multi-check `model:"haiku"`(의도된 경량 래퍼) — 변수화 대상 아님.
+  - **트레이드오프**: 장점 = 모델 교체가 진짜 1곳(deft-model). 단점 = Agent tool 문서 자기완결성↓(reader 가 deft-model 조회 필요) + Lead 가 spawn 때 SSOT 조회하도록 SKILL 강제 필요. 작업량 ≈ claude-2.45.0 Fable 변경과 유사(양 포트).
+  - **동기**: claude-2.45.0 Fable 복원 때 opus→fable 를 양 포트 ~20곳 sed 로 교체했음 — 이 변수화로 차기 모델 교체는 deft-model 1곳으로 축소.

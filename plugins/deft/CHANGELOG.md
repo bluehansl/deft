@@ -4,6 +4,13 @@
 
 형식은 [Keep a Changelog](https://keepachangelog.com/ko/1.1.0/) 를 따르며, 버전 체계는 [Semantic Versioning](https://semver.org/lang/ko/) 을 사용합니다 (`claude-X.Y.Z` / `codex-X.Y.Z` 접두).
 
+## [claude-2.45.2] - 2026-07-02
+
+> **PENDING 등록 — 모델 지정 전면 변수화 검토 결과** — 모델 지정을 `deft-model` SSOT 로 단일화(멀티체크 haiku 제외)하는 방안의 가능여부 판단 완료(가능). CLI 경로는 `$(deft-model)` 완전 자동, Agent tool 경로는 alias SSOT 참조로 단일화. 구현은 승인 후 별도. 코드 무변경.
+
+### Docs
+- **`PENDING.md`** — 모델 변수화 설계(deft-model alias 차원 추가 + 리터럴 ~10곳 SSOT 참조 전환)·제약(Agent tool 런타임 치환 불가)·트레이드오프 등록.
+
 ## [claude-2.45.1] - 2026-07-02
 
 > **PENDING 등록 — harness 방법론 부분 차용(C) 분석 결과** — multi-round 회의(3인 CONSENSUS) 결론을 `PENDING.md` 에 보류 항목으로 등록. 구현은 사용자 승인 후 별도 세션. 코드 무변경(Codex 무영향).
