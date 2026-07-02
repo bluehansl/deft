@@ -4,6 +4,13 @@
 
 형식은 [Keep a Changelog](https://keepachangelog.com/ko/1.1.0/) 를 따르며, 버전 체계는 [Semantic Versioning](https://semver.org/lang/ko/) 을 사용합니다 (`claude-X.Y.Z` / `codex-X.Y.Z` 접두).
 
+## [claude-2.45.1] - 2026-07-02
+
+> **PENDING 등록 — harness 방법론 부분 차용(C) 분석 결과** — multi-round 회의(3인 CONSENSUS) 결론을 `PENDING.md` 에 보류 항목으로 등록. 구현은 사용자 승인 후 별도 세션. 코드 무변경(Codex 무영향).
+
+### Docs
+- **`PENDING.md`** — harness A(토폴로지 렌즈)·B(분리 4축)·C(트리거 검증) 부분 차용 체크리스트 등록. (A)내재화·(B)병용 기각 근거 + deft 정체성 3축 보존 불변식 포함.
+
 ## [claude-2.45.0 / codex-1.21.0] - 2026-07-02
 
 > **Claude Fable 5 재개방 → 전 스킬 모델 Fable 5 복원** — 2026-06 차단으로 opus 로 운용하던 Claude 워커·팀원·리뷰어·첫워커 모델을 Fable 5 로 원복. CLI 실행 경로는 `deft-model`(SSOT) `CLAUDE_DEFAULT`=`claude-fable-5` 로, Agent tool 경로는 enum alias `fable` 리터럴로 전환. `claude --model claude-fable-5` 와 Agent tool `model:"fable"`(spawn→런타임→SendMessage) 양쪽 실호출 검증 완료. multi-check 의 haiku 얇은 래퍼는 의도대로 유지.
