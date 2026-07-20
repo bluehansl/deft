@@ -4,6 +4,20 @@
 
 형식은 [Keep a Changelog](https://keepachangelog.com/ko/1.1.0/) 를 따르며, 버전 체계는 [Semantic Versioning](https://semver.org/lang/ko/) 을 사용합니다 (`claude-X.Y.Z` / `codex-X.Y.Z` 접두).
 
+## [claude-2.46.0 / codex-1.22.0] - 2026-07-20
+
+> **산출물 라우팅 규칙 신설 — 독자(audience) 기준** — 팀 산출물이 plugin-data(`agent-teams/<work-id>/`)와 `~/.ai/tickets/<티켓>/`에 기준 없이 혼재하던 문제(실측: IT-14882 release-note.md 가 plugin-data 에, 구 IT-14552 역할노트가 tickets 에) 해소. 판별 질문 "팀 바깥 독자(사용자·타팀)가 읽는 완성물인가?" — Yes 면 티켓 디렉토리/프로젝트 repo, No(팀 내부 통신·연속성·오케스트레이션)면 plugin-data. 근본 원인이던 "부산물 자유 조항"(agent-teams §3-4) 교체.
+
+### Added
+- **agent-teams `SKILL.md` §3-4-1 산출물 라우팅** — 내부(work.md·<role>.md·team.md·orchestration.log·.spawn-*) = plugin-data / 대외 완성물(릴리즈노트·핸드오프·배포절차·QA컨텍스트·보고서) = work-id 가 티켓(`IT-\d+`)이면 `~/.ai/tickets/<work-id>/`, 프로젝트·OSS 작업이면 해당 repo. 배출 시 work.md 에 경로 링크 의무(SSOT 포인터 — 경로 수색 제거). §6-4 취합 절차에도 배출 단계 연결.
+- **multi-round `SKILL.md` §5-A 동일 라우팅** (Claude+Codex 양 포트) — board/summary/transcript 는 회의 세션 기록(내부) 유지, 보고서형 대외 완성물만 티켓/repo 로.
+
+### Changed
+- agent-teams §3-4 디렉토리 트리의 "작업 부산물 자유 추가" 조항 → "팀 내부 부산물만 + 대외 완성물은 §3-4-1" 로 교체 (혼재의 근본 원인 제거).
+
+### 데이터 정리 (스킬 외)
+- `IT-14882/release-note.md` 를 plugin-data → `~/.ai/tickets/IT-14882/` 로 이동 + work.md META 에 링크 기록.
+
 ## [claude-2.45.2] - 2026-07-02
 
 > **PENDING 등록 — 모델 지정 전면 변수화 검토 결과** — 모델 지정을 `deft-model` SSOT 로 단일화(멀티체크 haiku 제외)하는 방안의 가능여부 판단 완료(가능). CLI 경로는 `$(deft-model)` 완전 자동, Agent tool 경로는 alias SSOT 참조로 단일화. 구현은 승인 후 별도. 코드 무변경.
