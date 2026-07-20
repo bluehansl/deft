@@ -832,6 +832,7 @@ Lead 의 라운드 동작:
   - 경로: `~/.claude/plugin-data/deft/agent-teams/<work-id>/work.md` (work-id 규약은 deft 공통 config.json — §작업 디렉토리 표준).
   - 있으면 이어쓰기, 없으면 생성(agent-teams SKILL §6-1 템플릿). mate 보고를 Lead 가 `## FRONTEND/BACKEND/...` 또는 작업 항목별로 취합.
 - 이로써 작업 모드 회의 결과가 agent-teams 작업노트와 **같은 키로 연속** — 이후 agent-teams 가 같은 work-id 로 이어받을 수 있다.
+- **산출물 라우팅**: mate 보고를 **파일 형태의 대외 완성물**(사용자 보고서·타팀 공유 문서·배포 SQL 등)로 낼 때는 agent-teams SKILL §3-4-1 라우팅을 따른다 — work-id 가 티켓(`IT-\d+`)이면 `~/.ai/tickets/<work-id>/`, 프로젝트·OSS 작업이면 해당 repo. work.md 에는 취합 내용과 그 경로 링크만 남긴다(plugin-data 에 완성물 금지).
 
 **(T-5) 진행·종료**
 

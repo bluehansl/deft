@@ -4,6 +4,13 @@
 
 형식은 [Keep a Changelog](https://keepachangelog.com/ko/1.1.0/) 를 따르며, 버전 체계는 [Semantic Versioning](https://semver.org/lang/ko/) 을 사용합니다 (`claude-X.Y.Z` / `codex-X.Y.Z` 접두).
 
+## [claude-2.46.1] - 2026-07-20
+
+> **IT-14882 샘플 감사 후속 — 작업 모드(T-4)에도 라우팅 연결** — 2.46.0 규칙을 IT-14882 양 경로 샘플로 검증한 결과: ① multi-round **작업 모드 T-4**(mate 보고 work.md 취합)에 라우팅 포인터 누락 발견 → §3-4-1 연결 추가(Claude 측만 — Codex 포트는 작업 모드 자체가 없어 §5-A 미러로 완결). ② 잔여 혼재 `IT-14882/sql/`(배포 DDL·공통코드·롤백·추출쿼리 5종 = 대외 완성물)을 `~/.ai/tickets/IT-14882/sql/` 로 이동 + 옛 경로 참조 6곳(ticket.md 4·compact-instructions 1·backendDev.md 1) 치환 + work.md 링크 갱신.
+
+### Fixed
+- **multi-round `SKILL.md` (T-4)** — 작업 모드 mate 보고가 파일형 대외 완성물일 때 §3-4-1 라우팅을 따르도록 명시(plugin-data 에 완성물 금지, work.md 는 취합+링크만).
+
 ## [claude-2.46.0 / codex-1.22.0] - 2026-07-20
 
 > **산출물 라우팅 규칙 신설 — 독자(audience) 기준** — 팀 산출물이 plugin-data(`agent-teams/<work-id>/`)와 `~/.ai/tickets/<티켓>/`에 기준 없이 혼재하던 문제(실측: IT-14882 release-note.md 가 plugin-data 에, 구 IT-14552 역할노트가 tickets 에) 해소. 판별 질문 "팀 바깥 독자(사용자·타팀)가 읽는 완성물인가?" — Yes 면 티켓 디렉토리/프로젝트 repo, No(팀 내부 통신·연속성·오케스트레이션)면 plugin-data. 근본 원인이던 "부산물 자유 조항"(agent-teams §3-4) 교체.

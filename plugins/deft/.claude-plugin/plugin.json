@@ -1,7 +1,7 @@
 {
   "name": "deft",
   "description": "deft — Claude Code 개인 워크플로 도구 모음. 다중 AI 교차검증(multi-check), 멀티라운드 양방향 토론(multi-round), 에이전트 팀 운영(agent-teams), 세션 이동(session-relocate), 상태줄 설정·복원(set/restore-statusline)을 하나의 namespace로 제공.",
-  "version": "claude-2.46.0",
+  "version": "claude-2.46.1",
   "author": {
     "name": "bluehansl",
     "email": "bluehansl@naver.com"
