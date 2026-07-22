@@ -519,7 +519,7 @@ Lead 의 라운드 동작:
 
 회의록 원본은 `board.jsonl` 전체. 종합은 `$SESSION_DIR/summary.md` 로 저장 + 사용자 보고:
 
-> **산출물 라우팅 — 독자(audience) 기준**: `board.jsonl`/`summary.md`/`transcript.md` 는 **회의 세션 기록(내부)** — SESSION_DIR 유지. 그러나 회의 결론을 **파일 형태의 대외 완성물**(사용자 보고서·타팀 공유 문서)로 낼 때는 plugin-data 가 아니라 — work-id 가 티켓(`IT-\d+`)이면 `~/.ai/tickets/<work-id>/`, 프로젝트·OSS 작업이면 해당 repo 에 저장하고, summary.md 에 그 경로 링크를 남긴다. (판별 질문: "팀 바깥 독자가 읽는 완성물인가?")
+> **산출물 라우팅 — 독자(audience) 기준**: `board.jsonl`/`summary.md`/`transcript.md` 는 **회의 세션 기록(내부)** — SESSION_DIR 유지. 그러나 회의 결론을 **파일 형태의 대외 완성물**(사용자 보고서·타팀 공유 문서)로 낼 때는 plugin-data 가 아니라 — work-id 가 티켓(`IT-\d+`)이면 `~/.ai/tickets/<work-id>/`, 프로젝트·OSS 작업이면 해당 repo 에 저장하고, summary.md 에 그 경로 링크를 남긴다. (판별 질문: "팀 바깥 독자가 읽는 완성물인가?") 사용자 환경의 상위 지침(전역/프로젝트 AGENTS.md·CLAUDE.md)이 별도 산출물 경로를 규정하면 **그것이 우선**한다 — 본 규칙은 기본값이다.
 
 ```markdown
 ## Multi-Round Results

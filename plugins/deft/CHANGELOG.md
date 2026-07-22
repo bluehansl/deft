@@ -4,6 +4,14 @@
 
 형식은 [Keep a Changelog](https://keepachangelog.com/ko/1.1.0/) 를 따르며, 버전 체계는 [Semantic Versioning](https://semver.org/lang/ko/) 을 사용합니다 (`claude-X.Y.Z` / `codex-X.Y.Z` 접두).
 
+## [claude-2.46.2 / codex-1.22.1] - 2026-07-22
+
+> **산출물 라우팅 — 상위 지침 우선 명문화** — 사용자 본업 지침(`~/git/AGENTS.md` §2-4-1 신설, 도구 무관 산출물 경로 규칙)과 스킬 §3-4-1 의 관계를 명시: 사용자 환경의 상위 지침(전역/프로젝트 AGENTS.md·CLAUDE.md)이 별도 산출물 경로를 규정하면 **그것이 우선**, 스킬 규칙은 **기본값**. 특정 파일 경로 참조 없이 일반 문구로 — deft 자기완결(타 설치자 환경) 무손상.
+
+### Changed
+- agent-teams `SKILL.md` §3-4-1 — 우선순위 불릿 추가 (multi-round §5-A·T-4 는 §3-4-1 참조라 자동 전파).
+- codex multi-round `SKILL.md` §5-A — 동일 문구 추가 (Codex 포트는 agent-teams 부재로 자체 완결 문안).
+
 ## [claude-2.46.1] - 2026-07-20
 
 > **IT-14882 샘플 감사 후속 — 작업 모드(T-4)에도 라우팅 연결** — 2.46.0 규칙을 IT-14882 양 경로 샘플로 검증한 결과: ① multi-round **작업 모드 T-4**(mate 보고 work.md 취합)에 라우팅 포인터 누락 발견 → §3-4-1 연결 추가(Claude 측만 — Codex 포트는 작업 모드 자체가 없어 §5-A 미러로 완결). ② 잔여 혼재 `IT-14882/sql/`(배포 DDL·공통코드·롤백·추출쿼리 5종 = 대외 완성물)을 `~/.ai/tickets/IT-14882/sql/` 로 이동 + 옛 경로 참조 6곳(ticket.md 4·compact-instructions 1·backendDev.md 1) 치환 + work.md 링크 갱신.
