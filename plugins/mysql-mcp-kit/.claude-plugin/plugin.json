@@ -1,0 +1,12 @@
+{
+  "name": "mysql-mcp-kit",
+  "description": "MySQL(Aurora/MariaDB 포함) 을 benborla MCP(@benborla29/mcp-server-mysql)로 안전하게 조회하는 셋업 키트. 환경별 접속을 크리덴셜 파일로 관리(자유 정의), 읽기 전용 기본 + write=true 섹션만 쓰기 허용, 운영 쓰기는 승인 게이트. 조회 지침을 db-access 스킬로 제공. 실제 접속값(주소/계정/비번)은 사용자가 로컬에 입력한다.",
+  "version": "0.1.0",
+  "author": {
+    "name": "bluehansl",
+    "email": "bluehansl@naver.com"
+  },
+  "homepage": "https://github.com/bluehansl/deft",
+  "repository": "https://github.com/bluehansl/deft",
+  "license": "Personal use only"
+}

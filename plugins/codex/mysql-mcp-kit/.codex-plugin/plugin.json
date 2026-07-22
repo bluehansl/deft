@@ -1,0 +1,39 @@
+{
+  "name": "mysql-mcp-kit",
+  "version": "codex-0.1.0",
+  "description": "MySQL/MariaDB MCP setup kit for safe, credential-file based database access with read-only defaults, write gating, audit helpers, and a db-access skill.",
+  "author": {
+    "name": "bluehansl",
+    "email": "bluehansl@naver.com"
+  },
+  "homepage": "https://github.com/bluehansl/deft",
+  "repository": "https://github.com/bluehansl/deft",
+  "license": "Personal use only",
+  "keywords": [
+    "codex",
+    "mysql",
+    "mariadb",
+    "mcp",
+    "database",
+    "db-access"
+  ],
+  "skills": "./skills/",
+  "interface": {
+    "displayName": "mysql-mcp-kit",
+    "shortDescription": "Safe MySQL/MariaDB MCP setup kit.",
+    "longDescription": "mysql-mcp-kit provides a generic Codex setup kit for benborla MySQL MCP access: local credential-file configuration, read-only defaults, write=true gating, optional audit helpers, templates, and a db-access skill that owns database access rules.",
+    "developerName": "bluehansl",
+    "category": "Developer Tools",
+    "capabilities": [
+      "Interactive",
+      "Write"
+    ],
+    "websiteURL": "https://github.com/bluehansl/deft",
+    "defaultPrompt": [
+      "Use db-access before querying MySQL.",
+      "Set up mysql-mcp-kit for this project.",
+      "Review MySQL MCP safety settings."
+    ],
+    "brandColor": "#0F766E"
+  }
+}

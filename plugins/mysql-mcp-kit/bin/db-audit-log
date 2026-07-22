@@ -1,0 +1,27 @@
+#!/usr/bin/env bash
+#
+# db-audit-log — mysql MCP 쿼리 감사 로그 (Claude Code PostToolUse 훅)
+#
+#   - 입력  : stdin 으로 훅 페이로드 JSON (tool_name / tool_input / tool_response / session_id)
+#   - 출력  : ~/.ai/db-audit/YYYY-MM.jsonl 에 1쿼리 1줄 append
+#   - 원칙  : SQL 문·메타데이터만 기록. 조회 결과(rows)는 민감정보 보호를 위해 기록하지 않는다.
+#   - 훅 등록 예: PostToolUse matcher "mcp__mysql-.*" (사용자 서버 접두어에 맞게)
+#
+set -u
+
+LOG_DIR="${DB_AUDIT_DIR:-$HOME/.ai/db-audit}"
+mkdir -p "$LOG_DIR"
+
+jq -c '{
+  ts:   (now | strflocaltime("%Y-%m-%dT%H:%M:%S%z")),
+  tool: (.tool_name // null),
+  env:  (.tool_name // "" | capture("mcp__(?<s>[^_]+)__")?.s // null),
+  sql:  (.tool_input.sql // null),
+  error: (
+    (.tool_response.isError // false)
+    or ((.tool_response.content // []) | map(select((.text // "") | startswith("Error"))) | length > 0)
+  ),
+  session: (.session_id // null)
+}' >> "$LOG_DIR/$(date +%Y-%m).jsonl" 2>/dev/null || true
+
+exit 0

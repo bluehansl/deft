@@ -16,6 +16,15 @@
       "author": {
         "name": "bluehansl"
       }
+    },
+    {
+      "name": "mysql-mcp-kit",
+      "source": "./plugins/mysql-mcp-kit",
+      "description": "MySQL(Aurora/MariaDB) 을 benborla MCP 로 안전 조회하는 셋업 키트. 환경별 접속을 크리덴셜로 관리(자유 정의), 읽기 전용 기본 + write 환경만 쓰기(승인 게이트), db-access 스킬 제공. 접속값은 사용자 로컬 입력.",
+      "version": "0.1.0",
+      "author": {
+        "name": "bluehansl"
+      }
     }
   ]
 }

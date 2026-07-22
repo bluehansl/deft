@@ -1,0 +1,68 @@
+#!/usr/bin/env bash
+#
+# mysql-mcp — 환경별 MySQL MCP 서버 기동 래퍼 (benborla/mcp-server-mysql)
+#
+#   - 용도      : Claude Code / Codex MCP 서버 command 로 등록 (stdio)
+#   - 자격증명  : ~/.config/mysql-mcp/credentials  (INI, [env] 섹션별, mode 600)
+#                 필드: host / port / user / pass / db  (+ write=true 면 쓰기 허용)
+#                 → 비밀은 이 파일에만 두고, MCP 등록 설정에는 남기지 않는다
+#   - 버전 핀   : @benborla29/mcp-server-mysql@2.0.9 (검증 버전. 바꾸려면 MYSQL_MCP_PKG 로 override)
+#
+#   [쓰기 정책 — 데이터 구동]
+#   - 크리덴셜 섹션에 `write=true` 가 있으면 INSERT/UPDATE/DELETE 허용(ALLOW_*). DDL 은 항상 차단.
+#   - write 플래그가 없으면 읽기 전용(benborla 기본 + READ ONLY 세션).
+#   - MYSQL_DISABLE_READ_ONLY_TRANSACTIONS 는 어떤 경우에도 설정하지 않는다(2차 방어선 유지).
+#
+# 사용법:
+#   mysql-mcp <env>        # env = 크리덴셜 파일의 [섹션] 이름 (자유 정의)
+#
+set -euo pipefail
+
+ENV_ARG="${1:?usage: mysql-mcp <env>  (env = credentials 파일의 [섹션] 이름)}"
+
+CRED_FILE="${MYSQL_MCP_CREDENTIALS:-$HOME/.config/mysql-mcp/credentials}"
+[ -f "$CRED_FILE" ] || { echo "mysql-mcp: 자격증명 파일 없음: $CRED_FILE (플러그인 setup 을 먼저 실행)" >&2; exit 1; }
+
+# INI 파싱: [ENV_ARG] 섹션 안의 key 값 반환 (첫 '=' 뒤 전체 = pass 특수문자/'=' 보존)
+cred_field() {
+  awk -F= -v sec="$ENV_ARG" -v key="$1" '
+    /^[[:space:]]*#/ { next }
+    /^[[:space:]]*\[/ { in_sec = ($0 ~ "^[[:space:]]*\\["sec"\\][[:space:]]*$"); next }
+    in_sec && index($0, key"=") == 1 { sub(/^[^=]*=/, ""); print; exit }
+  ' "$CRED_FILE"
+}
+
+DB_HOST="$(cred_field host)"
+DB_PORT="$(cred_field port)"
+DB_USER="$(cred_field user)"
+DB_PASS="$(cred_field pass)"
+DB_NAME="$(cred_field db)"
+DB_WRITE="$(cred_field write)"
+
+[ -n "$DB_HOST" ] && [ -n "$DB_PORT" ] && [ -n "$DB_USER" ] && [ -n "$DB_PASS" ] \
+  || { echo "mysql-mcp: [$ENV_ARG] 필드 누락 (host/port/user/pass 확인: $CRED_FILE)" >&2; exit 1; }
+# db 는 필수 — 빈 값이면 benborla 가 multi-DB 모드(계정이 보는 모든 DB 조회)로 빠져 위험하다.
+[ -n "$DB_NAME" ] \
+  || { echo "mysql-mcp: [$ENV_ARG] db= 필수 (빈 값 금지 — multi-DB 모드 방지)" >&2; exit 1; }
+
+# MCP 호스트가 최소 PATH 로 spawn 하는 경우 대비: nvm 최신 node/bin PATH 보강
+if ! command -v npx >/dev/null 2>&1; then
+  NODE_BIN="$(ls -d "$HOME"/.nvm/versions/node/*/bin 2>/dev/null | sort -V | tail -1 || true)"
+  [ -n "$NODE_BIN" ] && export PATH="$NODE_BIN:$PATH"
+fi
+command -v npx >/dev/null 2>&1 || { echo "mysql-mcp: npx 를 찾을 수 없음 (node/nvm 확인)" >&2; exit 1; }
+
+export MYSQL_HOST="$DB_HOST" \
+       MYSQL_PORT="$DB_PORT" \
+       MYSQL_USER="$DB_USER" \
+       MYSQL_PASS="$DB_PASS" \
+       MYSQL_DB="$DB_NAME"
+
+# 데이터 구동 쓰기 허용: write=true 인 섹션만 DML 허용(DDL 은 계속 차단)
+if [ "$DB_WRITE" = "true" ]; then
+  export ALLOW_INSERT_OPERATION="true" \
+         ALLOW_UPDATE_OPERATION="true" \
+         ALLOW_DELETE_OPERATION="true"
+fi
+
+exec npx -y "${MYSQL_MCP_PKG:-@benborla29/mcp-server-mysql@2.0.9}"
