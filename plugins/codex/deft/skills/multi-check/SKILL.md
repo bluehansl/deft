@@ -100,8 +100,9 @@ reviewer 마다 pane 을 분할하고, 그 pane 쉘에서 headless CLI 명령을
 >
 > ```bash
 > # runner script 패턴(quoting 안전 권장)과 결합 — reviewer 명령을 스크립트로 저장 후 원샷 실행
+> # direction 은 분할선 방향(실화면 실측 — 가이드 문구와 반대): vertical=Lead 우측(좌우), horizontal=직전 pane 아래(상하)
 > OUT=$(orca terminal split --terminal "${PREV_HANDLE:-$ORCA_TERMINAL_HANDLE}" \
->       --direction $([ -n "${PREV_HANDLE:-}" ] && echo vertical || echo horizontal) \
+>       --direction $([ -n "${PREV_HANDLE:-}" ] && echo horizontal || echo vertical) \
 >       --command "sh $OUT_DIR/run-gemini.sh" --json)
 > R1_HANDLE=$(printf '%s' "$OUT" | jq -r '.result.split.handle // empty'); PREV_HANDLE="$R1_HANDLE"
 > ```

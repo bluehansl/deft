@@ -4,6 +4,17 @@
 
 형식은 [Keep a Changelog](https://keepachangelog.com/ko/1.1.0/) 를 따르며, 버전 체계는 [Semantic Versioning](https://semver.org/lang/ko/) 을 사용합니다 (`claude-X.Y.Z` / `codex-X.Y.Z` 접두).
 
+## [claude-2.48.2 / codex-1.23.2] - 2026-07-24
+
+> **orca split direction 매핑 반전 (사용자 실화면 실측)** — 시각화 UI 검증에서 발견: Orca 의 `--direction` 은 orca-cli 가이드 문구("horizontal splits left/right, vertical splits top/bottom")와 **반대로 동작**한다 — 실측: `vertical`=좌우 배치(anchor 우측 생성), `horizontal`=상하 배치(anchor 아래 생성) = **분할선 방향 기준 명명**. 기존 매핑으로는 스택 워커가 아래가 아니라 우측으로 생겨 "Lead | 워커 상하 스택" 레이아웃이 3컬럼으로 깨졌다(사용자 관찰). 라벨 pane 2방향 실측 판정(TEST-VERTICAL=우측/TEST-HORIZONTAL=아래) 후 전 지점 반전. 반전 후 claudex 2-워커 재스폰으로 **Lead 우측 + 그 아래 상하 스택 실화면 확인 완료**.
+
+### Fixed
+- **`deft-claudex-native-spawn` / `deft-claude-native-spawn`** — 스택(직전 워커 아래) `vertical`→`horizontal`, 첫 워커(Lead 우측)·stale 재시도 `horizontal`→`vertical`. 실측 근거 주석 명시.
+- **multi-round `SKILL.md`(Claude+Codex)** — §환경 판정 대응표에 direction 실측 의미 경고 추가, 3-B·포트 3-A 스니펫 반전. **multi-check `SKILL.md`(Codex)** — 🟠 스니펫 반전 + 주석.
+
+### Note (Orca 크래시 복원 실측)
+- Orca 앱 크래시·재시작 시 pane 이 **새 handle 로 재생성**되어 CLI 레지스트리와 화면 실체가 어긋날 수 있다(이전 close 가 헛돌고, 화면 pane 이 list 에 안 잡히는 고아화). 고아 pane 은 규약대로 **UI 수동 닫기**가 유일 — 재시작 후에는 handle 을 전부 재획득(`orca terminal list`)하고 화면 기준으로 재검증할 것.
+
 ## [claude-2.48.1 / codex-1.23.1] - 2026-07-24
 
 > **orca 실동 검증 후속 — deft-bin-sync shim 잔재 갱신 결함 수정** — 2.48.0 배포 후 Orca 1.4.150 실환경 풀사이클 검증(deft-test 기반)에서 발견: `~/.local/bin/cmux`(deft-cmux-shim)가 `ALL_HELPERS` 에 없어 기본 동기에서 갱신되지 않고, gap-fill 은 "부재 시에만"이라 **구버전 shim 잔재가 orca 오발사 가드를 영원히 못 받는** 결함(실측 — 구 shim 이 orca 안에서 진짜 cmux 로 exec 되어 cmux 앱 identify 반환 = 오발사 재현). deft-bin-sync 가 해결하려던 "구버전 잔재" 문제의 shim 판 재발.

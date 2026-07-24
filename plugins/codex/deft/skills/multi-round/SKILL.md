@@ -130,7 +130,7 @@ echo "deft 환경: $DEFT_ENV"
 
 | 용도 | cmux 모드 | orca 모드 |
 |---|---|---|
-| pane 분할+기동 | `cmux new-split` 후 `cmux send` 로 CLI 부팅 | **`orca terminal split --terminal <anchor> --direction vertical\|horizontal --command "<기동명령>" --json` 원샷** — 분할과 명령 실행이 원자적(빈 pane send·lazy-init readiness 문제 없음). handle 은 `.result.split.handle` |
+| pane 분할+기동 | `cmux new-split` 후 `cmux send` 로 CLI 부팅 | **`orca terminal split --terminal <anchor> --direction vertical\|horizontal --command "<기동명령>" --json` 원샷** — 분할과 명령 실행이 원자적(빈 pane send·lazy-init readiness 문제 없음). handle 은 `.result.split.handle`. ⚠️ **direction 은 분할선 방향(실화면 실측 — orca-cli 가이드 문구와 반대)**: `vertical`=좌우 배치(anchor **우측**), `horizontal`=상하 배치(anchor **아래**) |
 | 화면 읽기 | `cmux capture-pane` | `orca terminal read --terminal <handle>` (`--cursor`/`--limit` 페이징) |
 | 물리 입력 | `cmux send` + `cmux send-key Enter` | `orca terminal send --terminal <handle> --text "<한 줄>" --enter` |
 | TUI 응답 대기 | (없음 — idle-stable 폴링) | `orca terminal wait --terminal <handle> --for tui-idle --timeout-ms <N>` (agent CLI idle 판정 내장) |
@@ -346,9 +346,10 @@ Phase 0 결과 + 참가자 구성으로 §통신 우선순위 매트릭스에서
 > - **(1) Lead 등록**: `cmux identify` 대신 **`--surface "$ORCA_TERMINAL_HANDLE"`** (버스가 `term_*` 핸들을 `orca terminal send` 노크로 처리 — Lead 깨우기 동일 성립).
 > - **(2)+(3.5)+(4) 를 워커별 원샷 하나로 대체**: 빈 pane 선분할·readiness 마커·CLI 부팅 send 가 전부 불요 — (4)에서 조립한 `WORKER_CMD` 를 그대로 `--command` 로:
 >   ```bash
->   # 첫 워커: Lead 우측(horizontal), 이후: 직전 워커 아래(vertical) — "Lead | 워커 상하 스택" 재현
+>   # 첫 워커: Lead 우측(vertical=좌우 분할), 이후: 직전 워커 아래(horizontal=상하 분할) — "Lead | 워커 상하 스택" 재현
+>   #   (direction 은 분할선 방향 — 실측. §환경 판정 대응표 참조)
 >   OUT=$(orca terminal split --terminal "${PREV_HANDLE:-$ORCA_TERMINAL_HANDLE}" \
->         --direction $([ -n "${PREV_HANDLE:-}" ] && echo vertical || echo horizontal) \
+>         --direction $([ -n "${PREV_HANDLE:-}" ] && echo horizontal || echo vertical) \
 >         --command "$WORKER_CMD" --json)
 >   W_HANDLE=$(printf '%s' "$OUT" | jq -r '.result.split.handle // empty'); PREV_HANDLE="$W_HANDLE"
 >   orca terminal wait --terminal "$W_HANDLE" --for tui-idle --timeout-ms 90000 --json >/dev/null 2>&1 || true

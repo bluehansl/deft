@@ -77,7 +77,7 @@ echo "deft 환경: $DEFT_ENV"
 
 | 용도 | cmux 모드 | orca 모드 |
 |---|---|---|
-| pane 분할 | `cmux new-split right\|down` | `orca terminal create` / `orca terminal split --direction vertical\|horizontal` |
+| pane 분할 | `cmux new-split right\|down` | `orca terminal create` / `orca terminal split --direction vertical\|horizontal` — ⚠️ **direction 은 분할선 방향(실화면 실측 — orca-cli 가이드 문구와 반대)**: `vertical`=좌우 배치(anchor **우측** 생성), `horizontal`=상하 배치(anchor **아래** 생성) |
 | 화면 읽기 | `cmux capture-pane` | `orca terminal read` (`--cursor`/`--limit` 커서 페이징) |
 | 물리 입력 | `cmux send` + `cmux send-key Enter` | `orca terminal send --text "<한 줄>" --enter` |
 | TUI 응답 대기 | (없음 — idle-stable 폴링) | `orca terminal wait --for tui-idle --timeout-ms <N>` (agent CLI idle 판정 내장) |
@@ -777,7 +777,7 @@ WSURF_claude=$(printf '%s' "$HELPER_OUT" | jq -r '.surface' 2>/dev/null)
 - prompt 주입 시 **줄바꿈 sanitize 필수**: `PROMPT_SAFE=$(tr '\n' ' ' < file)` 후 `cmux send` + `cmux send-key Enter` (`\n` 은 Enter 로 해석되어 조기 제출됨)
 - 긴 prompt 는 `$SESSION_DIR/round<N>-<worker>.md` 저장 후 "Read <경로>" 한 줄만 send
 - 응답 감지 2단: ① `capture-pane --scrollback` 에서 `DONE:` 센티넬 grep ② idle-stable 폴링 (20줄 캡처 동일 반복 시 완료 간주, 8초 간격 최대 30회)
-- 🟠 **orca 모드 등가 (§환경 판정 대응표)**: pane 생성 `orca terminal split --direction vertical` / prompt 주입 `orca terminal send --text "<한 줄>" --enter`(줄바꿈 sanitize 동일 적용) / 응답 감지는 idle-stable 폴링 대신 **`orca terminal wait --for tui-idle --timeout-ms <N>` → `orca terminal read`(`--cursor`/`--limit`) 2단을 권장** — orca 의 tui-idle 판정이 agent CLI idle 을 내장 인식하므로 "20줄 동일 반복" 휴리스틱보다 정확하고 빠르다. 세부 플래그는 `orca skills get orca-cli` 확인.
+- 🟠 **orca 모드 등가 (§환경 판정 대응표)**: pane 생성 `orca terminal split --direction vertical`(=우측 생성 — direction 실측 의미는 대응표 참조) / prompt 주입 `orca terminal send --text "<한 줄>" --enter`(줄바꿈 sanitize 동일 적용) / 응답 감지는 idle-stable 폴링 대신 **`orca terminal wait --for tui-idle --timeout-ms <N>` → `orca terminal read`(`--cursor`/`--limit`) 2단을 권장** — orca 의 tui-idle 판정이 agent CLI idle 을 내장 인식하므로 "20줄 동일 반복" 휴리스틱보다 정확하고 빠르다. 세부 플래그는 `orca skills get orca-cli` 확인.
 
 #### 3-C. pane 환경 외부 (`DEFT_ENV=none`) — claudex MCP conversation
 
