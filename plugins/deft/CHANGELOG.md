@@ -4,6 +4,13 @@
 
 형식은 [Keep a Changelog](https://keepachangelog.com/ko/1.1.0/) 를 따르며, 버전 체계는 [Semantic Versioning](https://semver.org/lang/ko/) 을 사용합니다 (`claude-X.Y.Z` / `codex-X.Y.Z` 접두).
 
+## [claude-2.47.3] - 2026-07-24
+
+> **Orca 호환 4/4 — multi-check orca 모드 분기** — Phase 2 에 환경 판정 2단계(orca 우선 → gap-fill 후 cmux/none 확정) 도입, cmux gap-fill 을 orca 모드 skip. reviewer 는 Agent tool spawn 이라 orca claude-teams(tmux shim)가 pane 배치를 자동 처리 — cmux 의존부(캡처·워처·orphan 정리·레이아웃 복원)만 orca 분기.
+
+### Changed
+- **multi-check `SKILL.md`** — Phase 2 환경 판정(`DEFT_ENV`) 신설, Phase 3 spawn 순서·Post-spawn 🟠(orca 는 LEAD_REF/BASE 캡처·`cmux-rebalance-watch` 발사 skip — 비율 조정 불가는 UI 드래그 안내), Phase 5 ②(세션앵커 pgrep/kill 은 POSIX — orca 에서도 수행) ③ orphan tmux 블록 orca 미실행(UI 수동 닫기) ④ 레이아웃 복원 orca skip, Error Handling 2행 추가.
+
 ## [claude-2.47.2] - 2026-07-24
 
 > **Orca 호환 3/4 — agent-teams 양쪽 환경 서술 + cmux 직접 호출부 가드** — Orca 는 Agent Teams 용 tmux shim(`~/.orca/claude-agent-teams-bin/tmux` → `orca agent-teams-tmux`)으로 `orca claude-teams` 실행 시 팀 spawn pane 시각화가 자동이므로(실측 1.4.150), cmux 전제 문구를 cmux/orca 양쪽 서술로 갱신하고 cmux CLI 직접 호출부만 orca 모드 가드.

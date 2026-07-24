@@ -57,6 +57,14 @@ which gemini 2>/dev/null && echo "GEMINI_OK" || echo "GEMINI_NOT_FOUND"
 CODEX_REVIEWER_NAME=$(command -v claudex >/dev/null 2>&1 && echo claudex-reviewer || echo codex-reviewer)
 echo "Codex-family reviewer 이름: $CODEX_REVIEWER_NAME"
 
+# 환경 판정 1/2 — orca 우선 (multi-round SKILL §환경 판정과 동일 규칙 — ⚠️ ORCA 먼저.
+#   Orca 터미널 안에서도 cmux CLI 가 소켓으로 별도 실행 중인 cmux 앱에 연결되어 정상 응답하므로
+#   (실측 — 조용한 오발사), cmux 검사를 먼저 하면 orca 안에서 cmux 모드로 오판된다.)
+DEFT_ENV=""
+if [ -n "${ORCA_WORKTREE_ID:-}" ] || [ -n "${ORCA_TERMINAL_HANDLE:-}" ]; then
+  DEFT_ENV=orca   # orca claude-teams — reviewer pane 배치 자동(tmux shim). cmux CLI 호출 전면 금지
+fi
+
 # cmux CLI wrapper 설치 — cmux 가 PATH 에 없으면(신 cmux 는 대화형 precmd 훅으로만 PATH 주입 →
 #   비대화형 셸엔 부재) deft 동봉 wrapper 를 ~/.local/bin/cmux 로 설치(조건부 gap-fill, 구버전 안 가림).
 #   Lead 의 bare cmux(identify/focus-pane 등) 보호. wrapper 는 매 호출 env→표준경로로 진짜 cmux 해석.
@@ -69,10 +77,17 @@ DEFT_SYNC_SRC=$(ls -1 ~/.claude/plugins/cache/bluehansl/deft/*/bin/deft-bin-sync
 if [ -n "$DEFT_SYNC_SRC" ]; then
   mkdir -p ~/.local/bin && cp "$DEFT_SYNC_SRC" ~/.local/bin/deft-bin-sync && chmod +x ~/.local/bin/deft-bin-sync
   deft-bin-sync
-  command -v cmux >/dev/null 2>&1 || deft-bin-sync cmux 2>/dev/null   # cmux gap-fill 보강
+  # cmux gap-fill 보강 — orca 모드는 불요(cmux CLI 자체를 안 씀. shim 도 orca 가드 내장)
+  [ "$DEFT_ENV" = "orca" ] || command -v cmux >/dev/null 2>&1 || deft-bin-sync cmux 2>/dev/null
 else
   echo "WARN: deft-bin-sync 미발견(구버전 캐시) — 헬퍼 자동 동기 비활성"
 fi
+
+# 환경 판정 2/2 — cmux/none 확정 (gap-fill 이후 검사 — shim 설치 반영)
+if [ -z "$DEFT_ENV" ]; then
+  if command -v cmux >/dev/null 2>&1 && cmux identify >/dev/null 2>&1; then DEFT_ENV=cmux; else DEFT_ENV=none; fi
+fi
+echo "deft 환경: $DEFT_ENV"
 
 if command -v claude-bin-keepalive >/dev/null 2>&1; then
   claude-bin-keepalive || echo "STOP_TEAM_SPAWN: 세션 바이너리 복원 불가(KEEPALIVE_HARDFAIL) — 이 세션의 teammate spawn 은 반드시 실패한다."
@@ -110,7 +125,9 @@ PERSONA_DIR=~/.claude/plugins/marketplaces/bluehansl/plugins/deft/skills/multi-c
 
 > **왜 인라인 + `subagent_type:"claude"` 인가**: 과거엔 `subagent_type:"codex-reviewer"` 로 페르소나를 붙였으나, 이 커스텀 타입은 현행 빌드의 등록된 subagent 타입이 아니다(스킬 하위 `agents/` 는 표준 등록 경로가 아님 → 해석 안 됨). 그래서 범용 `subagent_type:"claude"` + 페르소나 prompt 인라인으로 전환한다 — **페르소나 내용은 그대로 보존**된다.
 
-**spawn 순서 (Agent-tool — spawn 과 함께 rebalance 워처 발사)**: `Agent` 툴은 spawn 1회가 **pane 생성 + AI 기동을 원자적으로** 수행하고, cmux claude-teams 가 pane 배치를 **자동 처리**한다(스킬이 분할 방향·대상을 제어할 수 없음 — multi-round 와 달리 `cmux new-split` 을 직접 쓰지 못함). 그리고 **각 spawn 마다 Lead pane 이 다시 찌부러진다**(cmux 가 Lead 기준으로 재분할 — 실측). rebalancing 은 pane geometry 만 정렬하는 **독립·비동기** 작업이라 reviewer 의 headless CLI 작업과 무관하게 호출할 수 있다 → **spawn 묶음과 같은 메시지에서 `cmux-rebalance-watch` 를 백그라운드로 띄워, panes 가 다 생겨 settle 되는 즉시 1회 rebalance** 시킨다(§Post-spawn).
+> 🟠 **orca 모드 (Phase 2 환경 판정)**: 아래 1·2의 `LEAD_REF`/`BASE`/`EXPECTED`/`FAST` 캡처(`cmux identify`/`tmux list-panes`)와 `cmux-rebalance-watch` 발사를 **전부 skip** 한다 — reviewer `Agent` spawn 만 병렬 발사하면 pane 배치는 orca claude-teams(tmux shim)가 자동 처리하고, 비율 조정은 불가(Orca resize CLI 미지원 — 필요 시 UI 드래그 안내). cmux/tmux 호출은 오발사이므로 금지(내장 가드가 이중 차단).
+
+**spawn 순서 (Agent-tool — spawn 과 함께 rebalance 워처 발사, cmux 모드)**: `Agent` 툴은 spawn 1회가 **pane 생성 + AI 기동을 원자적으로** 수행하고, cmux claude-teams 가 pane 배치를 **자동 처리**한다(스킬이 분할 방향·대상을 제어할 수 없음 — multi-round 와 달리 `cmux new-split` 을 직접 쓰지 못함). 그리고 **각 spawn 마다 Lead pane 이 다시 찌부러진다**(cmux 가 Lead 기준으로 재분할 — 실측). rebalancing 은 pane geometry 만 정렬하는 **독립·비동기** 작업이라 reviewer 의 headless CLI 작업과 무관하게 호출할 수 있다 → **spawn 묶음과 같은 메시지에서 `cmux-rebalance-watch` 를 백그라운드로 띄워, panes 가 다 생겨 settle 되는 즉시 1회 rebalance** 시킨다(§Post-spawn).
 
 1. spawn **직전(=panes 생성 전)** 에 캡처: `LEAD_REF=$(cmux identify | jq -r .caller.pane_ref)` (focus 복원용) + `BASE=$(tmux list-panes -a -F '#{pane_id}' | wc -l | tr -d ' ')` (baseline) + 이번에 spawn 할 reviewer 수 `N` → `EXPECTED=$((BASE+N))` (목표 최종 pane 수) + `FAST=$([ "$BASE" -eq 1 ] && echo 1 || echo 0)` (**clean Lead 워크스페이스 판정** — BASE==1 이면 빠른 경로). ⚠️ **BASE/EXPECTED/FAST 는 반드시 spawn 전에 캡처**한다 — 워처가 자기 시작 시점에 baseline 을 잡으면 이미 panes 가 생성된 뒤라 값이 부풀려져 감지가 영원히 안 돼 cap 까지 헛돈다(실측 버그).
 2. **사용 가능한 reviewer 전부 + rebalance 워처를 한 메시지에 함께 발사** — reviewer 는 `Agent`(병렬), 워처는 `cmux-rebalance-watch "$LEAD_REF" "$BASE" "$EXPECTED" "$FAST"` 를 **`run_in_background: true` Bash** 로 같은 메시지에. 워처가 panes 가 **EXPECTED 에 도달하는 즉시**(=모든 reviewer pane 등장 — panes 는 한꺼번에가 아니라 하나씩 순차 등장하므로 EXPECTED 도달이 가장 정확한 신호) rebalance(컬럼 60:40 + row 균등) + Lead focus 복원을 1회 실행한다(§Post-spawn). **`FAST=1`(clean Lead)이면 `cmux-rebalancing --fast`** (단발 push + row-equalize skip, ~4s→~2s — clean-grid 결정론 실측 기반), **아니면 robust** `cmux-rebalancing`.
@@ -166,7 +183,9 @@ Agent(
 
 While agents are working, the Lead performs its own analysis on the same question.
 
-#### Post-spawn: 비율 재조정 — 워처가 panes settle 즉시 자동 실행
+#### Post-spawn: 비율 재조정 — 워처가 panes settle 즉시 자동 실행 (cmux 모드 한정)
+
+> 🟠 **orca 모드**: 본 절 전체 skip — Orca 는 resize CLI 미지원. pane 비율은 UI 드래그로 조정 안내.
 
 **rebalancing 은 워처(`cmux-rebalance-watch`)에 위임한다 — spawn 묶음과 같은 메시지에서 백그라운드로 발사**한다. 워처는 `tmux list-panes` 로 pane 수를 폴링해 **새 pane 들이 생겨 안정(settle)되는 즉시** `cmux-rebalancing`(컬럼 60:40 + row 균등) + Lead focus 복원을 1회 실행한다.
 
@@ -238,7 +257,7 @@ SendMessage(to: "<아직 shutdown_request 안 보낸 리뷰어>", message: {type
 ```
 리뷰어 페르소나(`agents/<reviewer>.md` §종료 프로토콜)는 이 요청을 받으면 `shutdown_response{approve:true}` 를 호출해 정상 종료하고, cmux 가 그 pane 을 자동으로 닫는다. graceful 종료는 느릴 수 있음(공식 "Shutdown can be slow").
 
-**② 종료 검증 + 강제 폴백** (자가종료 안 한 리뷰어만 — 소유권 안전) — haiku 래퍼 리뷰어가 간혹 `shutdown_request` 를 prose("종료합니다")로만 응답하고 `shutdown_response` 를 **호출하지 않아 프로세스·pane 이 잔존**하는 경우가 있다(실측 — multi-check 마지막 pane 미닫힘·다음 스킬로의 잔존 직접 원인). graceful 유예 후에도 살아있으면 **본 세션 그 리뷰어 프로세스만** 직접 종료한다:
+**② 종료 검증 + 강제 폴백** (자가종료 안 한 리뷰어만 — 소유권 안전) — haiku 래퍼 리뷰어가 간혹 `shutdown_request` 를 prose("종료합니다")로만 응답하고 `shutdown_response` 를 **호출하지 않아 프로세스·pane 이 잔존**하는 경우가 있다(실측 — multi-check 마지막 pane 미닫힘·다음 스킬로의 잔존 직접 원인). graceful 유예 후에도 살아있으면 **본 세션 그 리뷰어 프로세스만** 직접 종료한다 (세션앵커 `pgrep`/`kill` 은 cmux 무관 POSIX 도구 — orca 모드에서도 그대로 수행. 단 orca 모드는 아래 블록의 `tmux` 참조 없이 pgrep/kill 부분만):
 ```bash
 TEAM_NAME="session-<id>"      # Lead 가 spawn 결과(@session-<id>)에서 획득 — 본 세션 팀
 for R in "$CODEX_REVIEWER_NAME" claude-reviewer gemini-reviewer; do   # 실제 spawn 한 이름(접미 -N 포함) 기준
@@ -254,7 +273,7 @@ for R in "$CODEX_REVIEWER_NAME" claude-reviewer gemini-reviewer; do   # 실제 s
 done
 ```
 
-**③ orphan pane 정리** (프로세스는 죽었는데 pane 만 남은 경우) — cmux `close-surface` 는 orphan 을 못 닫으므로 tmux 백엔드로 직접 닫는다. **본 세션 team config 의 tmuxPaneId 로만**, 그 pane 이 아직 존재하고 프로세스가 죽은 것만:
+**③ orphan pane 정리** (프로세스는 죽었는데 pane 만 남은 경우 — **cmux 모드 한정**. 🟠 orca 모드는 아래 tmux 블록을 실행하지 않는다: bare `tmux`/`cmux` 호출 금지(오발사·shim 동작 미검증) — 잔존 pane 은 사용자에게 UI 수동 닫기를 안내) — cmux `close-surface` 는 orphan 을 못 닫으므로 tmux 백엔드로 직접 닫는다. **본 세션 team config 의 tmuxPaneId 로만**, 그 pane 이 아직 존재하고 프로세스가 죽은 것만:
 ```bash
 CFG=~/.claude/teams/$TEAM_NAME/config.json
 EXIST=$(tmux list-panes -a -F '#{pane_id}' 2>/dev/null)   # 현재 존재하는 pane id 집합
@@ -270,7 +289,7 @@ done
 ```
 > ⚠️ cmux 환경의 `tmux` 는 호환 shim 이라 `#{pane_dead}`/`#{pane_pid}` 는 **빈 값**을 반환한다(실측) — pane 생사 판정에 쓸 수 없다. 그래서 ②/③ 는 그 포맷에 의존하지 않고 **세션앵커 `pgrep`(프로세스 생사) + `tmux list-panes`(pane 존재) + `kill-pane`(shim 지원 확인됨)** 으로만 판정한다.
 
-**④ 레이아웃 복원** — 리뷰어 pane 이 다 닫힌 뒤, 남은 Lead 레이아웃을 정렬하고 focus 를 Lead 로 복원한다(다음 스킬·후속 작업이 깔끔한 단일 pane 에서 시작되도록):
+**④ 레이아웃 복원** (cmux 모드 한정 — 🟠 orca 모드는 skip: resize·focus CLI 금지/미지원) — 리뷰어 pane 이 다 닫힌 뒤, 남은 Lead 레이아웃을 정렬하고 focus 를 Lead 로 복원한다(다음 스킬·후속 작업이 깔끔한 단일 pane 에서 시작되도록):
 ```bash
 command -v cmux-rebalancing >/dev/null 2>&1 && cmux-rebalancing
 cmux focus-pane --pane "$(cmux identify | jq -r .caller.pane_ref)" 2>/dev/null
@@ -285,7 +304,8 @@ cmux focus-pane --pane "$(cmux identify | jq -r .caller.pane_ref)" 2>/dev/null
 | Timeout (agent doesn't respond in 120s) | Synthesize with available results |
 | All CLIs fail | Compare Lead analysis against error context |
 | 리뷰어가 spawn 직후 무응답 | `model` 미지정 시 기본 `fable` 로 떠 의도한 경량 `haiku` 래퍼가 아님 — `model:"haiku"` 명시를 확인. 그래도 무응답이면 해당 모델 skip 후 진행 |
-| Reviewer dies right after spawn (e.g. binary path error) | Close its dead pane (`cmux top --processes` 로 프로세스 0 확인 후 `cmux close-surface`) → respawn → **rebalancing 재호출** — 죽은 pane 을 방치하면 레이아웃·식별 혼란 |
+| Reviewer dies right after spawn (e.g. binary path error) | Close its dead pane (`cmux top --processes` 로 프로세스 0 확인 후 `cmux close-surface`) → respawn → **rebalancing 재호출** — 죽은 pane 을 방치하면 레이아웃·식별 혼란. 🟠 orca 모드: pane 정리는 UI 수동 안내, respawn 만 수행(rebalancing 없음) |
+| orca 모드에서 rebalance/워처/shim 이 "orca 모드 감지 — 차단" 출력 | 정상 가드 동작 (Phase 2 환경 판정 참조) — cmux 경로 재시도 금지, orca 분기(🟠)로 진행 |
 
 ## Prompt Composition Rules
 
