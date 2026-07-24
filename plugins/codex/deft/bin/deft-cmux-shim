@@ -21,6 +21,14 @@
 #   않으므로 영향 없음. 신버전(이름 부재)에만 설치되어 env 로 해석한다.
 set -u
 
+# 🚨 orca 오발사 가드 — Orca 터미널 안에서도 진짜 cmux CLI 는 소켓으로 별도 실행 중인 cmux 앱에
+#   연결되어 정상 응답한다(실측 — 엉뚱한 앱의 pane 을 조용히 조작). 이 shim 이 orca 모드에서
+#   진짜 cmux 로 exec 하면 오발사 통로가 되므로 차단한다.
+if [ -n "${ORCA_WORKTREE_ID:-}" ] || [ -n "${ORCA_TERMINAL_HANDLE:-}" ]; then
+  echo "cmux(deft-cmux-shim): orca 모드 감지 — cmux CLI 호출 차단(별도 cmux 앱 오발사 방지). pane 조작은 orca terminal CLI 를 사용하라." >&2
+  exit 1
+fi
+
 for c in "${CMUX_BUNDLED_CLI_PATH:-}" \
          "${CMUX_CLAUDE_TEAMS_CMUX_BIN:-}" \
          "${CMUX_BIN:-}" \

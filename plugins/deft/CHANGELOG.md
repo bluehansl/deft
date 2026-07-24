@@ -4,6 +4,16 @@
 
 형식은 [Keep a Changelog](https://keepachangelog.com/ko/1.1.0/) 를 따르며, 버전 체계는 [Semantic Versioning](https://semver.org/lang/ko/) 을 사용합니다 (`claude-X.Y.Z` / `codex-X.Y.Z` 접두).
 
+## [codex-1.23.0] - 2026-07-24
+
+> **Codex 포트 Orca 호환 이식** — Claude 측 claude-2.47.0~2.48.0 의 orca 호환을 Codex 포팅본(`plugins/codex/deft`)에 이식. Lead=codex/claudex 가 Orca 관리 터미널에서 실행될 때도 동일한 오발사 가드·orca 분기가 적용된다.
+
+### Added
+- **bin 동기 (Claude 측 수정본 복사 — 내용 동일 사본 확인 후)**: `multi-round-bus`(orca 노크 — `term_*` 핸들이면 `orca terminal send`), `cmux-rebalancing`/`cmux-rebalance-guard`(orca no-op 가드), `deft-cmux-shim`(orca exec 차단).
+- **multi-round `SKILL.md`** — `§환경 판정 — cmux vs orca` 신설(ORCA_* 우선 — orca 안 `cmux identify` 오판 차단 + 대응표), Phase 0 `DEFT_ENV` 3분기, §3-A 🟠(Lead register `--surface "$ORCA_TERMINAL_HANDLE"` / **(2)+(3.5)+(4) 를 워커별 `orca terminal split --command "$WORKER_CMD"` 원샷으로 대체** — 빈 pane 선분할·readiness·send 부팅 불요 / register `--surface "$W_HANDLE"` / 페르소나 부트·update 프롬프트는 orca send), §3-B orca 등가(tui-idle 대기 권장), §3-C `DEFT_ENV=none` 재정의, §5-B orca `terminal close`, 보안 가드 #8·Error 2행.
+- **multi-round `GUIDE.md`** — 환경 판정 체크박스·매트릭스·Q6-1(Orca) 추가.
+- **multi-check `SKILL.md`** — 병렬 실행 전략을 `DEFT_ENV` 3분기(orca 행 신설)로, reviewer 실행 🟠(runner script + `split --command` 원샷·`.done` 폴링 동일·정리 `terminal close`), rebalancing 호출 규칙 orca no-op 명시, gap-fill orca skip.
+
 ## [claude-2.48.0] - 2026-07-24
 
 > **Orca 호환 완결 — spawn 헬퍼 orca 네이티브 지원 (claudex/codex 워커 orca 에서 실동)** — 2.47.x 는 orca 모드에서 spawn 헬퍼를 "차단 + 수동 절차 안내"로 처리했으나, multi-round 회의·작업 모드가 claudex 워커 스폰에 의존하므로 orca 실사용에 불충분. 헬퍼가 orca 를 **자동 분기 실행**하도록 승격 — 호출법은 cmux 와 동일(`DEFT_BASE_WORKSPACE` 만 불요). **전 경로 실측 검증 완료** (Orca 1.4.150 실환경: split `--command` 원샷·`&&` 셸 해석·`.result.split.handle` 스키마·LAUNCH/BUS_OPT 인라인 조립·`.last-worker-terminal` 스택 연쇄·members 등록·`terminal close` ptyKilled — mock claudex 2-워커 시나리오).

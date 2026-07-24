@@ -2,7 +2,7 @@
 
 > 여러 AI(Codex / Claudex / Claude)가 한 주제에 대해 **N라운드에 걸쳐 양방향으로 의견을 주고받으며 합의에 도달**하는 멀티턴 회의 도구 — Codex 포팅본. **메시지 버스(브로드캐스트 보드 + 노크)** 기반 — 워커는 cmux pane 의 살아있는 TUI, 통신 본문은 버스 보드, 깨우기는 한 줄 노크.
 
-> 본 가이드는 **Codex 측**입니다. Claude Code용은 `plugins/deft/skills/multi-round/GUIDE.md` 를 참고하세요. 워크플로는 동일하지만 사용자 데이터 경로·plugin cache 경로·cmux 외부 fallback에 차이가 있습니다.
+> 본 가이드는 **Codex 측**입니다. Claude Code용은 `plugins/deft/skills/multi-round/GUIDE.md` 를 참고하세요. 워크플로는 동일하지만 사용자 데이터 경로·plugin cache 경로·pane 환경 외부 fallback에 차이가 있습니다.
 
 ## 한 줄 컨셉
 
@@ -30,13 +30,13 @@
 
 - [ ] **참가자 CLI 1개 이상 설치** — `claude` 또는 `claudex` 또는 `codex` 중 최소 하나 (`which claude && which claudex && which codex`)
 - [ ] **mix 가능 여부 확인** — claude + claudex(또는 codex) 양쪽이면 mix가 default. 한쪽만이면 그 쪽만으로 진행
-- [ ] **cmux 환경 여부 확인** — cmux 안이면 메시지 버스 경로(Phase 3-A)가 기본. cmux 외부에서는 claudex MCP conversation(Phase 3-C)
+- [ ] **pane 환경 판정 (cmux vs orca — SKILL §환경 판정)** — ⚠️ ORCA_* 변수(`ORCA_WORKTREE_ID` 등) 존재 시 **orca 모드**가 우선(orca 안에서도 cmux CLI 가 별도 cmux 앱에 연결되어 성공하므로 cmux 판정을 먼저 하면 오판·오발사). cmux/orca 안이면 메시지 버스 경로(Phase 3-A)가 기본 — orca 모드는 워커 기동·노크만 orca 분기. 어느 쪽도 아니면 claudex MCP conversation(Phase 3-C)
 - [ ] **node 설치 여부** — 메시지 버스 헬퍼(`multi-round-bus`)가 node 스크립트. 없으면 send/capture 폴백(Phase 3-B)으로 자동 강등. 버스 헬퍼 자체는 skill 첫 실행 시 plugin 동봉본이 `~/.local/bin/` 으로 자동 설치됨 — **사용자 환경 파일(`config.toml` 등) 등록은 일절 불필요**
 - [ ] **참가자 수** — 기본 워커 3명(주제 맞춤 페르소나별). 1명/4명+ 를 원하면 요청에 명시 (예: "워커 1명으로 회의")
 - [ ] **회의 모드 결정 의도 정리** — 4지선다 메뉴 보고 고를지, 명시적으로 "토론해줘"·"분담해서" 등 키워드로 줄지
 - [ ] **종료 조건 결정** — 기본 "모든 AI 합의"로 자동 진행. 다른 조건 원하면 "max-round=10" / "한쪽 항복까지" 등 명시
 - [ ] **work-id 연계 확인** — 회의는 기본적으로 작업(work-id)에 연계됨. 입력에 티켓 번호 등이 있으면 자동 감지, 없으면 1회 질문. **독립 토론을 원하면 "독립 토론"이라고 명시**. work-id 규약 미설정이면 최초 1회 메뉴로 결정 (Claude 측 agent-teams 와 공유 — Claude 측에서 이미 결정했으면 그 규약 재사용)
-- [ ] **`cmux-rebalancing` 헬퍼** — PATH 에 있는지 확인. 없으면 skill 첫 실행 시 plugin 동봉본이 `~/.local/bin/` 으로 자동 설치됨. 워커 spawn 후 Lead/워커 pane 비율 재조정에 사용 (cmux 환경 한정)
+- [ ] **`cmux-rebalancing` 헬퍼** — PATH 에 있는지 확인. 없으면 skill 첫 실행 시 plugin 동봉본이 `~/.local/bin/` 으로 자동 설치됨. 워커 spawn 후 Lead/워커 pane 비율 재조정에 사용 (**cmux 환경 한정** — Orca 는 resize CLI 미지원이라 미사용, pane 비율은 UI 드래그. orca 모드에서 호출돼도 내장 가드가 no-op)
 
 ### 작업 디렉토리
 
@@ -228,10 +228,10 @@ skill 실행 시 사용하는 세션·메타·hooks는 모두 **`~/.codex/plugin
 
 | 참가자 구성 | 1순위 | 2순위 | 3순위 |
 |---|---|---|---|
-| **AI mix 또는 전원 claudex/codex** (cmux 환경) | **Phase 3-A. 메시지 버스** — pane TUI 워커 + 보드 + 자동 노크 | Phase 3-B. send/capture 폴백 | `multi-check` 사용 안내 후 중단 |
-| **cmux 외부 환경** | Phase 3-C. claudex MCP conversation (stateful 지속 대화) | `multi-check` 사용 안내 후 중단 | — |
+| **AI mix 또는 전원 claudex/codex** (pane 환경 — cmux/orca) | **Phase 3-A. 메시지 버스** — pane TUI 워커 + 보드 + 자동 노크 (orca 모드는 워커 기동을 `orca terminal split --command` 원샷으로, 노크는 `term_*` 핸들 orca send) | Phase 3-B. send/capture 폴백 (orca 등가 있음) | `multi-check` 사용 안내 후 중단 |
+| **pane 환경 외부** (cmux/orca 어느 쪽도 아님) | Phase 3-C. claudex MCP conversation (stateful 지속 대화) | `multi-check` 사용 안내 후 중단 | — |
 
-하위로 내려가는 조건: 상위 경로의 전제(버스 헬퍼·node·cmux·claudex MCP)가 충족되지 않을 때 — 내려갈 때마다 사유 1줄 보고. **헤드리스 1-shot + 컨텍스트 재전송 방식은 어떤 경우에도 쓰지 않음** (멀티라운드는 지속 대화가 본질 — 그게 필요 없으면 `multi-check` 가 올바른 도구).
+하위로 내려가는 조건: 상위 경로의 전제(버스 헬퍼·node·pane 환경·claudex MCP)가 충족되지 않을 때 — 내려갈 때마다 사유 1줄 보고. **헤드리스 1-shot + 컨텍스트 재전송 방식은 어떤 경우에도 쓰지 않음** (멀티라운드는 지속 대화가 본질 — 그게 필요 없으면 `multi-check` 가 올바른 도구).
 
 ---
 
@@ -292,7 +292,10 @@ A. 설치된 CLI만으로 진행. mix는 아니지만 회의 자체는 가능하
 A. Agent Teams = **Claude끼리만, Claude 팀 기능 베이스, MCP 불필요**. multi-round = **Codex/Claudex/Claude mix, 메시지 버스 + cmux pane**. 결정적 차이는 AI 다양성 (Codex vs Claude 시각 차) + 실행 경로입니다.
 
 ### Q6. cmux pane이 안 떠도 동작?
-A. cmux 환경에서는 pane 워커 + 메시지 버스가 기본입니다. cmux 외부에서는 pane 없이 Phase 3-C(claudex MCP conversation)로 동작합니다.
+A. pane 환경(cmux/orca)에서는 pane 워커 + 메시지 버스가 기본입니다. pane 환경 외부에서는 pane 없이 Phase 3-C(claudex MCP conversation)로 동작합니다.
+
+### Q6-1. Orca(stablyai/orca) 환경에서도 되나요?
+A. **예 — orca 모드로 동작** (SKILL §환경 판정). board·inbox 통신은 파일 기반이라 동일하고, 달라지는 것은 ① 워커 기동이 `orca terminal split --command` 원샷(빈 pane 선분할·readiness 불요) ② 노크가 `term_*` 핸들 기준 `orca terminal send`(버스 자동 분기) ③ pane 비율 조정 불가(resize CLI 미지원 — UI 드래그) ④ 정리는 `orca terminal close` 네 가지입니다. ⚠️ orca 안에서 cmux CLI 를 치면 **별도 실행 중인 cmux 앱**의 pane 을 조작하므로(오발사) 스킬과 bin 헬퍼가 이중으로 차단합니다.
 
 ### Q6-1. 버스를 쓰려고 따로 등록할 게 있나?
 A. **없음**. 버스 MCP 는 워커 spawn 명령에 인라인 주입되고, Lead 는 헬퍼를 shell 로 직접 호출. 사용자 환경 파일은 건드리지 않으며, 헬퍼는 첫 실행 시 `~/.local/bin/` 에 자동 설치.

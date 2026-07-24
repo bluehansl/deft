@@ -61,30 +61,52 @@ DEFT_SYNC_SRC=$(ls -1 ~/.codex/plugins/cache/bluehansl-codex/deft/*/bin/deft-bin
 if [ -n "$DEFT_SYNC_SRC" ]; then
   mkdir -p ~/.local/bin && cp "$DEFT_SYNC_SRC" ~/.local/bin/deft-bin-sync && chmod +x ~/.local/bin/deft-bin-sync
   deft-bin-sync   # cmux-rebalancing·deft-model 등 전체 헬퍼 갱신형 동기
-  command -v cmux >/dev/null 2>&1 || deft-bin-sync cmux 2>/dev/null   # cmux gap-fill 보강
+  # cmux gap-fill 보강 — orca 모드(ORCA_* 존재)는 불요(cmux CLI 자체를 안 씀. shim 도 orca 가드 내장)
+  [ -n "${ORCA_WORKTREE_ID:-}${ORCA_TERMINAL_HANDLE:-}" ] || command -v cmux >/dev/null 2>&1 || deft-bin-sync cmux 2>/dev/null
 else
   echo "WARN: deft-bin-sync 미발견(구버전 캐시) — 헬퍼 자동 동기 비활성"
 fi
 ```
 
-## 병렬 실행 전략 — cmux 환경 여부로 분기
+## 병렬 실행 전략 — 환경 판정으로 분기 (orca/cmux/none)
 
 ```bash
 # cmux gap-fill(deft-cmux-shim→~/.local/bin/cmux)은 위 환경 준비의 deft-bin-sync 가 처리 — 여기선 판정만.
-HAVE_CMUX=0
-which cmux >/dev/null 2>&1 && cmux identify >/dev/null 2>&1 && HAVE_CMUX=1
+# ⚠️ 판정 순서 필수 — ORCA 먼저. Orca 터미널 안에서도 cmux CLI 가 소켓으로 **별도 실행 중인 cmux 앱**에
+#    연결되어 정상 응답하므로(실측 — 조용한 오발사), cmux identify 성공을 먼저 보면 orca 에서 오판된다.
+if [ -n "${ORCA_WORKTREE_ID:-}" ] || [ -n "${ORCA_TERMINAL_HANDLE:-}" ]; then
+  DEFT_ENV=orca
+elif which cmux >/dev/null 2>&1 && cmux identify >/dev/null 2>&1; then
+  DEFT_ENV=cmux
+else
+  DEFT_ENV=none
+fi
+echo "deft 환경: $DEFT_ENV"
 ```
 
 | 환경 | 실행 전략 | 시각화 |
 |---|---|---|
-| `HAVE_CMUX=1` | **cmux pane 병렬 (기본)** — reviewer 명령을 pane 쉘에서 실행, 출력을 파일로 tee | 사용자가 reviewer 진행을 pane 으로 관찰 |
-| `HAVE_CMUX=0` | Codex sub-agent 병렬 | 호스트 TUI 내 표시만 |
+| `DEFT_ENV=cmux` | **cmux pane 병렬 (기본)** — reviewer 명령을 pane 쉘에서 실행, 출력을 파일로 tee | 사용자가 reviewer 진행을 pane 으로 관찰 |
+| `DEFT_ENV=orca` | **orca pane 병렬** — `orca terminal split --command` 원샷으로 reviewer 실행(아래 🟠). cmux CLI 호출 전면 금지(오발사) | pane 관찰 동일 (비율 조정만 불가 — resize CLI 미지원, UI 드래그) |
+| `DEFT_ENV=none` | Codex sub-agent 병렬 | 호스트 TUI 내 표시만 |
 
-> multi-agent spawn 은 cmux 환경에서 pane 시각화가 기본이다. headless 백그라운드 전용 실행은 cmux 외부에서만.
+> multi-agent spawn 은 pane 환경(cmux/orca)에서 pane 시각화가 기본이다. headless 백그라운드 전용 실행은 pane 환경 외부에서만.
 
 ### cmux 환경 기본: pane 병렬 실행
 
 reviewer 마다 pane 을 분할하고, 그 pane 쉘에서 headless CLI 명령을 실행해 **출력이 pane 에 보이면서 파일로도 수집**되게 한다 (1-shot 이므로 버스·양방향 통신은 불필요).
+
+> 🟠 **orca 모드**: 아래 (1)~(3)을 reviewer 별 **원샷 하나로 대체** — 분할·readiness·send 부팅이 전부 불요(`--command` 가 분할과 실행을 원자적으로 수행, 실측):
+>
+> ```bash
+> # runner script 패턴(quoting 안전 권장)과 결합 — reviewer 명령을 스크립트로 저장 후 원샷 실행
+> OUT=$(orca terminal split --terminal "${PREV_HANDLE:-$ORCA_TERMINAL_HANDLE}" \
+>       --direction $([ -n "${PREV_HANDLE:-}" ] && echo vertical || echo horizontal) \
+>       --command "sh $OUT_DIR/run-gemini.sh" --json)
+> R1_HANDLE=$(printf '%s' "$OUT" | jq -r '.result.split.handle // empty'); PREV_HANDLE="$R1_HANDLE"
+> ```
+>
+> (4) 수집(.done 마커 폴링)은 파일 기반이라 동일. rebalancing·focus 복원은 skip(resize CLI 미지원 — 비율은 UI 드래그 안내). 정리는 추적한 handle 로만 `orca terminal close --terminal "$R1_HANDLE"`.
 
 ```bash
 OUT_DIR=$(mktemp -d /tmp/multi-check.XXXXXX)
@@ -123,9 +145,9 @@ cmux focus-pane --pane "$LEAD_PANE" 2>/dev/null || true   # Lead focus 복원 (f
 ```
 - **결과 수집·취합 완료 후 reviewer pane 을 닫는다 — 소유권 안전 (파괴 행위)**: 본 실행이 분할해 추적한 reviewer surface(`$R1`/`$R2`/…)**만** 닫는다(`cmux close-surface --surface "$R1"` …). cmux 는 다중 워크스페이스·세션 환경 — 다른 세션/워크스페이스 pane·`surface:N` 을 추측으로 닫지 말 것(**전체 surface 순회·와일드카드 close 금지**). 출력은 tee 파일로 보존되므로 관찰 손실 없음. close-surface 가 못 닫는 orphan 이면 그 reviewer pane 의 tmux id 로만 `tmux kill-pane -t <id>` (전체 tmux 순회·다른 세션 절대 금지). 닫은 뒤 `cmux-rebalancing` 1회로 복원.
 
-### cmux 외부: Codex sub-agent 병렬 실행
+### pane 환경 외부(`DEFT_ENV=none`): Codex sub-agent 병렬 실행
 
-cmux 외부에서는 sub-agent 로 reviewer 별 one-shot 작업을 병렬 실행한다.
+pane 환경(cmux/orca) 외부에서는 sub-agent 로 reviewer 별 one-shot 작업을 병렬 실행한다.
 
 - `codex-reviewer`: Codex CLI를 실행하거나 독립 Codex 관점으로 분석한다.
 - `gemini-reviewer`: Bash로 Gemini CLI를 실행하고 결과를 반환한다.
@@ -153,7 +175,7 @@ command -v cmux-rebalancing >/dev/null 2>&1 && cmux-rebalancing
 # 사용자 명시 비율 (예시): cmux-rebalancing 7:3
 ```
 
-> **호출 규칙**: spawn(또는 재spawn)으로 pane 구성이 바뀔 때마다 그 spawn 묶음 직후 1회 호출 — 첫 spawn 만이 아니다. cmux 외부 실행 시 자동 skip.
+> **호출 규칙**: spawn(또는 재spawn)으로 pane 구성이 바뀔 때마다 그 spawn 묶음 직후 1회 호출 — 첫 spawn 만이 아니다. cmux 모드가 아니면(orca/none) 자동 skip — orca 는 resize CLI 미지원이라 호출돼도 bin 가드가 no-op(비율은 UI 드래그 안내).
 
 ### fallback: Bash CLI 직접 실행
 

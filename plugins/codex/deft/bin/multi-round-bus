@@ -121,6 +121,20 @@ function readBoard(dir) {
 // ---------- 노크 (제어 채널) ----------
 
 function cmuxKnock(surface) {
+  // 🚨 orca 오발사 가드 — Orca 터미널 안에서도 cmux CLI 가 소켓으로 별도 cmux 앱에 연결돼
+  //   send 가 엉뚱한 앱의 pane 입력창에 주입된다(실측). orca 모드는 cmux 노크를 절대 시도하지 않고,
+  //   surface 가 orca 터미널 핸들(term_*)로 등록됐으면 orca terminal send 로 노크한다(등가 경로).
+  //   핸들이 아니면 false — 메시지는 board 에 안전하고, 깨우기는 ntpPush(inbox 등록)가 1차 담당.
+  if (process.env.ORCA_WORKTREE_ID || process.env.ORCA_TERMINAL_HANDLE) {
+    if (surface && String(surface).startsWith('term_')) {
+      try {
+        execFileSync('orca', ['terminal', 'send', '--terminal', surface, '--text', KNOCK_TEXT, '--enter', '--json'],
+          { stdio: 'ignore', timeout: 10000 });
+        return true;
+      } catch (_) { return false; }
+    }
+    return false;
+  }
   try {
     execFileSync('cmux', ['send', '--surface', surface, KNOCK_TEXT], { stdio: 'ignore', timeout: 5000 });
     execFileSync('cmux', ['send-key', '--surface', surface, 'Enter'], { stdio: 'ignore', timeout: 5000 });

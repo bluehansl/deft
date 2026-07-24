@@ -126,6 +126,14 @@ def set_columns_once(ws, targets):
 
 
 def main():
+    # 🚨 orca 오발사 가드 — Orca 터미널 안에서도 cmux CLI 가 소켓으로 별도 실행 중인 cmux 앱에
+    #   연결되어 정상 응답한다(실측 — 엉뚱한 앱의 pane 을 조용히 조작). Orca 는 resize CLI 가
+    #   없어(`orca terminal resize` 부재) 본 도구의 orca 이식 자체가 불가 → orca 모드는 no-op 종료.
+    if os.environ.get("ORCA_WORKTREE_ID") or os.environ.get("ORCA_TERMINAL_HANDLE"):
+        print("cmux-rebalancing: orca 모드 감지 — cmux 앱 오발사 방지 차단. "
+              "Orca 는 resize CLI 미지원이므로 pane 비율은 UI 드래그로 조정하세요. (no-op)")
+        return
+
     # 워크스페이스: 인자 --workspace 또는 호출 pane 기준
     ws = None
     args = sys.argv[1:]
