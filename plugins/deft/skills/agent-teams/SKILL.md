@@ -197,7 +197,7 @@ Bash(run_in_background: true): cmux-rebalance-guard "$LEAD_WS" 90 0.1 50 5 "$GUA
 >
 > ⚠️ **중간(첫 spawn 후) 호출이 무의미한 건 동일** — Agent-tool spawn 은 매번 Lead pane 을 재차 찌부러뜨린다(실측: 60%→26%→복원). 워처는 "증가가 멈춰 settle" 될 때까지 기다리므로 모든 spawn 이 끝난 시점을 자동으로 잡는다. 재spawn(죽은 팀원 교체)으로 pane 이 바뀌면 워처를 다시 발사.
 >
-> **폴백(워처 미설치 / cmux 외부 §0-2)**: 종전처럼 모든 spawn 반환 후 `cmux-rebalancing` 1회 수동 호출(좌→우: 2컬럼=60:40 / 3컬럼=40:30:30 / 4컬럼=25:25:25:25 / 5+=균등. 사용자 명시 비율: `cmux-rebalancing 7:3`) + `cmux focus-pane --pane "$LEAD_REF"`. cmux 외부 실행 시 자동 skip.
+> **폴백(워처 미설치 — cmux 모드 한정)**: 종전처럼 모든 spawn 반환 후 `cmux-rebalancing` 1회 수동 호출(좌→우: 2컬럼=60:40 / 3컬럼=40:30:30 / 4컬럼=25:25:25:25 / 5+=균등. 사용자 명시 비율: `cmux-rebalancing 7:3`) + `cmux focus-pane --pane "$LEAD_REF"`. cmux 모드가 아니면(orca/none) 자동 skip — orca 는 본 절 서두 🟠 참조.
 
 ### 2-4. 진행 로그 (관찰성) — deft-log
 

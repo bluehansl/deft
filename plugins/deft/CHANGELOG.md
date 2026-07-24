@@ -4,6 +4,13 @@
 
 형식은 [Keep a Changelog](https://keepachangelog.com/ko/1.1.0/) 를 따르며, 버전 체계는 [Semantic Versioning](https://semver.org/lang/ko/) 을 사용합니다 (`claude-X.Y.Z` / `codex-X.Y.Z` 접두).
 
+## [claude-2.47.4] - 2026-07-24
+
+> **Orca 호환 검증 후속 — 잔존 "cmux 외부" 표현 정정** — 전체 스킬 문서를 재검토해 구 환경 판정 어휘가 남은 2곳 정정: ① multi-round NTP 폴백 조건의 "cmux 외부" → "pane 환경 외부(`DEFT_ENV=none`)" (orca 는 pane 환경이므로 NTP 폴백 사유 아님 — 방치 시 orca 에서 NTP 를 버스로 오폴백) ② agent-teams §2-3 워처 폴백의 "cmux 외부 시 skip" → "cmux 모드 아니면(orca/none) skip".
+
+### Fixed
+- multi-round `SKILL.md` §NTP 폴백 / agent-teams `SKILL.md` §2-3 폴백 — 환경 어휘를 `DEFT_ENV` 3분기 체계로 통일.
+
 ## [claude-2.47.3] - 2026-07-24
 
 > **Orca 호환 4/4 — multi-check orca 모드 분기** — Phase 2 에 환경 판정 2단계(orca 우선 → gap-fill 후 cmux/none 확정) 도입, cmux gap-fill 을 orca 모드 skip. reviewer 는 Agent tool spawn 이라 orca claude-teams(tmux shim)가 pane 배치를 자동 처리 — cmux 의존부(캡처·워처·orphan 정리·레이아웃 복원)만 orca 분기.
