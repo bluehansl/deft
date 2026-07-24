@@ -273,7 +273,7 @@ for R in "$CODEX_REVIEWER_NAME" claude-reviewer gemini-reviewer; do   # 실제 s
 done
 ```
 
-**③ orphan pane 정리** (프로세스는 죽었는데 pane 만 남은 경우 — 🟠 **orca 모드에서도 아래 tmux 블록 유효**: orca claude-teams 의 tmux shim 이 팀원 pane 한정으로 `list-panes`/`kill-pane` 을 실구현한다(실측 — 리뷰어=Agent tool 팀원 pane 이라 관할). 금지는 cmux CLI 만. 폴백: `orca terminal list --worktree active --json` 로 handle 확인 후 `orca terminal close`, 확신 없으면 사용자 UI 수동 닫기) — cmux `close-surface` 는 orphan 을 못 닫으므로 tmux 백엔드로 직접 닫는다. **본 세션 team config 의 tmuxPaneId 로만**, 그 pane 이 아직 존재하고 프로세스가 죽은 것만:
+**③ orphan pane 정리** (프로세스는 죽었는데 pane 만 남은 경우 — 🟠 **orca 모드에서도 아래 tmux 블록 유효**: orca claude-teams 의 tmux shim 이 팀원 pane 한정으로 `list-panes`/`kill-pane` 을 실구현한다(실측 — 리뷰어=Agent tool 팀원 pane 이라 관할). 금지는 cmux CLI 만. 🚨 **리뷰어 pane 을 `orca terminal close` 로 닫지 말 것** — shim 레지스트리와 어긋나 stale 등록이 남고 이후 `Agent` spawn 이 `tmux: terminal_exited` 로 깨진다(실측). 어긋났으면 `tmux kill-pane -t %N` 으로 stale 제거 후 재spawn) — cmux `close-surface` 는 orphan 을 못 닫으므로 tmux 백엔드로 직접 닫는다. **본 세션 team config 의 tmuxPaneId 로만**, 그 pane 이 아직 존재하고 프로세스가 죽은 것만:
 ```bash
 CFG=~/.claude/teams/$TEAM_NAME/config.json
 EXIST=$(tmux list-panes -a -F '#{pane_id}' 2>/dev/null)   # 현재 존재하는 pane id 집합

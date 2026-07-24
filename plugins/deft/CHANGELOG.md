@@ -4,6 +4,13 @@
 
 형식은 [Keep a Changelog](https://keepachangelog.com/ko/1.1.0/) 를 따르며, 버전 체계는 [Semantic Versioning](https://semver.org/lang/ko/) 을 사용합니다 (`claude-X.Y.Z` / `codex-X.Y.Z` 접두).
 
+## [claude-2.48.4] - 2026-07-24
+
+> **2.48.3 스모크에서 발견 — 팀원 pane `orca terminal close` 금지** — tmux shim 경로 스모크 중 실측: 팀원 pane(부활 잔재)을 `orca terminal close` 로 닫자 shim 의 team.panes 레지스트리에 stale 등록이 남아 **이후 `Agent` spawn 이 `tmux: terminal_exited` 로 실패**(stale pane 을 anchor 로 split 시도). 복구는 `tmux kill-pane -t <stale id>`(레지스트리 동기 제거 — 실측 검증) 후 재spawn. 2.48.3 이 넣은 "팀원 pane 폴백: orca terminal close" 문구는 위험해 정정 — **팀원 pane 정리는 tmux kill-pane(shim)만, orca terminal close 는 orca terminal 직접 생성 pane(claudex 워커) 전용**. 스모크로 shim `capture-pane`/`list-panes`/`kill-pane`/`split-window`(spawn 경유) 실동도 확정.
+
+### Fixed
+- agent-teams `SKILL.md` §9-1 ② / multi-check `SKILL.md` ③ / multi-round `SKILL.md` 대응표 — 팀원 pane `orca terminal close` 금지·`terminal_exited` 함정·`tmux kill-pane` 복구 절차 명시.
+
 ## [claude-2.48.3] - 2026-07-24
 
 > **orca tmux shim 실측 반영 — "bare tmux 전면 금지" 정밀화** — 사용자 소스 실측(Orca.app `claude-agent-teams-tmux-compat.js` + 세션 교차 확인): orca claude-teams 의 `tmux` 는 shim('3.4' 표방)이 **claude 팀원 pane(team.panes) 한정**으로 list-panes/send-keys/capture-pane/split-window/select-pane/kill-pane/last-pane/display-message 를 실구현한다. `resize-pane` 은 **no-op**·geometry 변수 빈 값(rebalance 불가 재확정), swap-pane/list-windows 미지원, orca terminal 직접 생성 pane(claudex 워커)·일반 터미널은 비대상. 종전 "orca 모드 bare tmux 전면 금지"는 과도한 제한이었다 — cmux CLI 만 전면 금지로 정밀화.

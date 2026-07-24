@@ -85,7 +85,7 @@ echo "deft 환경: $DEFT_ENV"
 | 물리 입력 | `cmux send` + `cmux send-key Enter` | `orca terminal send --text "<한 줄>" --enter`. **claude 팀원 pane 은 `tmux send-keys`(shim) 도 유효** |
 | TUI 응답 대기 | (없음 — idle-stable 폴링) | `orca terminal wait --for tui-idle --timeout-ms <N>` (agent CLI idle 판정 내장) |
 | pane 비율 조정 | `cmux-rebalancing` | **불가** — `orca terminal resize` 부재 + tmux shim `resize-pane` no-op·geometry 변수 빈 값(소스 실측 확정). "pane 비율은 UI 드래그로 조정" 안내로 대체 |
-| pane 정리 | `cmux close-surface` / `tmux kill-pane` | orca terminal 직접 생성 pane(claudex 등): `orca terminal close --terminal <handle>` (실측 — ptyKilled 포함) / claude 팀원 pane: `tmux kill-pane`(shim) 유효. 어느 쪽이든 shutdown 정상 종료(워커 자기종료) 우선, orphan 만 close |
+| pane 정리 | `cmux close-surface` / `tmux kill-pane` | orca terminal 직접 생성 pane(claudex 등): `orca terminal close --terminal <handle>` (실측 — ptyKilled 포함) / claude 팀원 pane: **`tmux kill-pane`(shim)만** — 🚨 팀원 pane 에 `orca terminal close` 를 쓰면 shim 레지스트리가 어긋나 이후 Agent spawn 이 `terminal_exited` 로 깨진다(실측 — 복구: `tmux kill-pane -t %N`). 어느 쪽이든 shutdown 정상 종료(워커 자기종료) 우선, orphan 만 close |
 
 - 세부 플래그·터미널 핸들 지정·페이징 규약은 **`orca skills get orca-cli`** 가 버전 일치 단일 소스 — orca 명령 실행 전 확인한다(릴리즈마다 플래그가 변할 수 있음).
 - **Agent tool 워커의 pane 시각화는 orca claude-teams 가 자동 처리** — Orca 는 Agent Teams 용 tmux shim(`~/.orca/claude-agent-teams-bin/tmux` → `orca agent-teams-tmux` exec 위임)을 PATH 에 넣어 팀 spawn 의 tmux 호출을 네이티브 pane 분할로 변환한다(실측). 즉 첫 워커(Agent tool)는 orca 모드에서도 절차 변경 없음.
