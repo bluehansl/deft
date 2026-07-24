@@ -48,6 +48,14 @@ command -v jq >/dev/null 2>&1 || { echo "ERROR: jq 필요" >&2; exit 1; }
 LEAD_SESSION="${DEFT_LEAD_SESSION:-$(jq -r '.leadSessionId // empty' "$CFG")}"
 [ -n "$LEAD_SESSION" ] || { echo "ERROR: parent-session 없음 (DEFT_LEAD_SESSION 또는 config leadSessionId)" >&2; exit 1; }
 
+# 🚨 orca 오발사 가드 — Orca 터미널 안에서도 cmux CLI 가 소켓으로 별도 cmux 앱에 연결돼
+#   `cmux identify` 가 성공하고 new-split/send 가 엉뚱한 앱의 pane 을 조작한다(실측).
+#   본 헬퍼는 cmux pane 기동 전용 → orca 모드는 차단.
+if [ -n "${ORCA_WORKTREE_ID:-}" ] || [ -n "${ORCA_TERMINAL_HANDLE:-}" ]; then
+  echo "ERROR: orca 모드 감지 — 본 헬퍼는 cmux 전용(오발사 방지 차단). orca 모드 워커 기동은 multi-round SKILL.md 의 orca 분기(orca terminal split/send/wait) 절차를 따르라." >&2
+  exit 1
+fi
+
 # cmux 가드
 if ! command -v cmux >/dev/null 2>&1 || ! cmux identify >/dev/null 2>&1; then
   echo "ERROR: cmux 환경 아님(pane 기동 불가)." >&2; exit 1

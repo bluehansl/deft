@@ -44,6 +44,15 @@ CLAUDE_HOME="${CLAUDE_CONFIG_DIR:-$HOME/.claude}"
 TEAM_DIR="$CLAUDE_HOME/teams/$TEAM_ID"
 INBOX="$TEAM_DIR/inboxes/$AGENT.json"
 
+# 🚨 orca 오발사 가드 — Orca 터미널 안에서도 cmux CLI 가 소켓으로 별도 cmux 앱에 연결돼
+#   `cmux identify` 가 성공하고 new-split/send 가 엉뚱한 앱의 pane 을 조작한다(실측).
+#   본 헬퍼는 cmux pane 기동 전용 → orca 모드는 차단하고 SKILL.md 의 orca 분기(orca terminal
+#   split/send/wait 직접 기동)를 안내한다.
+if [ -n "${ORCA_WORKTREE_ID:-}" ] || [ -n "${ORCA_TERMINAL_HANDLE:-}" ]; then
+  echo "ERROR: orca 모드 감지 — 본 헬퍼는 cmux 전용(오발사 방지 차단). orca 모드 워커 기동은 multi-round SKILL.md 의 orca 분기(orca terminal split/send/wait) 절차를 따르라." >&2
+  exit 1
+fi
+
 # cmux 환경 가드 (deft-cmux-shim 이 PATH 보강했을 수 있음)
 if ! command -v cmux >/dev/null 2>&1 || ! cmux identify >/dev/null 2>&1; then
   echo "ERROR: cmux 환경 아님(pane 기동 불가). cmux claude-teams 에서 실행하라." >&2

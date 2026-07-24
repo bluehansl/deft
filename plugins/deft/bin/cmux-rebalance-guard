@@ -34,6 +34,12 @@
 #
 # 출력: 감지·교정 이벤트만 한 줄씩(조용한 동안은 무출력)
 set -u
+# 🚨 orca 오발사 가드 — Orca 터미널 안에서도 cmux CLI 가 소켓으로 별도 cmux 앱에 연결돼
+#   엉뚱한 pane 을 조용히 조작한다(실측). Orca 는 resize CLI 미지원 → orca 모드는 즉시 no-op 종료.
+if [ -n "${ORCA_WORKTREE_ID:-}" ] || [ -n "${ORCA_TERMINAL_HANDLE:-}" ]; then
+  echo "cmux-rebalance-guard: orca 모드 감지 — cmux 오발사 방지 차단 (Orca 는 resize CLI 미지원). no-op 종료."
+  exit 0
+fi
 WS="${1:?usage: cmux-rebalance-guard <workspace-ref> [max-sec] [poll-sec] [lead-min-pct] [grace-sec] [done-flag]}"
 MAXSEC="${2:-90}"
 POLL="${3:-0.1}"

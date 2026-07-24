@@ -4,6 +4,17 @@
 
 형식은 [Keep a Changelog](https://keepachangelog.com/ko/1.1.0/) 를 따르며, 버전 체계는 [Semantic Versioning](https://semver.org/lang/ko/) 을 사용합니다 (`claude-X.Y.Z` / `codex-X.Y.Z` 접두).
 
+## [claude-2.47.0] - 2026-07-24
+
+> **Orca 호환 1/4 — bin 헬퍼 orca 오발사 가드 (최우선)** — Orca(stablyai/orca) 터미널 안에서도 cmux CLI 가 소켓으로 **별도 실행 중인 cmux 앱**에 연결되어 정상 응답한다(실측 Orca 1.4.150: `cmux list-panes --json` 이 cmux 앱 pane 목록을 반환) → deft 헬퍼가 orca 환경에서 실행되면 **엉뚱한 앱의 pane 을 조용히 조작**(오발사)하는 구조적 위험. 실행 계층(bin)에서 orca 모드(`ORCA_WORKTREE_ID`/`ORCA_TERMINAL_HANDLE` 존재)를 감지해 cmux 호출 경로를 전부 차단한다. 문서(스킬) 계층 분기는 2.47.1~2.47.3 에서 후속.
+
+### Added
+- **orca 오발사 가드 (bin 7종)** — 판정: `ORCA_WORKTREE_ID` 또는 `ORCA_TERMINAL_HANDLE` 존재 시 orca 모드.
+  - `cmux-rebalancing` / `cmux-rebalance-guard` / `cmux-rebalance-watch` — orca 모드 시 **no-op 종료(exit 0)** + "Orca 는 resize CLI 미지원(`orca terminal resize` 부재) — pane 비율은 UI 드래그로 조정" 안내. (rebalancing 계열은 orca 이식 자체가 불가)
+  - `deft-claudex-native-spawn` / `deft-claude-native-spawn` — orca 모드 시 **차단(exit 1)** + SKILL.md orca 분기(orca terminal split/send/wait 직접 기동) 안내. cmux 환경 가드(`cmux identify` 성공 여부)보다 **앞서** 검사 — orca 안에서 `cmux identify` 가 성공해 cmux 환경으로 오판되는 것을 차단.
+  - `multi-round-bus` — `cmuxKnock()` 이 orca 모드 시 cmux send 를 시도하지 않고 false 반환(메시지는 board 에 안전 — orca 모드 깨우기는 `ntpPush`(inbox 등록) 담당. inbox/board 는 파일 기반이라 환경 무관).
+  - `deft-cmux-shim` — orca 모드 시 진짜 cmux 로의 exec 차단(exit 1) — shim 이 오발사 통로가 되는 것을 방지.
+
 ## [claude-2.46.2 / codex-1.22.1] - 2026-07-22
 
 > **산출물 라우팅 — 상위 지침 우선 명문화** — 사용자 본업 지침(`~/git/AGENTS.md` §2-4-1 신설, 도구 무관 산출물 경로 규칙)과 스킬 §3-4-1 의 관계를 명시: 사용자 환경의 상위 지침(전역/프로젝트 AGENTS.md·CLAUDE.md)이 별도 산출물 경로를 규정하면 **그것이 우선**, 스킬 규칙은 **기본값**. 특정 파일 경로 참조 없이 일반 문구로 — deft 자기완결(타 설치자 환경) 무손상.
