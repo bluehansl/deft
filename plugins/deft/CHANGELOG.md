@@ -4,6 +4,20 @@
 
 형식은 [Keep a Changelog](https://keepachangelog.com/ko/1.1.0/) 를 따르며, 버전 체계는 [Semantic Versioning](https://semver.org/lang/ko/) 을 사용합니다 (`claude-X.Y.Z` / `codex-X.Y.Z` 접두).
 
+## [claude-2.48.1 / codex-1.23.1] - 2026-07-24
+
+> **orca 실동 검증 후속 — deft-bin-sync shim 잔재 갱신 결함 수정** — 2.48.0 배포 후 Orca 1.4.150 실환경 풀사이클 검증(deft-test 기반)에서 발견: `~/.local/bin/cmux`(deft-cmux-shim)가 `ALL_HELPERS` 에 없어 기본 동기에서 갱신되지 않고, gap-fill 은 "부재 시에만"이라 **구버전 shim 잔재가 orca 오발사 가드를 영원히 못 받는** 결함(실측 — 구 shim 이 orca 안에서 진짜 cmux 로 exec 되어 cmux 앱 identify 반환 = 오발사 재현). deft-bin-sync 가 해결하려던 "구버전 잔재" 문제의 shim 판 재발.
+
+### Fixed
+- **`deft-bin-sync`** (Claude+Codex 양측) — 기본(전체) 동기 시 `~/.local/bin/cmux` 가 존재하고 **deft-cmux-shim 마커를 포함하면**(우리 shim 일 때만 — 진짜 cmux CLI 는 마커 검사로 보호) 갱신 대상에 포함. 수정 후 실측: `INFO: cmux 동기` → shim 가드 정상 발동("orca 모드 감지 — 차단", exit 1).
+
+### Verified (Orca 1.4.150 실동 풀사이클 — 전 항목 PASS)
+- 배포 반영: 캐시 claude-2.48.0 도착 → `deft-bin-sync` 로 `~/.local/bin` 헬퍼 6종 cmp 일치.
+- 오발사 가드: cmux-rebalancing/-guard orca no-op(exit 0), shim 차단(exit 1 — 본 수정 후).
+- Agent tool 워커(probe-claude/haiku): orca claude-teams tmux shim 이 pane 자동 생성(이름표 `@probe-claude`), SendMessage ACK 자동주입 수신(지연 배치 — R-1 특성 그대로, 직접 회수 병행 규약 유효 확인).
+- claudex 워커(진짜 claudex, gpt-5.5): `deft-claudex-native-spawn` orca 분기 — `env:"orca"` JSON·terminal handle·members 등록·NTP binding 이름표(`probe-claudex - team session-…`)·tui-idle 통과, `send_message` PONG 왕복 성공(Lead 직접 회수로 수신).
+- 종료: 구조화 shutdown_request 2건 → **2초 내 양측 graceful 종료**, pane 자동 close(Orca — cmux 와 동일), 버스 워커 0·teammate 0·pane 잔존 0.
+
 ## [codex-1.23.0] - 2026-07-24
 
 > **Codex 포트 Orca 호환 이식** — Claude 측 claude-2.47.0~2.48.0 의 orca 호환을 Codex 포팅본(`plugins/codex/deft`)에 이식. Lead=codex/claudex 가 Orca 관리 터미널에서 실행될 때도 동일한 오발사 가드·orca 분기가 적용된다.

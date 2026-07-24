@@ -41,6 +41,13 @@ if [ "$#" -gt 0 ]; then
   TARGETS="$*"
 else
   TARGETS="$ALL_HELPERS"
+  # cmux(shim) 잔재 갱신 — 기본 동기는 cmux 를 새로 설치하지 않지만(진짜 cmux CLI 를 가리지 않기 위해
+  #   설치는 명시 gap-fill `deft-bin-sync cmux` 만), **이미 설치된 것이 우리 shim(deft-cmux-shim 마커)이면**
+  #   갱신 대상에 포함한다. 마커 검사 없이는 구버전 shim 잔재가 이후 수정(orca 오발사 가드 등)을 영원히
+  #   못 받는다 — orca 실동 검증에서 실측 발견(구 shim 이 orca 안에서 진짜 cmux 로 exec 해 오발사).
+  if [ -f "$DEST/cmux" ] && grep -q "deft-cmux-shim" "$DEST/cmux" 2>/dev/null; then
+    TARGETS="$TARGETS cmux"
+  fi
 fi
 
 for H in $TARGETS; do
