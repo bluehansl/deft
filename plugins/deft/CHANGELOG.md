@@ -4,6 +4,14 @@
 
 형식은 [Keep a Changelog](https://keepachangelog.com/ko/1.1.0/) 를 따르며, 버전 체계는 [Semantic Versioning](https://semver.org/lang/ko/) 을 사용합니다 (`claude-X.Y.Z` / `codex-X.Y.Z` 접두).
 
+## [claude-2.47.1] - 2026-07-24
+
+> **Orca 호환 2/4 — multi-round orca 모드 분기** — SKILL.md 에 `§환경 판정 — cmux vs orca` 공통 섹션 신설(전 Phase 최우선): 판정 순서 강제(ORCA_* 먼저 — orca 안에서 `cmux identify` 가 성공해 cmux 모드로 오판되는 함정 차단), cmux→orca pane 명령 대응표(split/read/send/wait — 세부 플래그는 `orca skills get orca-cli` 단일 소스), orca 모드 규칙(cmux CLI 전면 금지·rebalance skip·Agent tool pane 은 orca tmux shim 자동).
+
+### Added
+- **multi-round `SKILL.md`** — `§환경 판정` 신설 + orca 분기: Phase 0 판정을 `DEFT_ENV`(orca/cmux/none) 3분기로 교체, 통신 매트릭스 "cmux 환경"→"pane 환경(cmux/orca)" 재정의, §용례 1 🟠(orca 워커 기동 = `orca terminal split` → binding 기동 send → `wait --for tui-idle`, guard/`.last-worker-pane` skip), §3-A 🟠(Lead·워커 register 는 `--surface` 생략 `--inbox` 전용 — 깨우기 ntpPush), §3-B 🟠(send/read + **tui-idle 대기를 idle-stable 폴링 대신 권장** — agent CLI idle 판정 내장), §3-C 를 `DEFT_ENV=none` 로 재정의, §4-T·§5-B 🟠(정리는 shutdown 정상 종료만 — close-surface/kill-pane/rebalancing 금지, 잔존 pane 은 UI 수동), Error Handling·보안 가드 #8 추가.
+- **multi-round `GUIDE.md`** — Before You Start 환경 판정 항목, 매트릭스·보안 가드 #7·트러블슈팅 2행·FAQ Q7-1(Orca) 추가.
+
 ## [claude-2.47.0] - 2026-07-24
 
 > **Orca 호환 1/4 — bin 헬퍼 orca 오발사 가드 (최우선)** — Orca(stablyai/orca) 터미널 안에서도 cmux CLI 가 소켓으로 **별도 실행 중인 cmux 앱**에 연결되어 정상 응답한다(실측 Orca 1.4.150: `cmux list-panes --json` 이 cmux 앱 pane 목록을 반환) → deft 헬퍼가 orca 환경에서 실행되면 **엉뚱한 앱의 pane 을 조용히 조작**(오발사)하는 구조적 위험. 실행 계층(bin)에서 orca 모드(`ORCA_WORKTREE_ID`/`ORCA_TERMINAL_HANDLE` 존재)를 감지해 cmux 호출 경로를 전부 차단한다. 문서(스킬) 계층 분기는 2.47.1~2.47.3 에서 후속.
