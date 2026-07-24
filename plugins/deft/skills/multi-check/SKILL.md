@@ -273,7 +273,7 @@ for R in "$CODEX_REVIEWER_NAME" claude-reviewer gemini-reviewer; do   # 실제 s
 done
 ```
 
-**③ orphan pane 정리** (프로세스는 죽었는데 pane 만 남은 경우 — **cmux 모드 한정**. 🟠 orca 모드는 아래 tmux 블록을 실행하지 않는다: bare `tmux`/`cmux` 호출 금지(오발사·shim 동작 미검증) — 잔존 pane 은 `orca terminal list --worktree active --json` 로 handle 확인 후 `orca terminal close --terminal <handle>`, 확신 없으면 사용자 UI 수동 닫기 안내) — cmux `close-surface` 는 orphan 을 못 닫으므로 tmux 백엔드로 직접 닫는다. **본 세션 team config 의 tmuxPaneId 로만**, 그 pane 이 아직 존재하고 프로세스가 죽은 것만:
+**③ orphan pane 정리** (프로세스는 죽었는데 pane 만 남은 경우 — 🟠 **orca 모드에서도 아래 tmux 블록 유효**: orca claude-teams 의 tmux shim 이 팀원 pane 한정으로 `list-panes`/`kill-pane` 을 실구현한다(실측 — 리뷰어=Agent tool 팀원 pane 이라 관할). 금지는 cmux CLI 만. 폴백: `orca terminal list --worktree active --json` 로 handle 확인 후 `orca terminal close`, 확신 없으면 사용자 UI 수동 닫기) — cmux `close-surface` 는 orphan 을 못 닫으므로 tmux 백엔드로 직접 닫는다. **본 세션 team config 의 tmuxPaneId 로만**, 그 pane 이 아직 존재하고 프로세스가 죽은 것만:
 ```bash
 CFG=~/.claude/teams/$TEAM_NAME/config.json
 EXIST=$(tmux list-panes -a -F '#{pane_id}' 2>/dev/null)   # 현재 존재하는 pane id 집합
@@ -287,7 +287,7 @@ for R in "$CODEX_REVIEWER_NAME" claude-reviewer gemini-reviewer; do   # 실제 s
   fi
 done
 ```
-> ⚠️ cmux 환경의 `tmux` 는 호환 shim 이라 `#{pane_dead}`/`#{pane_pid}` 는 **빈 값**을 반환한다(실측) — pane 생사 판정에 쓸 수 없다. 그래서 ②/③ 는 그 포맷에 의존하지 않고 **세션앵커 `pgrep`(프로세스 생사) + `tmux list-panes`(pane 존재) + `kill-pane`(shim 지원 확인됨)** 으로만 판정한다.
+> ⚠️ cmux/orca 양쪽 환경의 `tmux` 는 호환 shim 이라 `#{pane_dead}`/`#{pane_pid}` 는 **빈 값**을 반환한다(양쪽 실측) — pane 생사 판정에 쓸 수 없다. 그래서 ②/③ 는 그 포맷에 의존하지 않고 **세션앵커 `pgrep`(프로세스 생사) + `tmux list-panes`(pane 존재) + `kill-pane`(양쪽 shim 지원 확인됨)** 으로만 판정한다.
 
 **④ 레이아웃 복원** (cmux 모드 한정 — 🟠 orca 모드는 skip: resize·focus CLI 금지/미지원) — 리뷰어 pane 이 다 닫힌 뒤, 남은 Lead 레이아웃을 정렬하고 focus 를 Lead 로 복원한다(다음 스킬·후속 작업이 깔끔한 단일 pane 에서 시작되도록):
 ```bash

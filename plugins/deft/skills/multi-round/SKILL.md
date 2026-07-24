@@ -72,17 +72,20 @@ echo "deft 환경: $DEFT_ENV"
 
 ### orca 모드 규칙 (오발사 가드 — 최우선)
 
-- 🚨 **orca 모드에서 cmux CLI 호출 전면 금지** — 에러가 나는 게 아니라 **별도 cmux 앱의 엉뚱한 pane 을 조용히 조작**한다(오발사, 실측). deft bin 은 orca 를 자체 인지한다 — **spawn 헬퍼(deft-claudex/claude-native-spawn)와 버스 노크(cmuxKnock)는 orca 경로로 자동 분기**하고, rebalance 계열(cmux-rebalancing/-guard/-watch)·deft-cmux-shim 은 no-op/차단한다. **Lead 가 직접 치는 bare `cmux`/`tmux` 명령도 동일하게 금지**다.
+- 🚨 **orca 모드에서 cmux CLI 호출 전면 금지** — 에러가 나는 게 아니라 **별도 cmux 앱의 엉뚱한 pane 을 조용히 조작**한다(오발사, 실측). deft bin 은 orca 를 자체 인지한다 — **spawn 헬퍼(deft-claudex/claude-native-spawn)와 버스 노크(cmuxKnock)는 orca 경로로 자동 분기**하고, rebalance 계열(cmux-rebalancing/-guard/-watch)·deft-cmux-shim 은 no-op/차단한다.
+- **`tmux` 는 다르다 — orca claude-teams 의 tmux shim 이 팀원 pane 한정으로 실구현한다** (실측 — `which tmux` = `~/.orca/claude-agent-teams-bin/tmux`, 'tmux 3.4' 표방. 구현 소스: Orca.app `out/shared/claude-agent-teams-tmux-compat.js`):
+  - 실구현: `list-panes`(-F/-t)·`send-keys`(-t/-l·특수키 변환)·`capture-pane`·`split-window`·`select-pane`·`kill-pane`·`last-pane`·`display-message`. 미지원: `swap-pane`·`list-windows`. **`resize-pane` 은 no-op**이고 `#{pane_width}` 등 geometry 포맷 변수도 빈 값 — 크기 측정·조정 모두 불가 확정.
+  - **관할 한정**: shim 은 **Agent Teams 가 spawn 한 claude 팀원 pane(team.panes)만** 관리한다 — orca terminal 로 직접 만든 pane(claudex/codex 워커 등)·일반 워크스페이스 터미널은 비대상(실측: list-panes 가 리더+팀원 pane 만 반환). 따라서 **팀원 pane 의 화면 읽기/입력/정리는 tmux 문법 그대로 유효**하고, claudex/codex 워커 pane 은 **orca terminal read/send/wait/close 경로**를 쓴다.
 - **pane 명령 대응표** (cmux → orca 등가, 실측 Orca 1.4.150):
 
 | 용도 | cmux 모드 | orca 모드 |
 |---|---|---|
 | pane 분할 | `cmux new-split right\|down` | `orca terminal create` / `orca terminal split --direction vertical\|horizontal` — ⚠️ **direction 은 분할선 방향(실화면 실측 — orca-cli 가이드 문구와 반대)**: `vertical`=좌우 배치(anchor **우측** 생성), `horizontal`=상하 배치(anchor **아래** 생성) |
-| 화면 읽기 | `cmux capture-pane` | `orca terminal read` (`--cursor`/`--limit` 커서 페이징) |
-| 물리 입력 | `cmux send` + `cmux send-key Enter` | `orca terminal send --text "<한 줄>" --enter` |
+| 화면 읽기 | `cmux capture-pane` | `orca terminal read` (`--cursor`/`--limit` 커서 페이징). **claude 팀원 pane 은 `tmux capture-pane`(shim) 도 유효** |
+| 물리 입력 | `cmux send` + `cmux send-key Enter` | `orca terminal send --text "<한 줄>" --enter`. **claude 팀원 pane 은 `tmux send-keys`(shim) 도 유효** |
 | TUI 응답 대기 | (없음 — idle-stable 폴링) | `orca terminal wait --for tui-idle --timeout-ms <N>` (agent CLI idle 판정 내장) |
-| pane 비율 조정 | `cmux-rebalancing` | **불가** — Orca 는 resize CLI 미지원(`orca terminal resize` 부재). "pane 비율은 UI 드래그로 조정" 안내로 대체 |
-| pane 정리 | `cmux close-surface` / `tmux kill-pane` | `orca terminal close --terminal <handle>` (실측 — ptyKilled 포함). shutdown 정상 종료(워커 자기종료) 우선, orphan 만 close |
+| pane 비율 조정 | `cmux-rebalancing` | **불가** — `orca terminal resize` 부재 + tmux shim `resize-pane` no-op·geometry 변수 빈 값(소스 실측 확정). "pane 비율은 UI 드래그로 조정" 안내로 대체 |
+| pane 정리 | `cmux close-surface` / `tmux kill-pane` | orca terminal 직접 생성 pane(claudex 등): `orca terminal close --terminal <handle>` (실측 — ptyKilled 포함) / claude 팀원 pane: `tmux kill-pane`(shim) 유효. 어느 쪽이든 shutdown 정상 종료(워커 자기종료) 우선, orphan 만 close |
 
 - 세부 플래그·터미널 핸들 지정·페이징 규약은 **`orca skills get orca-cli`** 가 버전 일치 단일 소스 — orca 명령 실행 전 확인한다(릴리즈마다 플래그가 변할 수 있음).
 - **Agent tool 워커의 pane 시각화는 orca claude-teams 가 자동 처리** — Orca 는 Agent Teams 용 tmux shim(`~/.orca/claude-agent-teams-bin/tmux` → `orca agent-teams-tmux` exec 위임)을 PATH 에 넣어 팀 spawn 의 tmux 호출을 네이티브 pane 분할로 변환한다(실측). 즉 첫 워커(Agent tool)는 orca 모드에서도 절차 변경 없음.
@@ -958,7 +961,7 @@ Lead 의 라운드 동작:
 | 5 | claudex/claude/codex 모두 없으면 명시 에러 (silent 실패 X) | 사용자 혼란 |
 | 6 | Lead surface 캡처는 `cmux identify` 의 `.caller.surface_ref` 사용 | fallback 미작동 |
 | 7 | 1-shot + history 재전송 방식 금지 — 불가 환경은 multi-check 안내 후 중단 | 지속 대화 원칙 위반 |
-| 8 | orca 모드에서 cmux/tmux CLI 호출 전면 금지 (§환경 판정 — ORCA_* 우선 판정 + bin 가드 이중) | 별도 cmux 앱 pane 오조작 (조용한 오발사) |
+| 8 | orca 모드에서 cmux CLI 호출 전면 금지 (§환경 판정 — ORCA_* 우선 판정 + bin 가드 이중). `tmux` 는 shim 관할(claude 팀원 pane) 한정 유효 — 그 외 대상엔 무의미 | 별도 cmux 앱 pane 오조작 (조용한 오발사) |
 
 ## Error Handling
 

@@ -4,6 +4,15 @@
 
 형식은 [Keep a Changelog](https://keepachangelog.com/ko/1.1.0/) 를 따르며, 버전 체계는 [Semantic Versioning](https://semver.org/lang/ko/) 을 사용합니다 (`claude-X.Y.Z` / `codex-X.Y.Z` 접두).
 
+## [claude-2.48.3] - 2026-07-24
+
+> **orca tmux shim 실측 반영 — "bare tmux 전면 금지" 정밀화** — 사용자 소스 실측(Orca.app `claude-agent-teams-tmux-compat.js` + 세션 교차 확인): orca claude-teams 의 `tmux` 는 shim('3.4' 표방)이 **claude 팀원 pane(team.panes) 한정**으로 list-panes/send-keys/capture-pane/split-window/select-pane/kill-pane/last-pane/display-message 를 실구현한다. `resize-pane` 은 **no-op**·geometry 변수 빈 값(rebalance 불가 재확정), swap-pane/list-windows 미지원, orca terminal 직접 생성 pane(claudex 워커)·일반 터미널은 비대상. 종전 "orca 모드 bare tmux 전면 금지"는 과도한 제한이었다 — cmux CLI 만 전면 금지로 정밀화.
+
+### Changed (Claude 측만 — Codex 포트는 Agent tool 팀원이 없어 shim 관할 pane 자체가 없음)
+- **multi-round `SKILL.md`** — §환경 판정: tmux shim 실구현·관할 한정 신설(팀원 pane 은 tmux 문법 유효 / claudex 워커는 orca terminal 경로 — 기존 경로 재확인), 대응표 화면읽기·입력·정리 행에 팀원 pane tmux 병기, 보안 가드 #8 정밀화.
+- **agent-teams `SKILL.md`** — §2-2 팀원 pane 관찰·개입(orca 포함 tmux 유효) 신설, §2-3 🟠 resize 불가 근거를 shim no-op 소스 실측으로 확정, §9-1 ② orphan tmux 블록을 **orca 모드에서도 유효**로 교정(금지는 cmux 만), shim 각주 cmux/orca 공통화.
+- **multi-check `SKILL.md`** — Phase 5 ③ orphan tmux 블록 orca 유효 교정(리뷰어=팀원 pane), shim 각주 공통화.
+
 ## [claude-2.48.2 / codex-1.23.2] - 2026-07-24
 
 > **orca split direction 매핑 반전 (사용자 실화면 실측)** — 시각화 UI 검증에서 발견: Orca 의 `--direction` 은 orca-cli 가이드 문구("horizontal splits left/right, vertical splits top/bottom")와 **반대로 동작**한다 — 실측: `vertical`=좌우 배치(anchor 우측 생성), `horizontal`=상하 배치(anchor 아래 생성) = **분할선 방향 기준 명명**. 기존 매핑으로는 스택 워커가 아래가 아니라 우측으로 생겨 "Lead | 워커 상하 스택" 레이아웃이 3컬럼으로 깨졌다(사용자 관찰). 라벨 pane 2방향 실측 판정(TEST-VERTICAL=우측/TEST-HORIZONTAL=아래) 후 전 지점 반전. 반전 후 claudex 2-워커 재스폰으로 **Lead 우측 + 그 아래 상하 스택 실화면 확인 완료**.
