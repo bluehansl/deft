@@ -4,6 +4,14 @@
 
 형식은 [Keep a Changelog](https://keepachangelog.com/ko/1.1.0/) 를 따르며, 버전 체계는 [Semantic Versioning](https://semver.org/lang/ko/) 을 사용합니다 (`claude-X.Y.Z` / `codex-X.Y.Z` 접두).
 
+## [claude-2.47.2] - 2026-07-24
+
+> **Orca 호환 3/4 — agent-teams 양쪽 환경 서술 + cmux 직접 호출부 가드** — Orca 는 Agent Teams 용 tmux shim(`~/.orca/claude-agent-teams-bin/tmux` → `orca agent-teams-tmux`)으로 `orca claude-teams` 실행 시 팀 spawn pane 시각화가 자동이므로(실측 1.4.150), cmux 전제 문구를 cmux/orca 양쪽 서술로 갱신하고 cmux CLI 직접 호출부만 orca 모드 가드.
+
+### Changed
+- **agent-teams `SKILL.md`** — §0-1 활성조건 `cmux claude-teams 또는 orca claude-teams` + 환경 판정 2단계(orca 우선 → gap-fill 후 cmux/none 확정 — orca 안 `cmux identify` 오판 차단), cmux gap-fill 을 orca 모드 skip, §0-2 를 "팀 pane 하니스 외부(`DEFT_ENV=none`)" 로 재정의, §2-2 pane 자동 분할 양쪽 서술(orca=tmux shim), §2-3 rebalance 워처/guard **cmux 모드 한정**(🟠 orca skip — resize CLI 미지원, UI 드래그 안내 + LEAD_REF/BASE 캡처도 skip), §9-1 ② orphan tmux 블록 orca 미실행(UI 수동 닫기 안내)·③ 레이아웃 복원 orca skip, §11 빠른 시작 갱신.
+- **agent-teams `GUIDE.md`** — Before You Start(환경 판정·orca rebalance 미사용), A-4 각주, 트러블슈팅 2행.
+
 ## [claude-2.47.1] - 2026-07-24
 
 > **Orca 호환 2/4 — multi-round orca 모드 분기** — SKILL.md 에 `§환경 판정 — cmux vs orca` 공통 섹션 신설(전 Phase 최우선): 판정 순서 강제(ORCA_* 먼저 — orca 안에서 `cmux identify` 가 성공해 cmux 모드로 오판되는 함정 차단), cmux→orca pane 명령 대응표(split/read/send/wait — 세부 플래그는 `orca skills get orca-cli` 단일 소스), orca 모드 규칙(cmux CLI 전면 금지·rebalance skip·Agent tool pane 은 orca tmux shim 자동).

@@ -8,12 +8,12 @@ SKILL.md의 규약을 **실전 시나리오**로 풀어쓴 보조 문서. 처음
 
 팀을 띄우기 전에 다음을 확인한다 (상세 §0):
 
-- [ ] `cmux claude-teams` 환경에서 실행 중인가? (아니면 §0-2 — 단일 Claude degrade 또는 재시작 권장)
+- [ ] `cmux claude-teams` **또는 `orca claude-teams`** 환경에서 실행 중인가? (아니면 §0-2 — 단일 Claude degrade 또는 재시작 권장) ⚠️ 환경 판정은 ORCA_* 변수 우선(§0-1 — orca 안에서도 cmux CLI 가 별도 cmux 앱에 연결되어 성공하므로 오판·오발사 주의)
 - [ ] `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1` 활성 + Claude Code **v2.1.32 이상**인가?
 - [ ] `Agent`/`SendMessage`/`Task*` 도구를 쓸 수 있는가? (팀은 첫 `Agent` spawn 시 암묵적 자동 생성 — 별도 `TeamCreate` 불요/폐지)
 - [ ] work-id 저장 경로 `~/.claude/plugin-data/deft/agent-teams/<work-id>/` 에 접근 가능한가?
-- [ ] (cmux claude-teams 일 때) 팀원 pane 자동 분할이 동작하는가?
-- [ ] `cmux-rebalancing` 헬퍼가 PATH 에 있는가? 없으면 skill 첫 실행 시 plugin 동봉본이 `~/.local/bin/` 으로 자동 설치됨. 팀원 spawn 후 Lead/팀원 pane 비율 재조정에 사용 (cmux 환경 한정)
+- [ ] (cmux/orca claude-teams 일 때) 팀원 pane 자동 분할이 동작하는가? (orca 는 tmux shim 으로 자동 — §2-2)
+- [ ] `cmux-rebalancing` 헬퍼가 PATH 에 있는가? 없으면 skill 첫 실행 시 plugin 동봉본이 `~/.local/bin/` 으로 자동 설치됨. 팀원 spawn 후 Lead/팀원 pane 비율 재조정에 사용 (**cmux 환경 한정** — orca 는 resize CLI 미지원이라 미사용, pane 비율은 UI 드래그)
 
 ---
 
@@ -80,7 +80,7 @@ Agent(name="frontendDev", subagent_type="claude", model="fable", ...)
 Agent(name="qa", subagent_type="claude", model="fable", ...)
 # team_name 인자는 넣지 않는다(deprecated/무시). model:"fable" 명시 — 팀원은 Lead 모델 미상속.
 ```
-> `cmux claude-teams` 환경이라 pane 분할은 자동(§2-2). Lead는 cmux 명령 호출 불필요. 첫 팀원 분할 직후 `cmux-rebalancing` 1회(§2-3).
+> `cmux claude-teams`/`orca claude-teams` 환경이라 pane 분할은 자동(§2-2). Lead는 pane 명령 호출 불필요. cmux 모드는 첫 팀원 분할 직후 `cmux-rebalancing` 1회(§2-3) — orca 모드는 rebalance skip(resize CLI 미지원).
 
 ### A-5. 구현 사이클
 
@@ -188,7 +188,8 @@ Lead + reviewer(독립 시각) spawn
 | 팀원이 work.md를 직접 고침 | 금지. work.md는 Lead 단독. 팀원은 본인 role.md만 (§6) |
 | AI mix(Claudex 등) 토론이 필요 | 본 skill 아님 → `deft:multi-round` 사용 |
 | 1발 비교만 필요 | `deft:multi-check` |
-| cmux 외부에서 팀이 안 뜸 | 정상 — §0-2. 단일 Claude degrade 또는 `cmux claude-teams` 재시작 |
+| cmux/orca 외부에서 팀이 안 뜸 | 정상 — §0-2. 단일 Claude degrade 또는 `cmux claude-teams`(Orca 면 `orca claude-teams`) 재시작 |
+| orca 모드에서 rebalance/워처가 "orca 모드 감지 — 차단" 출력 | 정상 가드 — Orca 는 resize CLI 미지원. pane 비율은 UI 드래그로 조정 (§2-3 🟠) |
 
 ---
 
