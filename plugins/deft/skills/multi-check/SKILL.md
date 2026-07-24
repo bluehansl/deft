@@ -273,7 +273,7 @@ for R in "$CODEX_REVIEWER_NAME" claude-reviewer gemini-reviewer; do   # 실제 s
 done
 ```
 
-**③ orphan pane 정리** (프로세스는 죽었는데 pane 만 남은 경우 — **cmux 모드 한정**. 🟠 orca 모드는 아래 tmux 블록을 실행하지 않는다: bare `tmux`/`cmux` 호출 금지(오발사·shim 동작 미검증) — 잔존 pane 은 사용자에게 UI 수동 닫기를 안내) — cmux `close-surface` 는 orphan 을 못 닫으므로 tmux 백엔드로 직접 닫는다. **본 세션 team config 의 tmuxPaneId 로만**, 그 pane 이 아직 존재하고 프로세스가 죽은 것만:
+**③ orphan pane 정리** (프로세스는 죽었는데 pane 만 남은 경우 — **cmux 모드 한정**. 🟠 orca 모드는 아래 tmux 블록을 실행하지 않는다: bare `tmux`/`cmux` 호출 금지(오발사·shim 동작 미검증) — 잔존 pane 은 `orca terminal list --worktree active --json` 로 handle 확인 후 `orca terminal close --terminal <handle>`, 확신 없으면 사용자 UI 수동 닫기 안내) — cmux `close-surface` 는 orphan 을 못 닫으므로 tmux 백엔드로 직접 닫는다. **본 세션 team config 의 tmuxPaneId 로만**, 그 pane 이 아직 존재하고 프로세스가 죽은 것만:
 ```bash
 CFG=~/.claude/teams/$TEAM_NAME/config.json
 EXIST=$(tmux list-panes -a -F '#{pane_id}' 2>/dev/null)   # 현재 존재하는 pane id 집합
@@ -304,7 +304,7 @@ cmux focus-pane --pane "$(cmux identify | jq -r .caller.pane_ref)" 2>/dev/null
 | Timeout (agent doesn't respond in 120s) | Synthesize with available results |
 | All CLIs fail | Compare Lead analysis against error context |
 | 리뷰어가 spawn 직후 무응답 | `model` 미지정 시 기본 `fable` 로 떠 의도한 경량 `haiku` 래퍼가 아님 — `model:"haiku"` 명시를 확인. 그래도 무응답이면 해당 모델 skip 후 진행 |
-| Reviewer dies right after spawn (e.g. binary path error) | Close its dead pane (`cmux top --processes` 로 프로세스 0 확인 후 `cmux close-surface`) → respawn → **rebalancing 재호출** — 죽은 pane 을 방치하면 레이아웃·식별 혼란. 🟠 orca 모드: pane 정리는 UI 수동 안내, respawn 만 수행(rebalancing 없음) |
+| Reviewer dies right after spawn (e.g. binary path error) | Close its dead pane (`cmux top --processes` 로 프로세스 0 확인 후 `cmux close-surface`) → respawn → **rebalancing 재호출** — 죽은 pane 을 방치하면 레이아웃·식별 혼란. 🟠 orca 모드: `orca terminal list`→`orca terminal close` 로 정리(확신 없으면 UI 수동), respawn 만 수행(rebalancing 없음) |
 | orca 모드에서 rebalance/워처/shim 이 "orca 모드 감지 — 차단" 출력 | 정상 가드 동작 (Phase 2 환경 판정 참조) — cmux 경로 재시도 금지, orca 분기(🟠)로 진행 |
 
 ## Prompt Composition Rules

@@ -324,7 +324,7 @@ multi-round skill 내부에 다음 가드가 강제됩니다.
 | 워커 무응답인데 Lead 가 모름 (조용한 데드락) | Lead 는 노크로만 깨어남 — 아무도 post 안 하면 정지 | post 직후 `multi-round-bus watch` 백그라운드 워치독 (스킬 기본 절차) — timeout 시 재노크 + STALLED 진단 | §Phase 4-A |
 | claudex 워커가 버스 도구 호출마다 승인 다이얼로그를 띄움 | claudex/codex 에 MCP 도구 영구 신뢰 설정 부재 (실측) | spawn 명령의 `--dangerously-bypass-approvals-and-sandbox` 포함 확인 (스킬 기본 — 회의 워커 한정). 이미 뜬 다이얼로그는 "2. Allow for this session" 으로 도구당 1회 승인 | §Phase 3-A (4) |
 | Lead surface 캡처 실패 (LEAD_SURFACE 빈값) — cmux 모드 한정 | `cmux identify`가 caller surface 못 잡음 | 환경 변수 `CMUX_SURFACE_ID` 확인. 없으면 사용자가 직접 surface id 제공. **orca 모드면 정상**(surface 캡처 자체를 안 함 — SKILL §3-A 🟠) | §6 가드 #5 |
-| orca 모드인데 bin 헬퍼가 "orca 모드 감지 — 차단" 을 출력 | 오발사 가드 정상 동작 (cmux 전용 헬퍼를 orca 에서 호출) | cmux 경로 재시도 금지 — SKILL 의 해당 Phase 🟠 orca 분기(orca terminal split/send/wait)로 진행 | SKILL §환경 판정 |
+| orca 모드에서 rebalance 계열/deft-cmux-shim 이 "orca 모드" no-op/차단 출력 | 오발사 가드 정상 동작 (cmux 전용 도구를 orca 에서 호출) | cmux 경로 재시도 금지. spawn 헬퍼·버스 노크는 orca 자동 분기라 그대로 사용 — SKILL 의 해당 Phase 🟠 참조 | SKILL §환경 판정 |
 | 워커 응답이 와도 Lead가 다음 라운드로 못 넘어감 | 워커 응답 마지막 줄에 `DONE:` 센티넬 누락 | 다음 라운드 prompt에 "마지막 줄 `DONE:` 강제" 재주입 | §5-2 라운드 자동화 |
 | (3-B 폴백 한정) prompt 조기 제출됨 (절반만 들어감) | `cmux send`가 `\n`을 Enter로 해석 | prompt를 파일로 저장 → 워커에게 "Read <경로>" 안내 (skill 자동 처리). 버스 경로에선 발생하지 않음 | §6 가드 #3 |
 | 특정 워커가 계속 같은 의견만 반복 | 페르소나가 너무 약하거나 prompt에 다른 입장 정보 누락 | 다음 라운드 prompt에 상대 입장을 명시적으로 인용 + "본인 입장 변경 가능한지 검토" 추가 | §3-2 dialogue 흐름 |
@@ -363,7 +363,7 @@ A. cmux 환경 안에서는 pane 워커 + 메시지 버스가 default. pane 이 
 A. **예**. pane 환경 외부(`DEFT_ENV=none`)에서는 Phase 3-C (claudex MCP conversation — stateful 지속 대화) 로 동작. claudex MCP 등록이 필요. 미등록·미설치면 multi-check 안내 후 중단.
 
 ### Q7-1. Orca(stablyai/orca) 환경에서도 되나요?
-A. **예 — orca 모드로 동작** (SKILL §환경 판정). board·inbox 통신은 파일 기반이라 동일하고, 달라지는 것은 ① 워커 pane 기동이 cmux 헬퍼 대신 `orca terminal split/send/wait` ② 깨우기가 ntpPush(inbox) 전용 ③ pane 비율 조정 불가(Orca 는 resize CLI 미지원 — UI 드래그로 조정) 세 가지다. ⚠️ orca 안에서 cmux CLI 를 치면 **별도 실행 중인 cmux 앱**의 pane 을 조작하므로(오발사) 스킬과 bin 헬퍼가 이중으로 차단한다.
+A. **예 — orca 모드로 동작** (SKILL §환경 판정). board·inbox 통신은 파일 기반이라 동일하고, 워커 spawn 헬퍼(`deft-claudex/claude-native-spawn`)도 **orca 를 자동 분기 지원**한다(`orca terminal split --command` 원샷 기동 — 실측 검증. `DEFT_BASE_WORKSPACE` 만 불요). 달라지는 것은 ① 노크가 ntpPush(inbox) 1차 + `orca terminal send` 폴백(`term_*` 핸들 등록 시) ② pane 비율 조정 불가(Orca 는 resize CLI 미지원 — UI 드래그로 조정) ③ pane 정리는 `orca terminal close` 세 가지다. ⚠️ orca 안에서 cmux CLI 를 치면 **별도 실행 중인 cmux 앱**의 pane 을 조작하므로(오발사) 스킬과 bin 헬퍼가 이중으로 차단한다.
 
 ### Q7-1. 버스를 쓰려고 따로 등록할 게 있나?
 A. **없음**. 버스 MCP 는 워커 spawn 명령에 인라인 주입되고, Lead 는 헬퍼를 Bash 로 직접 호출. 사용자 환경 파일은 건드리지 않으며, 헬퍼는 첫 실행 시 `~/.local/bin/` 에 자동 설치.

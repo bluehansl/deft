@@ -2,7 +2,8 @@
 # deft-claudex-native-spawn — Claude(Lead) 팀에 claudex 를 "네이티브 팀원"으로 붙인다.
 #
 # claudex 0.139.1+ 는 Claude Code 의 네이티브 팀원 통신(파일 inbox 프로토콜)을 말한다
-# (--claude-team / --claude-team-agent binding). 이 헬퍼는 그 claudex 를 cmux pane 에 기동해
+# (--claude-team / --claude-team-agent binding). 이 헬퍼는 그 claudex 를 pane 에 기동해
+# — **cmux / Orca 양쪽 지원** (ORCA_* 존재 시 orca 모드 자동 분기: orca terminal split --command) —
 # Lead 의 팀 inbox 를 watch 시키므로, 이후 Lead 는 **평범한 SendMessage(to:"<agent-name>")** 로
 # claudex 와 네이티브 통신한다(버스/노크 불요). claudex 답신은 Lead inbox → Lead 에 자동 주입.
 #
@@ -21,12 +22,14 @@
 #   DEFT_BUS_DIR        (회의 모드) board 버스 세션 dir. 설정 시 claudex 에 -c mcp_servers.bus 주입 →
 #                       팀 binding(NTP 깨우기·identity UI) + 버스 MCP(board) 공존. 미설정(작업 모드)=순수 NTP 팀원.
 #   DEFT_BUS_BIN        multi-round-bus 경로 오버라이드(미설정 시 PATH).
-#   DEFT_BASE_WORKSPACE pane 분할 대상 워크스페이스(예: workspace:10). cmux new-split 은 --surface 단독을
-#                       해석 못 한다(window 컨텍스트 필요) → 비대화형 Bash·resume 후 caller stale 환경에선
-#                       반드시 --workspace 로 분할해야 한다(실측: --surface 는 not_found). 미설정 시
-#                       cmux identify 의 caller→focused workspace_ref 폴백. Lead 워크스페이스 명시 권장.
+#   DEFT_BASE_WORKSPACE (cmux 모드 전용) pane 분할 대상 워크스페이스(예: workspace:10). cmux new-split 은
+#                       --surface 단독을 해석 못 한다(window 컨텍스트 필요) → 비대화형 Bash·resume 후 caller
+#                       stale 환경에선 반드시 --workspace 로 분할해야 한다(실측: --surface 는 not_found).
+#                       미설정 시 cmux identify 의 caller→focused workspace_ref 폴백. orca 모드는 불요.
+#   DEFT_TUI_WAIT_MS    (orca 모드) tui-idle 대기 timeout ms (기본 90000).
 #
-# 출력: JSON 한 줄 {spawned,team,surface,inbox,bin} + 다음 안내.
+# 출력: JSON 한 줄 — cmux: {spawned,team,surface,tmuxPaneId,inbox,bin,registered}
+#                  orca: {spawned,team,env:"orca",terminal,surface:"",inbox,bin,registered} + 다음 안내.
 set -u
 
 TEAM_ID="${1:?usage: deft-claudex-native-spawn <team-session-id> <agent-name> [cwd]}"
@@ -44,13 +47,75 @@ CLAUDE_HOME="${CLAUDE_CONFIG_DIR:-$HOME/.claude}"
 TEAM_DIR="$CLAUDE_HOME/teams/$TEAM_ID"
 INBOX="$TEAM_DIR/inboxes/$AGENT.json"
 
-# 🚨 orca 오발사 가드 — Orca 터미널 안에서도 cmux CLI 가 소켓으로 별도 cmux 앱에 연결돼
-#   `cmux identify` 가 성공하고 new-split/send 가 엉뚱한 앱의 pane 을 조작한다(실측).
-#   본 헬퍼는 cmux pane 기동 전용 → orca 모드는 차단하고 SKILL.md 의 orca 분기(orca terminal
-#   split/send/wait 직접 기동)를 안내한다.
+# ── orca 모드 (Orca 1.4.150+ 실측) — cmux CLI 호출 전면 금지(별도 cmux 앱 오발사) → orca terminal 기동 ──
+#   `orca terminal split --command` 가 "pane 생성 + 명령 실행" 원샷이라, cmux 의 빈 pane send·
+#   lazy-init readiness 문제가 구조적으로 없다(실측 — && 체인 셸 해석 확인). anchor 는 직전 워커
+#   (.last-worker-terminal — orca 전용 상태파일) 아래 vertical(상하), 첫 헬퍼 워커는 Lead 터미널
+#   ($ORCA_TERMINAL_HANDLE) 우측 horizontal(좌우) → "Lead | 워커 상하 스택" 레이아웃을 orca 로 재현.
+#   ⚠️ Orca 는 resize CLI 미지원 — rebalancing 호출 없음(비율은 UI 드래그).
 if [ -n "${ORCA_WORKTREE_ID:-}" ] || [ -n "${ORCA_TERMINAL_HANDLE:-}" ]; then
-  echo "ERROR: orca 모드 감지 — 본 헬퍼는 cmux 전용(오발사 방지 차단). orca 모드 워커 기동은 multi-round SKILL.md 의 orca 분기(orca terminal split/send/wait) 절차를 따르라." >&2
-  exit 1
+  command -v orca >/dev/null 2>&1 || { echo "ERROR: orca CLI 없음 — Orca 관리 터미널에서 실행하라." >&2; exit 1; }
+  command -v jq >/dev/null 2>&1 || { echo "ERROR: jq 필요(orca handle 파싱)" >&2; exit 1; }
+
+  # 회의 모드 board 버스(선택) — cmux 경로와 동일한 -c mcp_servers.bus 인라인 주입
+  BUS_OPT=""
+  if [ -n "${DEFT_BUS_DIR:-}" ]; then
+    BUS_BIN_PATH="${DEFT_BUS_BIN:-$(command -v multi-round-bus 2>/dev/null || true)}"
+    if [ -n "$BUS_BIN_PATH" ]; then
+      BUS_OPT=" -c \"mcp_servers.bus={command=\\\"$BUS_BIN_PATH\\\",args=[\\\"mcp\\\"],env={MULTI_ROUND_SESSION_DIR=\\\"$DEFT_BUS_DIR\\\",BUS_PARTICIPANT=\\\"$AGENT\\\"}}\""
+    else
+      echo "WARN: DEFT_BUS_DIR 설정됐으나 multi-round-bus 미발견 — board 버스 없이 팀원만 기동." >&2
+    fi
+  fi
+  LAUNCH="cd '$CWD' && exec '$CLAUDEX_BIN' --dangerously-bypass-approvals-and-sandbox --claude-team '$TEAM_ID' --claude-team-agent '$AGENT'$BUS_OPT"
+
+  mkdir -p "$TEAM_DIR" 2>/dev/null
+  LASTTERM_FILE="$TEAM_DIR/.last-worker-terminal"
+  PREV_TERM="$(cat "$LASTTERM_FILE" 2>/dev/null)"
+  ANCHOR="$PREV_TERM"; SPLIT_DIR=vertical                                     # 2번째+: 직전 워커 아래(상하)
+  [ -n "$ANCHOR" ] || { ANCHOR="${ORCA_TERMINAL_HANDLE:-}"; SPLIT_DIR=horizontal; }  # 첫 워커: Lead 우측(좌우)
+  SPLIT_OUT="$(orca terminal split --terminal "$ANCHOR" --direction "$SPLIT_DIR" --command "$LAUNCH" --json 2>/dev/null)"
+  HANDLE="$(printf '%s' "$SPLIT_OUT" | jq -r '.result.split.handle // empty' 2>/dev/null)"
+  if [ -z "$HANDLE" ] && [ -n "$PREV_TERM" ]; then
+    # 직전 워커 handle stale(닫힘/재시작) — Lead 터미널 기준으로 재시도
+    SPLIT_OUT="$(orca terminal split --terminal "${ORCA_TERMINAL_HANDLE:-}" --direction horizontal --command "$LAUNCH" --json 2>/dev/null)"
+    HANDLE="$(printf '%s' "$SPLIT_OUT" | jq -r '.result.split.handle // empty' 2>/dev/null)"
+  fi
+  if [ -z "$HANDLE" ]; then
+    # 최후 폴백 — 새 터미널(create). 스키마 편차 대비 재귀 handle 캡처.
+    SPLIT_OUT="$(orca terminal create --worktree active --command "$LAUNCH" --json 2>/dev/null)"
+    HANDLE="$(printf '%s' "$SPLIT_OUT" | jq -r '[..|.handle? // empty]|map(select(.!=""))|first // empty' 2>/dev/null)"
+  fi
+  [ -n "$HANDLE" ] || { echo "ERROR: orca terminal 기동 실패: $SPLIT_OUT" >&2; exit 1; }
+  printf %s "$HANDLE" > "$LASTTERM_FILE"
+
+  # TUI 부팅 대기(readiness 등가 — orca 내장 tui-idle 판정). 실패해도 계속(기동은 split 시 이미 시작).
+  orca terminal wait --terminal "$HANDLE" --for tui-idle --timeout-ms "${DEFT_TUI_WAIT_MS:-90000}" --json >/dev/null 2>&1 \
+    || echo "WARN: tui-idle 대기 timeout — claudex 부팅 지연 가능(진행은 계속)." >&2
+
+  # 팀 config members 등록 — cmux 경로와 동일 로직(§아래). tmuxPaneId 는 빈 값(라우팅은 name 기반이라 무관).
+  REGISTERED=0
+  CFG="$TEAM_DIR/config.json"
+  if [ -f "$CFG" ]; then
+    if jq -e --arg n "$AGENT" 'any(.members[]?; .name==$n)' "$CFG" >/dev/null 2>&1; then
+      REGISTERED="already"
+    else
+      TS="$(date +%s)000"
+      if jq --arg n "$AGENT" --arg tid "$TEAM_ID" --arg cwd "$CWD" --argjson ts "$TS" \
+          '.members += [{agentId:($n+"@"+$tid), name:$n, color:"cyan", joinedAt:$ts, tmuxPaneId:"", subscriptions:[], agentType:"claude", model:"fable", prompt:"claudex 네이티브 팀원(deft-claudex-native-spawn/orca)", planModeRequired:false, cwd:$cwd, backendType:"tmux", isActive:true}]' \
+          "$CFG" > "$CFG.deft-tmp" 2>/dev/null && mv "$CFG.deft-tmp" "$CFG"; then
+        REGISTERED=1
+      else
+        rm -f "$CFG.deft-tmp" 2>/dev/null
+        echo "WARN: config.json members 등록 실패 — 팀원↔claudex 통신이 안 될 수 있다(Lead↔claudex 는 정상)." >&2
+      fi
+    fi
+  fi
+
+  printf '{"spawned":"%s","team":"%s","env":"orca","terminal":"%s","surface":"","inbox":"%s","bin":"%s","registered":"%s"}\n' \
+    "$AGENT" "$TEAM_ID" "$HANDLE" "$INBOX" "$CLAUDEX_BIN" "$REGISTERED"
+  echo "다음: Lead 는 SendMessage(to:\"$AGENT\") 로 네이티브 통신. pane 정리: orca terminal close --terminal $HANDLE"
+  exit 0
 fi
 
 # cmux 환경 가드 (deft-cmux-shim 이 PATH 보강했을 수 있음)

@@ -4,6 +4,18 @@
 
 형식은 [Keep a Changelog](https://keepachangelog.com/ko/1.1.0/) 를 따르며, 버전 체계는 [Semantic Versioning](https://semver.org/lang/ko/) 을 사용합니다 (`claude-X.Y.Z` / `codex-X.Y.Z` 접두).
 
+## [claude-2.48.0] - 2026-07-24
+
+> **Orca 호환 완결 — spawn 헬퍼 orca 네이티브 지원 (claudex/codex 워커 orca 에서 실동)** — 2.47.x 는 orca 모드에서 spawn 헬퍼를 "차단 + 수동 절차 안내"로 처리했으나, multi-round 회의·작업 모드가 claudex 워커 스폰에 의존하므로 orca 실사용에 불충분. 헬퍼가 orca 를 **자동 분기 실행**하도록 승격 — 호출법은 cmux 와 동일(`DEFT_BASE_WORKSPACE` 만 불요). **전 경로 실측 검증 완료** (Orca 1.4.150 실환경: split `--command` 원샷·`&&` 셸 해석·`.result.split.handle` 스키마·LAUNCH/BUS_OPT 인라인 조립·`.last-worker-terminal` 스택 연쇄·members 등록·`terminal close` ptyKilled — mock claudex 2-워커 시나리오).
+
+### Added
+- **`deft-claudex-native-spawn` / `deft-claude-native-spawn` orca 경로** — ORCA_* 감지 시: anchor 결정(`.last-worker-terminal` 직전 워커 아래 vertical → 없으면 Lead `$ORCA_TERMINAL_HANDLE` 우측 horizontal) → `orca terminal split --command "<LAUNCH>"` **원샷 기동**(빈 pane send·lazy-init readiness 문제가 구조적으로 없음) → stale anchor 시 Lead 기준 재시도 → 최후 `terminal create` 폴백 → `wait --for tui-idle`(best-effort, `DEFT_TUI_WAIT_MS` 기본 90000) → members 등록(공통 로직) → JSON `{env:"orca",terminal:"term_*",...}`. `DEFT_BUS_DIR` board 버스 주입(회의 모드)도 동일 지원.
+- **`multi-round-bus` orca 노크** — orca 모드에서 surface 가 `term_*` 핸들이면 `orca terminal send --terminal` 로 노크(등가 경로). Lead/워커 register `--surface` 에 orca handle 사용 가능 — orca 회의가 cmux 와 동등한 노크 체계 확보(1차는 여전히 ntpPush).
+
+### Changed
+- **multi-round `SKILL.md`/`GUIDE.md`** — 용례 1·3-A·4-T·전제·환경 판정 🟠 를 "직접 기동 절차" → "헬퍼 그대로(자동 분기)" 로 승격, 대응표·5-B pane 정리를 `orca terminal close`(실측) 확정, register 에 orca handle `--surface` 병행.
+- **agent-teams/multi-check `SKILL.md`** — orphan 정리 "UI 수동" → `orca terminal list`→`close` 보강.
+
 ## [claude-2.47.4] - 2026-07-24
 
 > **Orca 호환 검증 후속 — 잔존 "cmux 외부" 표현 정정** — 전체 스킬 문서를 재검토해 구 환경 판정 어휘가 남은 2곳 정정: ① multi-round NTP 폴백 조건의 "cmux 외부" → "pane 환경 외부(`DEFT_ENV=none`)" (orca 는 pane 환경이므로 NTP 폴백 사유 아님 — 방치 시 orca 에서 NTP 를 버스로 오폴백) ② agent-teams §2-3 워처 폴백의 "cmux 외부 시 skip" → "cmux 모드 아니면(orca/none) skip".
