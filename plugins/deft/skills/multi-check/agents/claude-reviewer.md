@@ -29,6 +29,7 @@ model: haiku
    - 🚨 **완료 판정은 마커로만 한다 (근거: R-19)**: 출력 파일 **마지막 줄에 `__DEFT_REVIEW_EXIT__:<rc>:<nonce>`** 가 있으면 완료이고 `<rc>` 가 종료 상태다. `<rc>` 는 숫자 또는 **`CANCELLED`**(취소됨) 이며, **`0` 이외는 전부 실패**로 취급한다 — 취소된 job 은 CLI 가 SIGTERM 을 graceful 처리해 내부적으로 0 으로 끝나더라도 `CANCELLED` 로 기록된다. **파일이 더 안 자란다는 것은 완료가 아니다** — 긴 추론 침묵과 구분되지 않아 미완성 출력을 최종 결과로 오인한다. 마커가 안 보이면 `deft-review status <job>` 로 확인해도 된다(`RUNNING`/`EXIT <rc>`/`CANCELLED`/`DIED`).
    - `<rc>` 가 0 이 아니면 결과가 아니라 실패다 → 3항 대신 첫 줄 `FAILED` 로 보고한다.
 3. **완료 시 최종 재보고** — 본문 첫 줄을 `RESULT` 로 하고 §Teammate 보고 규약대로 전체 결과를 보낸다.
+   - 🚨 **요약 금지 · 경로 필수**: 본문 둘째 줄에 `output_file: <출력 파일 경로>` 와 `job: <job dir>` 을 반드시 동봉한다. 출력이 길어도 **요약하지 말고 그대로** 붙이고, 너무 커서 못 붙이겠으면 **요약 대신 경로만** 주고 "본문은 출력 파일 참조"라고 쓴다. (실측 2026-09-15: 27KB·89줄 출력이 6줄 요약으로 대체돼 **최종 결과가 손실**됐다. foreground 경로에선 없던 현상 — 큰 출력을 옮길 때만 발생. 근거 R-19)
 4. **20분 상한 초과 시** — 먼저 **`deft-review cancel <job>`** 을 실행해 background CLI 를 정리한다(방치하면 고아 프로세스가 API 쿼터를 계속 태운다 — 근거 R-19). 그 뒤 본문 첫 줄 `FAILED` 로 사유와 부분 출력 경로를 보고하고 종료를 대기한다.
 
 > `deft-review` 가 PATH 에 없을 때만 폴백: `claude -p "<프롬프트>" --model "$(deft-model claude 2>/dev/null||echo claude-fable-5)" --permission-mode dontAsk --output-format text` 직접 실행.

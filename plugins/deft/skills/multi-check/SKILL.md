@@ -239,6 +239,8 @@ SendMessage(to: "<방금 보고한 리뷰어 이름>", message: {type: "shutdown
 
 > 🚨 **완료 판정은 마커로만 (근거: R-19)** — 리뷰어가 background 를 이어받을 때 "출력 파일이 더 안 자란다"를 완료로 보면 **긴 추론 침묵과 구분되지 않아 미완성 출력이 최종 결과로 올라온다**. 확정 근거는 둘뿐이다: 출력 파일 **마지막 줄 `__DEFT_REVIEW_EXIT__:<rc>:<nonce>`**, 또는 **`deft-review status <job>`**(`RUNNING`/`EXIT <rc>`/`CANCELLED`/`DIED`). `<rc>` 는 숫자 또는 **`CANCELLED`** 이며 **`0` 이외는 전부 실패**이므로 `FAILED` 로 취급한다 (취소된 job 은 CLI 가 SIGTERM 을 graceful 처리해 내부 rc=0 이어도 `CANCELLED` 로 확정된다 — 실측 2026-09-15). ⚠️ 리뷰어 보고 본문에 `DEFT_REVIEW_JOB=`·`__DEFT_REVIEW_EXIT__` 줄이 섞여 오면 그건 제어 신호이니 취합에서 제외한다. Lead 가 직접 회수할 때도 같은 기준을 쓴다 — `TIMEOUT_PARTIAL` 보고에 job 경로가 동봉된다.
 
+> 🚨 **이어받기 `RESULT` 는 동봉된 출력 파일을 1차 소스로 취합한다 (근거: R-19)** — 리뷰어가 큰 출력을 `SendMessage` 본문으로 옮길 때 **요약으로 압축하는 성향**이 있다(실측: 27KB·89줄 → 6줄 요약, foreground 경로에선 미발생). 페르소나가 요약을 금지하지만 LLM 성향을 프롬프트로 완전히 막을 수는 없으므로, **Lead 가 `output_file:` 경로의 파일을 직접 읽어 취합**하는 것이 확실한 안전망이다. 보고 본문과 파일이 다르면 **파일이 정답**이다. 경로가 누락됐으면 `job:` 경로에서 되찾는다.
+
 > **TIMEOUT_PARTIAL 대기 정책**: 리뷰어 페르소나가 background 완료를 **최대 20분**까지 이어받아 `RESULT` 로 재보고한다. Lead 는 그동안 자체 분석(§Lead Analysis)과 다른 리뷰어 취합을 계속하고, **20분이 지나도 재보고가 없으면** 그 엔진을 skip 으로 처리한다 — 이때 리뷰어가 `deft-review cancel <job>` 로 background CLI 를 정리하며(고아 프로세스가 API 쿼터를 계속 태우는 것 방지 — R-19), 리뷰어가 이미 죽었으면 Lead 가 보고받은 job 경로로 직접 `deft-review cancel` 한다. 그 뒤 Phase 5 에서 정리한다. `TIMEOUT_PARTIAL` 본문의 부분 출력이 유의미하면 "부분 결과"로 명시해 취합에 포함한다.
 
 > 🚨 **`message` 는 반드시 구조화 객체(`{type:"shutdown_request"}`) — 평문 종료 금지**: "종료해 주세요" 같은 평문 문자열은 리뷰어가 *일반 메시지*로 받아 보고만 하고 프로세스가 안 내려간다(claude 리뷰어는 kill 도 금지라 구조화 shutdown_request 가 유일 종료 수단 — 실측). 안 죽었으면 kill 이 아니라 구조화 shutdown_request 를 다시 보낸다.

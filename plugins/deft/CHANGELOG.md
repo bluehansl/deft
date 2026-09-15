@@ -4,6 +4,27 @@
 
 형식은 [Keep a Changelog](https://keepachangelog.com/ko/1.1.0/) 를 따르며, 버전 체계는 [Semantic Versioning](https://semver.org/lang/ko/) 을 사용합니다 (`claude-X.Y.Z` / `codex-X.Y.Z` 접두).
 
+## [claude-2.53.2] - 2026-09-15
+
+> **이어받기 재보고의 요약 손실 방지 (R-19 보강)** — `claude-2.53.1` 재검증(cancel 모순·제어 신호 누출 **수정 확인, 회귀 없음**)에서 새로 관측된 성향 1건 반영. 이 검증에서 "이어받기 → 마커 완료 → `RESULT` 재보고" 경로가 자연 완료(92초)로 **처음 실측**됐다.
+
+### Added
+- multi-check `agents/*-reviewer.md` 3종 §실행 3항 — **`output_file:`·`job:` 경로 동봉 필수 + 요약 금지**. 출력이 커서 못 붙이겠으면 **요약 대신 경로만** 주고 "본문은 출력 파일 참조"로 쓴다(요약을 강요받는 상황 자체를 제거).
+- multi-check `SKILL.md` §Phase 4 — **이어받기 `RESULT` 는 동봉된 출력 파일을 1차 소스로 취합**한다. 보고 본문과 파일이 다르면 **파일이 정답**. 경로 누락 시 `job:` 에서 되찾는다.
+- codex 포트 `SKILL.md` (4) — 포트는 출력이 애초에 파일로 떨어져 **구조적으로 이 문제에 면역**임을 명시. 단 pane 스크롤백을 옮겨 적으면 같은 손실이 나므로 "반드시 출력 파일을 읽어 취합" 명시.
+- `RATIONALE.md` R-19 — 요약 손실 관측과 "처방의 방향"(프롬프트 강화보다 구조적 안전망) 기록.
+
+### Verified (E2E 재검증 — 다른 세션)
+- **cancel 판정 모순 수정 확인 (3경로)** — Lead 직접·리뷰어 강제 변형 2경로에서 마커 `__DEFT_REVIEW_EXIT__:CANCELLED:<nonce>` = `status CANCELLED` = `exit_code CANCELLED` 일치, `cancel_requested` 존재, 래퍼 rc 143, 프로세스 그룹·래퍼 잔존 0, 재호출 `ALREADY_DONE CANCELLED` 멱등, **호출자·Lead 세션 생존**.
+- **제어 신호 누출 수정 확인** — 정상 경로 1건 + cancel 변형 2건의 보고 본문에 `__DEFT_REVIEW_EXIT__`·`DEFT_REVIEW_JOB=` **0건**, `job:` 줄은 경로만.
+- **`$!` pgid 우려 해당 없음** — 헬퍼는 `"$@" &` 단순 명령(파이프라인 아님)이라 `$!` 가 CLI 자신의 pid 이고 pgid 는 `ps -o pgid=` 실측값을 읽는다. 실측 pid=pgid 일치 확인. (리뷰어 지적은 `cmd | tee &` 류에만 해당)
+
+## [codex-1.27.2] - 2026-09-15
+
+### Changed
+- multi-check `SKILL.md` (4) — 출력 파일이 1차 소스임을 명시(포트는 구조적으로 요약 손실에 면역). pane 스크롤백 전사 금지.
+- `bin/deft-review` — Claude 측과 동일 유지(이번 변경은 문서뿐). **양 트리 바이트 동일.**
+
 ## [claude-2.53.1] - 2026-09-15
 
 > **E2E 검증에서 잡힌 취소 경로 판정 모순 수정 (R-19 보강)** — `claude-2.53.0` 을 다른 세션이 정규 경로로 E2E 검증(5항목 전부 통과·호출자 사망 회귀 없음)하면서 **초판 `cancel` 의 실제 결함 1건 + 제어 신호 누출 1건**을 발견해 수정.

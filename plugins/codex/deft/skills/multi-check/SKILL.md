@@ -149,6 +149,9 @@ done
 # 엔진별 성패 판정: `EXIT 0` 만 결과로 취급. 그 외(`EXIT n≠0` / `CANCELLED` / `DIED`)는 실패로 skip 하고 사유를 기록한다.
 #   ⚠️ 취소된 job 은 CLI 가 SIGTERM 을 graceful 처리해 내부 rc=0 이어도 `CANCELLED` 로 확정된다(실측 2026-09-15).
 #   출력 파일을 취합할 때 `DEFT_REVIEW_JOB=`·`__DEFT_REVIEW_EXIT__` 줄은 제어 신호이니 본문에서 제외한다.
+#   ✅ 포트는 reviewer 출력이 애초에 파일(`$OUT_DIR/<engine>.out`)로 떨어지므로 **파일이 곧 1차 소스**다 —
+#   Claude 측에서 관측된 '리뷰어가 큰 출력을 요약해 보고해 결과가 손실되는' 문제(R-19)가 구조적으로 발생하지 않는다.
+#   취합은 반드시 이 파일을 읽어서 한다(pane 화면 스크롤백을 옮겨 적지 말 것 — 잘림·요약 위험).
 for J in "$OUT_DIR"/job-*; do
   [ -d "$J" ] && echo "$(cat "$J/engine" 2>/dev/null): $(deft-review status "$J")"
 done
