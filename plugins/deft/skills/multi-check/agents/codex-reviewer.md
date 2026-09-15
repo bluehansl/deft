@@ -16,7 +16,7 @@ Codex 계열 CLI 로 주어진 질문을 검토하고 결과를 반환한다. CL
 - 권장(긴/특수문자 프롬프트 안전): `printf '%s' '<검토 대상 프롬프트>' | deft-review codex`
 - 짧은 프롬프트: `deft-review codex "<검토 대상 프롬프트>"`
 
-헬퍼 출력을 **그대로** 사용한다(요약·수정 금지). stderr 의 MCP 경고는 무시. 결과는 `gpt-5.5` + xhigh reasoning 의 claudex/codex 출력이다.
+헬퍼 출력을 **그대로** 사용한다(요약·수정 금지). 🚨 **단 stderr 의 제어 줄은 보고 본문에서 제외한다** — `DEFT_REVIEW_JOB=…` 과 `__DEFT_REVIEW_EXIT__:…` 두 줄은 deft 내부 제어 신호이고 검토 결과가 아니다. Bash 도구 결과에는 stdout·stderr 가 섞여 오므로 통째로 붙이지 말고, job 경로는 `job:` 줄로만 옮긴다(실측 2026-09-15: 이 안내가 없을 때 보고 본문 말미에 마커가 그대로 붙어 왔다). stderr 의 MCP 경고는 무시. 결과는 `gpt-5.5` + xhigh reasoning 의 claudex/codex 출력이다.
 
 **실행 규율 (필수 — 노이즈·지연 방지)**: `deft-review` 는 **foreground 로 한 번** 실행하고 그 자리에서 완료를 기다린다. **선제적 background 실행(`run_in_background`/ctrl+b)·Monitor 설정·결과파일 반복 Read(폴링) 금지** — 불필요한 반복 보고를 유발한다(실측 — claudex web search 가 길어질 때 발생).
 
@@ -26,7 +26,7 @@ Codex 계열 CLI 로 주어진 질문을 검토하고 결과를 반환한다. CL
    `SendMessage(to:"team-lead", summary:"codex timeout - background 계속 진행", message:"TIMEOUT_PARTIAL\n출력 파일: <Bash 가 알려준 output 경로>\njob: <stderr 첫 줄 DEFT_REVIEW_JOB= 값>\n<받은 부분 출력>")`
    ⚠️ 이 센티널이 없으면 Lead 가 **결과 보고로 오인**해 `shutdown_request` 를 보내고, 그 순간 background CLI 까지 함께 죽어 거의 완성된 분석이 폐기된다(실측 사고 2026-09-07 — 리뷰어 전원 결과 0).
 2. **완료를 이어받아 대기** — Bash 가 timeout 시 **출력 파일 경로를 알려준다**(`Output is being written to: …`). 그 파일을 `Read` 로 확인하며 완료를 기다린다 — 이때만 폴링 허용: 확인 간격 **60초 이상**, 총 대기 **20분** 상한. 중간 경과는 보고하지 않는다(노이즈 방지). ⚠️ `BashOutput` 은 이 하네스에서 deprecated 다 — **출력 파일 `Read` 가 정식 경로**(실측 확인 2026-09-07).
-   - 🚨 **완료 판정은 마커로만 한다 (근거: R-19)**: 출력 파일 **마지막 줄에 `__DEFT_REVIEW_EXIT__:<rc>:<nonce>`** 가 있으면 완료이고 `<rc>` 가 종료 상태다. **파일이 더 안 자란다는 것은 완료가 아니다** — 긴 추론 침묵과 구분되지 않아 미완성 출력을 최종 결과로 오인한다. 마커가 안 보이면 `deft-review status <job>` 로 확인해도 된다(`RUNNING`/`EXIT <rc>`/`CANCELLED`/`DIED`).
+   - 🚨 **완료 판정은 마커로만 한다 (근거: R-19)**: 출력 파일 **마지막 줄에 `__DEFT_REVIEW_EXIT__:<rc>:<nonce>`** 가 있으면 완료이고 `<rc>` 가 종료 상태다. `<rc>` 는 숫자 또는 **`CANCELLED`**(취소됨) 이며, **`0` 이외는 전부 실패**로 취급한다 — 취소된 job 은 CLI 가 SIGTERM 을 graceful 처리해 내부적으로 0 으로 끝나더라도 `CANCELLED` 로 기록된다. **파일이 더 안 자란다는 것은 완료가 아니다** — 긴 추론 침묵과 구분되지 않아 미완성 출력을 최종 결과로 오인한다. 마커가 안 보이면 `deft-review status <job>` 로 확인해도 된다(`RUNNING`/`EXIT <rc>`/`CANCELLED`/`DIED`).
    - `<rc>` 가 0 이 아니면 결과가 아니라 실패다 → 3항 대신 첫 줄 `FAILED` 로 보고한다.
 3. **완료 시 최종 재보고** — 본문 첫 줄을 `RESULT` 로 하고 §Teammate 보고 규약대로 전체 결과를 보낸다.
 4. **20분 상한 초과 시** — 먼저 **`deft-review cancel <job>`** 을 실행해 background CLI 를 정리한다(방치하면 고아 프로세스가 API 쿼터를 계속 태운다 — 근거 R-19). 그 뒤 본문 첫 줄 `FAILED` 로 사유와 부분 출력 경로를 보고하고 종료를 대기한다.

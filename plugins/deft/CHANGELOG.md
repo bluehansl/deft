@@ -4,6 +4,26 @@
 
 형식은 [Keep a Changelog](https://keepachangelog.com/ko/1.1.0/) 를 따르며, 버전 체계는 [Semantic Versioning](https://semver.org/lang/ko/) 을 사용합니다 (`claude-X.Y.Z` / `codex-X.Y.Z` 접두).
 
+## [claude-2.53.1] - 2026-09-15
+
+> **E2E 검증에서 잡힌 취소 경로 판정 모순 수정 (R-19 보강)** — `claude-2.53.0` 을 다른 세션이 정규 경로로 E2E 검증(5항목 전부 통과·호출자 사망 회귀 없음)하면서 **초판 `cancel` 의 실제 결함 1건 + 제어 신호 누출 1건**을 발견해 수정.
+
+### Fixed
+- **🚨 취소된 job 이 "성공 rc=0" 으로 보이던 모순** — `cancel` 초판은 시그널 후 `exit_code` 를 덮어썼으나, **claudex 는 SIGTERM 을 graceful 처리해 `exit 0`** 으로 끝나 래퍼가 먼저 `exit_code=0` + 마커 `:0:` 를 기록하고 **마커는 이미 stderr 로 나가 되돌릴 수 없었다**. 마커로 판정하면 잘린 출력이 성공으로 취합되고, 두 주체가 같은 파일을 경쟁적으로 써서 `status` 가 `EXIT 0` 이 될 여지도 있었다. → `cancel` 이 시그널 **전에** `cancel_requested` 플래그만 쓰고, 래퍼가 `wait` 후 그 플래그를 보고 자식 rc 와 무관하게 `exit_code=CANCELLED` + 마커 `__DEFT_REVIEW_EXIT__:CANCELLED:<nonce>` 를 기록한다(`status` 도 플래그 우선). `exit_code` 작성자가 래퍼 하나로 줄어 경쟁이 사라진다. **실측 재검증**: status·exit_code·마커 3곳 모두 `CANCELLED`, 프로세스 그룹 잔존 0, 호출자 생존, 재호출 `ALREADY_DONE CANCELLED` 멱등.
+- **제어 신호가 보고 본문에 누출** — 헬퍼 stdout 은 깨끗했으나 **리뷰어가 Bash 결과(stdout+stderr 병합)를 통째로 붙여** `__DEFT_REVIEW_EXIT__`·`DEFT_REVIEW_JOB=` 줄이 검토 결과에 섞였다(E2E 실측: claude-reviewer 본문 말미, codex-reviewer 의 `job:` 줄 접두어). 첫 줄 센티널 판별엔 무해하나 사용자가 제어 문자열을 결과로 읽는다. → 페르소나 3종·`SKILL.md` 에 "제어 두 줄은 보고 본문에서 제외, job 경로는 `job:` 줄로만" 명시.
+
+### Changed
+- 페르소나 3종·`SKILL.md` — 마커 `<rc>` 값에 **`CANCELLED`** 가 올 수 있음을 명시하고 **`0` 이외는 전부 실패**로 못박았다. "종료 코드 0 = 성공" 은 취소 경로에서 거짓이다(취소는 CLI 입장에서 정상 종료).
+- `RATIONALE.md` R-19 — 취소 판정 모순·제어 신호 누출 2건과 교훈 추가.
+- `PENDING.md` — orca `in-process` 리뷰어에서 Phase 5 ② 의 `pgrep --agent-id` 잔존 판정이 **항상 0** 이라 무의미한 문제 등재(E2E 부수 관찰, 우선순위 낮음 — `shutdown_approved` 수신으로 충분히 확인 가능하므로 실害 없음. cmux 모드에선 현행 유효하므로 모드 분기 검토 필요).
+
+## [codex-1.27.1] - 2026-09-15
+
+### Changed
+- `bin/deft-review` — Claude 측 `claude-2.53.1` 과 동일(`cancel_requested` 플래그·래퍼 단일 작성자·status 플래그 우선). **양 트리 바이트 동일 유지.**
+- multi-check `SKILL.md` (4) 성패 판정 — `EXIT 0` 만 결과, `CANCELLED`·`DIED` 도 실패로 집계. 취소된 job 의 CLI 내부 rc=0 주의와 제어 줄 제외 명시.
+- multi-check `agents/*-reviewer.md` 3종 — `<rc>` 에 `CANCELLED` 가 올 수 있음 + 제어 줄 제외 안내 추가.
+
 ## [claude-2.53.0] - 2026-09-15
 
 > **완료 판정을 exit code 로 확정 + 양 트리 `deft-review` 단일화 (RATIONALE R-19)** — R-18 처방을 정규 경로로 검증하던 multi-check 실행에서 두 리뷰어가 **독립적으로** 같은 약점을 지적했다: 이어받기의 완료 판정이 "출력 파일이 더 안 자란다"에 의존하는데, xhigh 추론의 **긴 침묵 구간과 구분되지 않아 미완성 출력이 최종 결과로 취합**될 수 있다. 종전 `deft-review` 는 마지막 줄이 `exec` 라 exit code 를 기록할 주체가 없었다.

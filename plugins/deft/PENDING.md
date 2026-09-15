@@ -12,6 +12,12 @@
 (없음 — 진행 중 항목은 완료 시 CHANGELOG 로 이관)
 ## 보류 / 대기
 
+- [ ] **multi-check Phase 5 ② 잔존 판정이 orca in-process 리뷰어에서 무의미** (2026-09-15 등재 · 우선순위 낮음)
+  - **관측(E2E 검증)**: Phase 5 ② 의 `pgrep -f -- "--agent-id $R@$TEAM_NAME"` 는 orca `backendType=in-process` 리뷰어에서 **항상 0** 이다 — 별도 프로세스가 아니기 때문. "정상 종료"와 "판정 불가"를 구분하지 못한다.
+  - **현재 대응**: `shutdown_approved` 수신으로 종료를 확인하면 충분하다(E2E 에서 그렇게 확인). 즉 실害는 없고, 가드가 조용히 무효인 상태다.
+  - **검토할 것**: in-process 모드에서의 잔존 판정 기준(예: `shutdown_approved` 미수신 + 일정 시간 경과로만 판정). cmux(별도 pane) 모드에서는 현행 pgrep 가 유효하므로 **모드 분기**가 필요하다.
+
+
 - [ ] **multi-check 리뷰어 CLI detach — 리뷰어 종료와 CLI 수명 분리** (2026-09-07 등재 · P2)
   - **배경**: 2026-09-07 사고(RATIONALE R-18)에서 리뷰어 Agent 종료가 background 로 밀린 CLI 까지 함께 죽였다. `claude-2.51.0` 은 **센티널 분기로 "죽이지 않게"** 해결했지만(Lead 가 shutdown 을 보류), CLI 수명이 여전히 리뷰어 프로세스에 묶여 있다는 구조는 그대로다.
   - **제안**: `deft-review` 가 CLI 를 `setsid` 등으로 부모와 분리해 띄우고 출력을 파일로 tee → 리뷰어가 언제 종료돼도 결과 파일이 완성된다. Codex 포트가 이미 이 성질을 갖고 있다(pane 독립 프로세스 + tee) — 사고가 Claude 측에서만 난 이유.

@@ -146,7 +146,9 @@ for _ in $(seq 1 300); do
   [ "$DONE" -ge "$REVIEWER_COUNT" ] && break
   sleep 2
 done
-# 엔진별 성패 판정: `EXIT 0` 만 결과로 취급. 그 외(EXIT n≠0 / DIED)는 실패로 skip 하고 사유를 기록한다.
+# 엔진별 성패 판정: `EXIT 0` 만 결과로 취급. 그 외(`EXIT n≠0` / `CANCELLED` / `DIED`)는 실패로 skip 하고 사유를 기록한다.
+#   ⚠️ 취소된 job 은 CLI 가 SIGTERM 을 graceful 처리해 내부 rc=0 이어도 `CANCELLED` 로 확정된다(실측 2026-09-15).
+#   출력 파일을 취합할 때 `DEFT_REVIEW_JOB=`·`__DEFT_REVIEW_EXIT__` 줄은 제어 신호이니 본문에서 제외한다.
 for J in "$OUT_DIR"/job-*; do
   [ -d "$J" ] && echo "$(cat "$J/engine" 2>/dev/null): $(deft-review status "$J")"
 done
