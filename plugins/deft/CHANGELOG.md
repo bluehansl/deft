@@ -4,6 +4,39 @@
 
 형식은 [Keep a Changelog](https://keepachangelog.com/ko/1.1.0/) 를 따르며, 버전 체계는 [Semantic Versioning](https://semver.org/lang/ko/) 을 사용합니다 (`claude-X.Y.Z` / `codex-X.Y.Z` 접두).
 
+## [claude-2.53.0] - 2026-09-15
+
+> **완료 판정을 exit code 로 확정 + 양 트리 `deft-review` 단일화 (RATIONALE R-19)** — R-18 처방을 정규 경로로 검증하던 multi-check 실행에서 두 리뷰어가 **독립적으로** 같은 약점을 지적했다: 이어받기의 완료 판정이 "출력 파일이 더 안 자란다"에 의존하는데, xhigh 추론의 **긴 침묵 구간과 구분되지 않아 미완성 출력이 최종 결과로 취합**될 수 있다. 종전 `deft-review` 는 마지막 줄이 `exec` 라 exit code 를 기록할 주체가 없었다.
+
+### Added
+- `bin/deft-review` — **job dir 규약**: `~/.claude/plugin-data/deft/multi-check/jobs/<engine>-<ts>-<nonce>/` 에 `pid`·`pgid`·`engine`·`nonce`·`exit_code`. `--job-dir <dir>` 로 호출자가 경로를 지정할 수 있다(Codex pane 이 폴링 대상을 미리 아는 경로).
+- `bin/deft-review` — **제어 신호를 stderr 로만**: 첫 줄 `DEFT_REVIEW_JOB=<dir>`, 마지막 줄 `__DEFT_REVIEW_EXIT__:<rc>:<nonce>`. **stdout 은 CLI 출력 그대로** 유지돼 "헬퍼 출력을 그대로 사용" 규약이 깨지지 않는다(실측: `PONG` 요청에 stdout 이 정확히 `PONG` 한 줄). `nonce` 는 모델이 제어 문자열을 흉내내도 위조 불가하게 한다.
+- `bin/deft-review` — **서브커맨드 2종**: `status <jobdir>`(`RUNNING`/`EXIT <rc>`/`CANCELLED`/`DIED`), `cancel <jobdir>`(프로세스 그룹 SIGTERM→SIGKILL + `exit_code=CANCELLED`). 페르소나가 raw `kill`·파일 파싱을 쓰지 않아 구현코드 비노출 원칙이 유지된다.
+- multi-check `SKILL.md` §Phase 4 — **완료 판정 규약** 명시: 확정 근거는 exit 마커와 `deft-review status` 뿐이며 파일 크기·mtime 은 근거가 아니다. `rc≠0` 은 결과가 아니라 실패. 상한 초과 시 `deft-review cancel` 로 정리(리뷰어가 죽었으면 Lead 가 job 경로로 직접).
+- multi-check `agents/*-reviewer.md` 3종 — 이어받기 단계에 마커 기반 완료 판정 + `rc≠0` → `FAILED` 분기, 상한 초과 시 `deft-review cancel` 선행. `TIMEOUT_PARTIAL` 보고에 **job 경로 동봉**(Lead 직접 회수용).
+- `RATIONALE.md` — **R-19** 신설.
+
+### Changed
+- `bin/deft-review` — **`exec` 제거**. 자식으로 띄워 `rc` 캡처 → sidecar 기록 → `exit $rc` 전파. `trap TERM INT HUP` 으로 자식 그룹에 시그널 명시 전파 — 실측: 래퍼에만 SIGTERM 을 보내도 CLI 그룹 5개가 전부 종료되고 `exit_code=143` 기록(= `exec` 시절 "리뷰어 종료 시 CLI 도 종료" semantics 보존, P2 전제 불변).
+
+### Fixed
+- **🚨 `cancel` 이 호출자를 죽이던 결함 (검증 중 실측 사고 — 배포 전 차단)** — 자식이 새 프로세스 그룹을 갖지 못하면 `pgid` 가 **호출자 그룹과 같아**, `kill -TERM -- -$PGID` 가 **취소를 요청한 리뷰어·Lead 세션까지 거둔다**(실측: 검증 중 호출자 Bash 가 SIGTERM 으로 종료, exit 144). 이중 처방: ① `set -m`(job control)으로 자식을 새 프로세스 그룹에 띄운다(macOS bash 새 pgid 부여 실측) ② `cancel`·`trap` 양쪽에 **자기 그룹 보호 가드** — `pgid == 호출자 pgid` 면 그룹 kill 을 포기하고 기록된 pid 만 정리. 가드 없이 배포했다면 상한 초과 정리가 Lead 를 죽였을 것이다.
+- **단일 PID kill 로는 고아가 남던 문제** — claudex 는 `node → 네이티브 바이너리` 로 자식을 더 띄운다. 실측: `cancel` 전 그룹 프로세스 5개 → 후 0개(단일 PID kill 이면 4개 잔존해 API 쿼터를 계속 소모).
+
+### Verified (실측)
+- 정상 완료(stdout 불변·stderr 마커·`exit_code=0`·`status EXIT 0`) / 실패 전파(gemini `IneligibleTierError` → `rc=1`·`EXIT 1`) / `cancel`(그룹 5→0, 호출자 생존, 재호출 `ALREADY_DONE`) / 시그널 전파(래퍼 SIGTERM → CLI 그룹 전멸·`143`) / 오용 경로 fail-fast 0초 회귀 없음 / 하네스 background 출력 파일에 stderr 포함.
+
+## [codex-1.27.0] - 2026-09-15
+
+> **Codex 포트를 `deft-review` 로 전환 — 완료 판정 규약 단일화 (R-19)** — 포트는 `deft-review` 를 **쓰지 않고** raw CLI 를 pane 에 send 했고, 완료 판정이 `CMD | tee out; touch done` 이었다. `;` 라 CLI 실패와 무관하게 `.done` 이 생기고, 파이프 exit code 는 `tee` 것(PIPESTATUS 미사용)이라 **실패를 완료로 오판**했다 — Claude 측과 같은 결함의 더 나쁜 형태. `deft-bin-sync` 로 헬퍼를 설치하면서도 쓰지 않던 상태를 정리했다.
+
+### Changed
+- multi-check `SKILL.md` (3) pane 명령 — raw CLI → **`deft-review --job-dir $OUT_DIR/job-<engine> <engine> < $PROMPT_FILE`** 한 줄. CLI 선택(claudex 우선)·플래그·모델·`--skip-git-repo-check`·`--skip-trust` 를 헬퍼가 소유하므로 pane 에 구현코드가 노출되지 않는다.
+- multi-check `SKILL.md` (4) 수집 — `.done` 마커 폴링 → **`deft-review status` 폴링**(`EXIT *`/`CANCELLED`/`DIED` 를 완료로 집계). 엔진별 성패를 `EXIT 0` 기준으로 판정해 실패는 사유와 함께 skip. 출력 파일 크기·mtime 으로 판정 금지 명시.
+- multi-check `SKILL.md` — 정리 경로에 `deft-review cancel` 명시(raw `kill` 미사용). §Error Handling 기본 명령 3곳도 `deft-review` 로 교체. `.done` stale 서술 1건 정정.
+- multi-check `agents/*-reviewer.md` 3종 — 기본 명령(인자·stdin) 6곳을 `deft-review --job-dir` 로 교체 + 완료 판정 규약(`status`/exit 마커, `EXIT 0` 아니면 실패, `cancel`) 추가.
+- `bin/deft-review` — Claude 측과 동일(job dir·stderr 마커·status/cancel·`set -m`·자기보호 가드·trap 전파). **양 트리 바이트 동일 유지.**
+
 ## [claude-2.52.0] - 2026-09-07
 
 > **L4 페르소나 준수 검증 완료 + 센티널 계약 보강** — `claude-2.51.0` 의 미검증 항목(리뷰어 Agent 가 새 센티널 절차를 실제로 이행하는가)을 실측 완료. 검증 과정에서 리뷰어 2인이 독립적으로 제기한 보강안을 반영.

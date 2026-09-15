@@ -1,16 +1,19 @@
 #!/usr/bin/env bash
-# deft-review — multi-check 리뷰어 CLI 실행 헬퍼
+# deft-review — multi-check 리뷰어 CLI 실행 헬퍼 (+ job 상태·취소)
 #
 # 목적: 리뷰어(codex/claude/gemini) 호출의 CLI 선택·실행 플래그·모델·추론수준을
 #       한 곳에 캡슐화한다. 페르소나/스폰 프롬프트가 raw bash 블록을 노출하지 않고
 #       `deft-review <engine>` 한 줄만 적으면 되도록 — 대화형 pane 의 구현코드 노출 제거 +
 #       구현 단일 진실 소스(SSOT, deft-model 과 동일 사상).
+#       Claude 측(Agent 리뷰어)과 Codex 측(pane 리뷰어)이 **같은 헬퍼**를 쓴다 — 완료 판정
+#       규약이 양 트리에서 갈라지지 않게 하는 것이 이 파일의 두 번째 목적이다(근거 R-19).
 #
 # 사용:
-#   deft-review codex  "<프롬프트>"        # 인자로 전달 (짧은 프롬프트)
-#   printf '%s' "<프롬프트>" | deft-review codex   # stdin (긴/특수문자 프롬프트 — 권장)
-#   deft-review claude  "<프롬프트>"
-#   deft-review gemini  "<프롬프트>"
+#   deft-review codex  "<프롬프트>"                    # 인자로 전달 (짧은 프롬프트)
+#   printf '%s' "<프롬프트>" | deft-review codex        # stdin (긴/특수문자 프롬프트 — 권장)
+#   deft-review --job-dir <dir> codex < prompt.txt     # job dir 지정 (호출자가 폴링 대상을 미리 아는 경로)
+#   deft-review status <jobdir>                        # RUNNING | EXIT <rc> | CANCELLED | DIED
+#   deft-review cancel <jobdir>                        # 자식 프로세스 그룹 정리 (SIGTERM → SIGKILL)
 #
 # engine 별 동작:
 #   codex  : claudex 우선(없으면 codex) — `-a never exec --sandbox read-only --skip-git-repo-check -m gpt-5.5 -c model_reasoning_effort=xhigh`
@@ -20,8 +23,93 @@
 # 실행 시간: 검토 대상이 수 KB 이상이면 3~10분이 정상이다(gpt-5.5 xhigh). 호출부(페르소나)의 Bash timeout 은
 #   600000(10분) 이상이어야 하며, 그래도 넘치면 background 로 이어받는다 — 근거 RATIONALE R-18.
 #
-# 출력은 해당 CLI 출력을 그대로 stdout 으로 흘린다(요약·수정 없음). 미설치 시 <ENGINE>_NOT_INSTALLED 출력 후 exit 0.
+# 완료 판정 (R-19): stdout 은 CLI 출력 그대로 흘리고, **제어 신호는 stderr 와 job dir 로만** 낸다.
+#   - stderr 첫 줄      : `DEFT_REVIEW_JOB=<jobdir>`
+#   - stderr 마지막 줄  : `__DEFT_REVIEW_EXIT__:<rc>:<nonce>`
+#   - job dir 파일      : `pid` `pgid` `engine` `nonce` `exit_code`
+#   출력 파일이 안 자라는 것은 **완료가 아니다**(긴 추론 침묵과 구분 불가) — exit 마커/`exit_code` 만이 확정 근거.
+#   nonce 를 마커에 넣는 이유: 모델이 제어 문자열을 흉내내도 per-run nonce 는 알 수 없어 위조가 불가능하다.
 set -euo pipefail
+
+JOBS_ROOT="${DEFT_REVIEW_JOBS_ROOT:-$HOME/.claude/plugin-data/deft/multi-check/jobs}"
+
+# ── PATH 자동 보강 ──────────────────────────────────────────────────────────────
+# 비대화형/Agent 워커 셸은 PATH 가 빈약해 nvm·Homebrew 설치 CLI(claudex/codex/gemini)를 command -v 로
+#   못 찾는다(실측: multi-check reviewer 가 CODEX_NOT_INSTALLED 오판). 표준 설치 경로를 앞에 prepend 한다.
+_NVM_BIN=""
+if [ -d "$HOME/.nvm/versions/node" ]; then
+  _NVM_BIN=$(ls -d "$HOME"/.nvm/versions/node/*/bin 2>/dev/null | sort -V | tail -1)
+fi
+for _p in "$HOME/.local/bin" "$_NVM_BIN" "$HOME/.nvm/current/bin" /opt/homebrew/bin /usr/local/bin; do
+  [ -n "$_p" ] && [ -d "$_p" ] && case ":$PATH:" in *":$_p:"*) ;; *) PATH="$_p:$PATH" ;; esac
+done
+export PATH
+
+# ── 서브커맨드: status / cancel ─────────────────────────────────────────────────
+# 페르소나가 raw kill·파일 파싱을 쓰지 않도록 헬퍼가 흡수한다(구현코드 비노출 유지).
+case "${1:-}" in
+  status)
+    JOB="${2:-}"
+    [ -n "$JOB" ] || { echo "usage: deft-review status <jobdir>" >&2; exit 2; }
+    [ -d "$JOB" ] || { echo "NO_SUCH_JOB: $JOB" >&2; exit 2; }
+    if [ -f "$JOB/exit_code" ]; then
+      RC=$(cat "$JOB/exit_code")
+      case "$RC" in
+        CANCELLED) echo "CANCELLED" ;;
+        *)         echo "EXIT $RC" ;;
+      esac
+      exit 0
+    fi
+    # exit_code 가 없으면 아직 실행 중이거나 비정상 사망. pid 생존으로 구분한다.
+    if [ -f "$JOB/pid" ] && kill -0 "$(cat "$JOB/pid")" 2>/dev/null; then
+      echo "RUNNING"
+    else
+      echo "DIED"   # 마커를 남기지 못하고 사라짐 — 부분 출력만 신뢰할 수 있다
+    fi
+    exit 0
+    ;;
+  cancel)
+    JOB="${2:-}"
+    [ -n "$JOB" ] || { echo "usage: deft-review cancel <jobdir>" >&2; exit 2; }
+    [ -d "$JOB" ] || { echo "NO_SUCH_JOB: $JOB" >&2; exit 2; }
+    if [ -f "$JOB/exit_code" ]; then
+      echo "ALREADY_DONE $(cat "$JOB/exit_code")"; exit 0
+    fi
+    # 프로세스 그룹째 정리 — CLI 가 자식(node → 네이티브 바이너리)을 더 띄우므로 단일 PID kill 로는 고아가 남는다.
+    PGID=""; [ -f "$JOB/pgid" ] && PGID=$(cat "$JOB/pgid")
+    # 🚨 자기 보호 가드 (실측 사고 2026-09-15): 자식이 새 프로세스 그룹을 갖지 못한 job 은 pgid 가
+    #   **호출자의 그룹과 같다**. 그대로 `kill -- -PGID` 하면 취소를 요청한 리뷰어·Lead 세션까지 함께 죽는다
+    #   (실측: cancel 이 호출자 Bash 를 SIGTERM 으로 종료시켜 exit 144). 같은 그룹이면 그룹 kill 을 포기하고
+    #   기록된 pid 만 정리한다. 근거 R-19.
+    MY_PGID=$(ps -o pgid= -p $$ 2>/dev/null | tr -d ' ')
+    if [ -n "$PGID" ] && [ -n "$MY_PGID" ] && [ "$PGID" = "$MY_PGID" ]; then
+      echo "deft-review: job pgid($PGID) 가 호출자 그룹과 같아 그룹 kill 을 건너뜁니다 (pid 만 정리)" >&2
+      PGID=""
+      if [ -f "$JOB/pid" ]; then
+        JPID=$(cat "$JOB/pid")
+        kill -TERM "$JPID" 2>/dev/null || true
+        for _ in $(seq 1 10); do kill -0 "$JPID" 2>/dev/null || break; sleep 1; done
+        if kill -0 "$JPID" 2>/dev/null; then kill -KILL "$JPID" 2>/dev/null || true; fi
+      fi
+    fi
+    if [ -n "$PGID" ] && kill -0 -- "-$PGID" 2>/dev/null; then
+      kill -TERM -- "-$PGID" 2>/dev/null || true
+      for _ in $(seq 1 10); do kill -0 -- "-$PGID" 2>/dev/null || break; sleep 1; done
+      if kill -0 -- "-$PGID" 2>/dev/null; then kill -KILL -- "-$PGID" 2>/dev/null || true; fi
+    fi
+    echo CANCELLED > "$JOB/exit_code"
+    echo "CANCELLED"
+    exit 0
+    ;;
+esac
+
+# ── --job-dir 옵션 (엔진 인자보다 앞에 온다) ────────────────────────────────────
+JOB_DIR=""
+if [ "${1:-}" = "--job-dir" ]; then
+  JOB_DIR="${2:-}"
+  [ -n "$JOB_DIR" ] || { echo "deft-review: --job-dir 값이 없습니다" >&2; exit 2; }
+  shift 2
+fi
 
 ENGINE="${1:-}"
 shift 2>/dev/null || true
@@ -33,7 +121,8 @@ shift 2>/dev/null || true
 case "$ENGINE" in
   codex|claude|gemini) ;;
   ""|-h|--help)
-    echo "usage: deft-review <codex|claude|gemini> [prompt]   (prompt 생략 시 stdin)"
+    echo "usage: deft-review [--job-dir <dir>] <codex|claude|gemini> [prompt]   (prompt 생략 시 stdin)"
+    echo "       deft-review status <jobdir>   |   deft-review cancel <jobdir>"
     [ -z "$ENGINE" ] && exit 2 || exit 0
     ;;
   *)
@@ -49,18 +138,7 @@ else
   PROMPT="$(cat)"
 fi
 
-# PATH 자동 보강 — 비대화형/Agent 워커 셸은 PATH 가 빈약해 nvm·Homebrew 설치 CLI(claudex/codex/gemini)를
-#   command -v 로 못 찾는다(실측: multi-check reviewer 가 CODEX_NOT_INSTALLED 오판). 표준 설치 경로를 PATH 앞에
-#   prepend 해 어느 셸에서 호출돼도 CLI 를 찾게 한다. 이미 있으면 무해(첫 매치 사용). nvm 은 최신 버전 bin 우선.
-_NVM_BIN=""
-if [ -d "$HOME/.nvm/versions/node" ]; then
-  _NVM_BIN=$(ls -d "$HOME"/.nvm/versions/node/*/bin 2>/dev/null | sort -V | tail -1)
-fi
-for _p in "$HOME/.local/bin" "$_NVM_BIN" "$HOME/.nvm/current/bin" /opt/homebrew/bin /usr/local/bin; do
-  [ -n "$_p" ] && [ -d "$_p" ] && case ":$PATH:" in *":$_p:"*) ;; *) PATH="$_p:$PATH" ;; esac
-done
-export PATH
-
+# ── CLI 해석 (미설치는 job dir 없이 즉시 반환 — 호출부 계약 불변) ───────────────
 case "$ENGINE" in
   codex)
     if command -v claudex >/dev/null 2>&1; then CLI=claudex
@@ -69,22 +147,75 @@ case "$ENGINE" in
     # --skip-git-repo-check: codex/claudex 는 git 리포 밖에서 `Not inside a trusted directory ...` 로 exit 1 한다.
     #   리뷰어는 Lead 의 cwd 를 그대로 물려받아 리포 밖(예: ~)일 수 있고, 스킬 어디에도 "리포 안에서 실행" 전제가
     #   없어 원인 불명 실패로 보였다(실측 사고 2026-09-07). 어차피 --sandbox read-only 라 쓰기 위험 없음.
-    exec "$CLI" -a never exec --sandbox read-only --skip-git-repo-check -m gpt-5.5 -c 'model_reasoning_effort="xhigh"' "$PROMPT"
+    set -- "$CLI" -a never exec --sandbox read-only --skip-git-repo-check -m gpt-5.5 -c 'model_reasoning_effort="xhigh"' "$PROMPT"
     ;;
   claude)
     command -v claude >/dev/null 2>&1 || { echo "CLAUDE_NOT_INSTALLED: claude CLI is not installed"; exit 0; }
     MODEL="$(deft-model claude 2>/dev/null || echo claude-fable-5)"
-    exec claude -p "$PROMPT" --model "$MODEL" --permission-mode dontAsk --output-format text
+    set -- claude -p "$PROMPT" --model "$MODEL" --permission-mode dontAsk --output-format text
     ;;
   gemini)
     command -v gemini >/dev/null 2>&1 || { echo "GEMINI_NOT_INSTALLED: gemini CLI is not installed"; exit 0; }
     # stderr 를 버리지 않는다 — 종전 `2>/dev/null` 은 노이즈와 함께 실패 원인까지 삼켜, 인증·model 오류 시
-    #   빈 출력만 남아 원인 파악이 불가능했다(실측 사고 2026-09-07). codex/claude 경로와 동일하게 흘려보내고,
-    #   페르소나가 "stderr 경고는 무시" 규약으로 처리한다.
+    #   빈 출력만 남아 원인 파악이 불가능했다(실측 사고 2026-09-07).
     # --skip-trust: gemini 도 리포/신뢰 밖 디렉토리에서 막힌다 — "not running in a trusted directory" 로
     #   승인 대기에 걸려 무한 hang 하고, 그 전에 `--approval-mode plan` 이 default 로 강등된다(실측 2026-09-07,
-    #   stderr 를 되살린 덕에 발견). 신뢰를 세션 한정으로 부여해 두 문제를 함께 해소. 읽기 제약은
-    #   GEMINI_POLICY_ALLOW_READONLY 가 유지한다.
-    exec env GEMINI_POLICY_ALLOW_READONLY=true gemini -p "$PROMPT" -m gemini-3-flash-preview --approval-mode plan --skip-trust -o text
+    #   stderr 를 되살린 덕에 발견). 읽기 제약은 GEMINI_POLICY_ALLOW_READONLY 가 유지한다.
+    set -- env GEMINI_POLICY_ALLOW_READONLY=true gemini -p "$PROMPT" -m gemini-3-flash-preview --approval-mode plan --skip-trust -o text
     ;;
 esac
+
+# ── job dir 준비 ────────────────────────────────────────────────────────────────
+NONCE=$(od -An -N6 -tx1 /dev/urandom 2>/dev/null | tr -d ' \n' || true)
+[ -n "$NONCE" ] || NONCE="$$"
+if [ -z "$JOB_DIR" ]; then
+  JOB_DIR="$JOBS_ROOT/$ENGINE-$(date +%Y%m%d-%H%M%S)-$NONCE"
+fi
+mkdir -p "$JOB_DIR"
+printf '%s\n' "$ENGINE" > "$JOB_DIR/engine"
+printf '%s\n' "$NONCE"  > "$JOB_DIR/nonce"
+# 호출부가 폴링 대상을 알 수 있도록 stderr 첫 줄로 알린다(stdout 은 CLI 출력 전용).
+printf 'DEFT_REVIEW_JOB=%s\n' "$JOB_DIR" >&2
+
+# ── 실행 ────────────────────────────────────────────────────────────────────────
+# `exec` 를 쓰지 않는다 — 프로세스를 교체해 버리면 exit code 를 기록할 주체가 사라진다(R-19).
+#   대신 자식으로 띄우고 rc 를 캡처해 sidecar 에 남기고, 종료 상태는 `exit $rc` 로 그대로 전파한다.
+#   trap: 래퍼가 SIGTERM/INT/HUP 을 받으면 자식 프로세스 그룹에 명시 전파한다 — exec 시절에는 시그널이
+#   CLI 에 직접 갔으므로, 래퍼가 한 단계 끼는 변경이 "리뷰어 종료 시 CLI 도 종료" semantics 를 깨지 않게 한다.
+set +e
+# `set -m`(job control) 을 켜서 자식을 **새 프로세스 그룹**에 띄운다. 이게 없으면 자식 pgid 가 호출자
+#   그룹과 같아져, 나중에 `cancel` 의 그룹 kill 이 리뷰어·Lead 세션까지 거둔다(실측 사고 2026-09-15 — 검증
+#   중 cancel 이 호출자 Bash 를 SIGTERM 으로 죽여 exit 144). macOS bash 에서 `set -m` + `&` 가 새 pgid 를
+#   부여함을 실측 확인. 근거 R-19.
+set -m
+"$@" &
+CHILD=$!
+set +m
+printf '%s\n' "$CHILD" > "$JOB_DIR/pid"
+CHILD_PGID=$(ps -o pgid= -p "$CHILD" 2>/dev/null | tr -d ' ')
+[ -n "$CHILD_PGID" ] && printf '%s\n' "$CHILD_PGID" > "$JOB_DIR/pgid"
+
+_forward() {
+  # 자기 그룹 보호 — CHILD_PGID 가 호출자 그룹과 같으면 그룹 전파를 포기하고 pid 만 종료한다(위 cancel 과 동일 사유).
+  _MY_PGID=$(ps -o pgid= -p $$ 2>/dev/null | tr -d ' ')
+  if [ -n "$CHILD_PGID" ] && [ -n "$_MY_PGID" ] && [ "$CHILD_PGID" = "$_MY_PGID" ]; then CHILD_PGID=""; fi
+  if [ -n "$CHILD_PGID" ]; then
+    kill -TERM -- "-$CHILD_PGID" 2>/dev/null || kill -TERM "$CHILD" 2>/dev/null || true
+  else
+    kill -TERM "$CHILD" 2>/dev/null || true
+  fi
+  wait "$CHILD" 2>/dev/null
+  printf '%s\n' 143 > "$JOB_DIR/exit_code"
+  printf '__DEFT_REVIEW_EXIT__:%s:%s\n' 143 "$NONCE" >&2
+  exit 143
+}
+trap _forward TERM INT HUP
+
+wait "$CHILD"; RC=$?
+set -e
+
+printf '%s\n' "$RC" > "$JOB_DIR/exit_code"
+# 마지막 줄 마커 — foreground 정상 경로는 Bash 결과 stderr 로, timeout 경로는 하네스 출력 파일로 읽힌다
+#   (출력 파일에 stderr 가 포함됨을 실측 확인, 2026-09-15).
+printf '__DEFT_REVIEW_EXIT__:%s:%s\n' "$RC" "$NONCE" >&2
+exit "$RC"

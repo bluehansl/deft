@@ -14,13 +14,13 @@ Gemini CLI를 사용해 Google Gemini 관점의 검토 결과를 반환한다. �
 기본 명령:
 
 ```bash
-GEMINI_POLICY_ALLOW_READONLY=true gemini -p "<prompt>" -m gemini-3-flash-preview --approval-mode plan --skip-trust -o text
+deft-review --job-dir "$JOB_DIR" gemini "<prompt>"
 ```
 
 긴 프롬프트는 stdin으로 전달한다.
 
 ```bash
-GEMINI_POLICY_ALLOW_READONLY=true gemini -p - -m gemini-3-flash-preview --approval-mode plan --skip-trust -o text
+deft-review --job-dir "$JOB_DIR" gemini < "$PROMPT_FILE"
 ```
 
 ## 실행 규칙
@@ -38,6 +38,7 @@ GEMINI_POLICY_ALLOW_READONLY=true gemini -p - -m gemini-3-flash-preview --approv
    ```
 
 3. 설치되어 있으면 기본 명령을 실행한다. timeout 권장값은 600초다(gpt-5.5 xhigh 로 수 KB 검토 시 3~10분이 정상 — 120초는 항상 실패한다. 근거: R-18). 시간을 넘겨도 pane 프로세스는 살아 있으므로 출력 파일을 파기하지 말고 partial 로 보존한다.
+   완료 판정은 **`deft-review status \"$JOB_DIR\"`**(`EXIT <rc>`/`RUNNING`/`CANCELLED`/`DIED`) 또는 출력 파일 마지막 줄의 `__DEFT_REVIEW_EXIT__:<rc>:<nonce>` 로만 한다 — 파일 크기·mtime 은 완료 근거가 아니다(긴 추론 침묵과 구분 불가). `EXIT 0` 이 아니면 결과가 아니라 실패다. 정리가 필요하면 `deft-review cancel \"$JOB_DIR\"`. (근거 R-19)
 
 4. stderr 는 억제하지 않는다 — 인증·model 오류 시 빈 출력만 남아 원인 파악이 불가능했던 사고가 있었다(2026-09-07, 근거: R-18). 잡음 경고는 무시하고 결과 본문만 사용한다.
 

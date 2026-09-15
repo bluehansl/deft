@@ -159,6 +159,20 @@
 - **정상 동작했던 것 (오해 방지)**: orca 판정·가드 skip·페르소나 인라인·graceful 종료·`SendMessage` 보고 규약은 **전부 설계대로**였다. 실패는 **CLI 실행 계층**(timeout·trusted directory·검색 폭주)에서만 났다 — orca pane 조작을 의심하지 말 것.
 - **지침**: multi-check `SKILL.md` §Phase 1 time-box·§Phase 4 ①보고 종류 판별·§Error Handling, `agents/*-reviewer.md` §실행(timeout 예외 절차), `bin/deft-review`.
 
+
+### R-19. 완료 판정은 exit code 로만 — 출력 정체는 완료가 아니다 (설계 보강 2026-09-15)
+
+- **계기**: R-18 처방(timeout=진행 중)을 정규 경로로 검증하던 multi-check 실행에서, 두 리뷰어가 **독립적으로** 같은 약점을 지적했다. Codex 리뷰어: "완료 판정이 output 안정성뿐 → 긴 정지 구간을 완료로 오판. `byte size/mtime` 은 참고만, 완료 판정 금지. `.done`/`status.json` sidecar 필수". Claude 리뷰어: "`echo $? > done.flag` 래핑 — exit code 파일이 유일한 완료 판정 기준".
+- **문제**: R-18 의 이어받기는 리뷰어가 출력 파일을 `Read` 하며 기다리는데, **"파일이 더 안 자란다"가 완료와 구분되지 않는다.** xhigh 추론은 수십 초간 아무것도 쓰지 않는 침묵 구간이 있어, 그 순간을 완료로 읽으면 **미완성 출력이 최종 결과로 취합**된다.
+- **`exec` 가 걸림돌이었다**: 종전 `deft-review` 는 마지막 줄이 `exec "$CLI" …` 였다. 프로세스를 교체하므로 **exit code 를 기록할 주체가 사라진다** — 리뷰어들은 헬퍼 소스를 보지 못해 이 제약을 몰랐고, 제안대로 래핑하려면 `exec` 제거가 선행돼야 했다.
+- **처방**: `exec` 제거 → 자식으로 띄워 `rc` 캡처 → **job dir 에 `exit_code` 기록** → `exit $rc` 로 종료 상태 전파. 제어 신호는 **stdout 을 오염시키지 않도록 stderr 로만** 낸다(첫 줄 `DEFT_REVIEW_JOB=<dir>`, 마지막 줄 `__DEFT_REVIEW_EXIT__:<rc>:<nonce>`) — "헬퍼 출력을 그대로 사용" 규약 보존. `nonce` 는 모델이 제어 문자열을 흉내내도 위조할 수 없게 한다(Codex 리뷰어의 "모델 출력과 제어 신호 충돌" 지적 대응).
+- **실측 확인**: 하네스의 timeout→background 출력 파일에 **stderr 가 포함**된다(`(echo out; echo err >&2; sleep 15)` 를 timeout 5s 로 검증) → timeout 경로에서도 마커를 읽을 수 있다.
+- **🚨 `cancel` 의 자기 학살 결함 (실측 사고 2026-09-15)**: 상한 초과 시 자식을 정리하려면 **프로세스 그룹** kill 이 필요하다(claudex 는 `node → 네이티브 바이너리` 로 자식을 더 띄워 단일 PID kill 은 고아 4개를 남긴다 — 실측). 그런데 자식이 **새 프로세스 그룹을 갖지 못하면 pgid 가 호출자 그룹과 같아**, `kill -TERM -- -$PGID` 가 **취소를 요청한 리뷰어·Lead 세션까지 죽인다**(검증 중 호출자 Bash 가 SIGTERM 으로 종료, exit 144). 처방은 이중이다: ① `set -m`(job control)으로 자식을 새 프로세스 그룹에 띄운다(macOS bash 에서 새 pgid 부여 실측) ② `cancel`·trap 양쪽에 **자기 그룹 보호 가드** — `pgid == 호출자 pgid` 면 그룹 kill 을 포기하고 기록된 pid 만 정리. 가드 없이 배포했다면 리뷰어의 상한 초과 정리가 Lead 를 거뒀을 것이다.
+- **시그널 semantics 보존**: `exec` 시절에는 시그널이 CLI 에 직접 갔다. 래퍼가 한 단계 끼면서 `trap TERM INT HUP` 으로 자식 그룹에 명시 전파한다 — 실측: 래퍼에만 SIGTERM 을 보내도 CLI 그룹 5개가 전부 종료되고 `exit_code=143` 이 기록된다. "리뷰어 종료 시 CLI 도 종료"(P2 의 전제)가 변하지 않는다.
+- **양 트리 일관성이 이 보강의 두 번째 목적**: Codex 포트는 `deft-review` 를 **쓰지 않고** raw 명령을 pane 에 send 했고, 완료 판정이 `CMD | tee out; touch done` 이었다 — `;` 라 CLI 실패와 무관하게 `.done` 이 생기고, 파이프 exit code 는 `tee` 것(PIPESTATUS 미사용)이어서 **실패를 완료로 오판**했다. 같은 결함의 더 나쁜 형태다. 포트를 `deft-review --job-dir` + `deft-review status` 폴링으로 전환해 완료 판정 규약을 단일화했다.
+- **P2(detach)와의 관계**: 이 job dir + `pid`/`pgid` + `cancel` 규약이 P2 의 전제(job registry·완료 marker·취소 API)를 그대로 만든다. P2 는 `set -m` 을 `setsid` 로 바꾸는 정도로 줄어든다 — 다만 착수 판단은 불변(PENDING 참조).
+- **지침**: `bin/deft-review`(양 트리 동일), multi-check `SKILL.md` §Phase 4, `agents/*-reviewer.md` §실행, codex 포트 `SKILL.md` (3)(4).
+
 ## 출력 / UX (전 스킬 공통)
 
 ### R-14. Lead 출력 레지스터 — 의미 이벤트만

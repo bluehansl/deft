@@ -107,7 +107,7 @@ reviewer 마다 pane 을 분할하고, 그 pane 쉘에서 headless CLI 명령을
 > R1_HANDLE=$(printf '%s' "$OUT" | jq -r '.result.split.handle // empty'); PREV_HANDLE="$R1_HANDLE"
 > ```
 >
-> (4) 수집(.done 마커 폴링)은 파일 기반이라 동일. rebalancing·focus 복원은 skip(resize CLI 미지원 — 비율은 UI 드래그 안내). 정리는 추적한 handle 로만 `orca terminal close --terminal "$R1_HANDLE"`.
+> (4) 수집(`deft-review status` 폴링)은 파일 기반이라 동일. rebalancing·focus 복원은 skip(resize CLI 미지원 — 비율은 UI 드래그 안내). 정리는 추적한 handle 로만 `orca terminal close --terminal "$R1_HANDLE"`.
 
 ```bash
 OUT_DIR=$(mktemp -d /tmp/multi-check.XXXXXX)
@@ -122,23 +122,40 @@ command -v cmux-rebalancing >/dev/null 2>&1 && cmux-rebalancing
 cmux send --surface "$R1" "touch $OUT_DIR/.ready-r1" && cmux send-key --surface "$R1" Enter
 for _ in $(seq 1 15); do [ -f "$OUT_DIR/.ready-r1" ] && break; sleep 1; done
 
-# (3) reviewer 명령 실행 — 출력 tee + 완료 마커 (명령은 한 줄로 — pane 쉘에서 \n 은 즉시 실행)
+# (3) reviewer 명령 실행 — **deft-review 단일 헬퍼** (Claude 측과 같은 완료 판정 규약 — 근거 R-19)
+#     ⚠️ raw CLI 를 직접 send 하지 말 것. 종전 `CMD | tee out; touch done` 은 ① `;` 라 CLI 실패와 무관하게
+#     .done 이 생기고 ② 파이프 exit code 가 tee 것이라(PIPESTATUS 미사용) **실패를 완료로 오판**했다.
+#     deft-review 는 job dir 에 exit_code 를 남기므로 성공·실패가 확정 구분된다.
 PROMPT_FILE="$OUT_DIR/prompt.txt"   # 검토 prompt 는 파일로 저장 (줄바꿈 안전)
-cmux send --surface "$R1" "GEMINI_POLICY_ALLOW_READONLY=true gemini -p \"\$(cat $PROMPT_FILE)\" -m gemini-3-flash-preview --approval-mode plan --skip-trust -o text 2>&1 | tee $OUT_DIR/gemini.out; touch $OUT_DIR/gemini.done"
+JOB_G="$OUT_DIR/job-gemini"         # job dir 을 미리 지정 → 폴링 대상이 확정적
+cmux send --surface "$R1" "deft-review --job-dir $JOB_G gemini < $PROMPT_FILE > $OUT_DIR/gemini.out 2>&1"
 cmux send-key --surface "$R1" Enter
 
-# (4) 수집 — 전 reviewer 의 .done 마커 폴링 (reviewer 당 timeout 600s, 미완료는 partial 보존 + skip)
+# (4) 수집 — 전 reviewer job 의 `deft-review status` 폴링 (reviewer 당 timeout 600s)
 #     ⚠️ 120s 로 두지 말 것 — gpt-5.5 xhigh 로 수 KB 프롬프트를 검토하면 3~10분이 정상이라
 #     짧은 질문에서만 동작하고 스킬 본래 용도(설계·코드 교차검증)에서는 항상 미완료가 된다 (근거: R-18).
+#     ⚠️ 출력 파일 크기·mtime 으로 완료를 판정하지 말 것 — 긴 추론 침묵과 구분되지 않는다 (근거: R-19).
 for _ in $(seq 1 300); do
-  ls "$OUT_DIR"/*.done >/dev/null 2>&1 && [ "$(ls $OUT_DIR/*.done | wc -l)" -ge "$REVIEWER_COUNT" ] && break
+  DONE=0
+  for J in "$OUT_DIR"/job-*; do
+    [ -d "$J" ] || continue
+    case "$(deft-review status "$J" 2>/dev/null)" in
+      EXIT\ *|CANCELLED|DIED) DONE=$((DONE+1)) ;;
+    esac
+  done
+  [ "$DONE" -ge "$REVIEWER_COUNT" ] && break
   sleep 2
+done
+# 엔진별 성패 판정: `EXIT 0` 만 결과로 취급. 그 외(EXIT n≠0 / DIED)는 실패로 skip 하고 사유를 기록한다.
+for J in "$OUT_DIR"/job-*; do
+  [ -d "$J" ] && echo "$(cat "$J/engine" 2>/dev/null): $(deft-review status "$J")"
 done
 ```
 
-- Codex reviewer 는 pane 에서 `"$CODEX_CLI" -a never exec --sandbox read-only --skip-git-repo-check -m gpt-5.5 ... | tee $OUT_DIR/codex.out; touch $OUT_DIR/codex.done` 로 동일 패턴.
-- Claude reviewer 도 동일 (`claude -p ... | tee ...`).
-- **폴링 예산(600s) 초과 시**: Claude 측과 달리 reviewer 는 **독립 pane 프로세스**라 폴링을 멈춰도 계속 실행되고 `tee` 출력 파일은 나중에 완성된다. 따라서 pane 을 닫지 말고 `partial` 로 취합한 뒤, 사용자에게 "해당 엔진은 아직 실행 중 — `$OUT_DIR/<engine>.out` 에서 확인 가능"을 명시한다. (Claude 측의 `TIMEOUT_PARTIAL` 조기 종료 사고는 이 구조 덕에 포트에서는 발생하지 않는다 — 근거: R-18)
+- Codex·Claude reviewer 도 **동일 패턴** — `deft-review --job-dir $OUT_DIR/job-<engine> <engine> < $PROMPT_FILE > $OUT_DIR/<engine>.out 2>&1` 한 줄. CLI 선택(claudex 우선)·플래그·모델·`--skip-git-repo-check`·`--skip-trust` 는 헬퍼가 소유하므로 pane 에 구현코드를 노출하지 않는다.
+- **완료 판정은 `deft-review status` 또는 출력 파일 마지막 줄의 `__DEFT_REVIEW_EXIT__:<rc>:<nonce>`** 로만 한다. `.done` 마커 방식은 제거됐다(위 사유).
+- **폴링 예산(600s) 초과 시**: reviewer 는 **독립 pane 프로세스**라 폴링을 멈춰도 계속 실행되고 출력 파일은 나중에 완성된다. pane 을 닫지 말고 `partial` 로 취합한 뒤 "해당 엔진은 아직 실행 중 — `$OUT_DIR/<engine>.out`, job `$OUT_DIR/job-<engine>`" 을 명시한다. (Claude 측의 `TIMEOUT_PARTIAL` 조기 종료 사고는 이 구조 덕에 포트에서는 발생하지 않는다 — 근거: R-18)
+- **정리가 필요하면 `deft-review cancel $OUT_DIR/job-<engine>`** — 프로세스 그룹째 SIGTERM→SIGKILL 로 고아 없이 정리한다. raw `kill` 을 쓰지 않는다 (근거: R-19).
 - **quoting 안전 (권장)**: 긴 one-line 명령의 escaping 오류를 피하려면 reviewer 별 runner script 를 생성하고 pane 에는 `sh $OUT_DIR/run-<reviewer>.sh` 한 줄만 send 한다.
 - **마무리 정렬 + focus 복원 (전 reviewer 분할 완료 후 1회)** — 순차 down 분할은 row 높이가 1/2·1/4·1/4 로 남고(실측), `--focus false` 에도 focus 가 마지막 pane 으로 이동할 수 있다:
 
@@ -223,7 +240,7 @@ else CODEX_CLI=""; fi
 기본 명령 (`$CODEX_CLI`는 `claudex` 또는 `codex`):
 
 ```bash
-"$CODEX_CLI" -a never exec --sandbox read-only --skip-git-repo-check -m gpt-5.5 -c 'model_reasoning_effort="xhigh"' "<prompt>"
+deft-review --job-dir "$OUT_DIR/job-codex" codex < "$PROMPT_FILE"
 ```
 
 - 명령 자체는 검증된 형식이며, claudex는 codex와 옵션·플래그가 완전 호환된다.
@@ -236,7 +253,7 @@ else CODEX_CLI=""; fi
 기본 명령:
 
 ```bash
-GEMINI_POLICY_ALLOW_READONLY=true gemini -p "<prompt>" -m gemini-3-flash-preview --approval-mode plan --skip-trust -o text
+deft-review --job-dir "$OUT_DIR/job-gemini" gemini < "$PROMPT_FILE"
 ```
 
 - 사용자 터미널에서 정상 응답이 확인된 명령이다.
@@ -248,7 +265,7 @@ GEMINI_POLICY_ALLOW_READONLY=true gemini -p "<prompt>" -m gemini-3-flash-preview
 기본 명령:
 
 ```bash
-claude -p "<prompt>" --model "$(deft-model claude 2>/dev/null||echo claude-fable-5)" --permission-mode dontAsk --output-format text
+deft-review --job-dir "$OUT_DIR/job-claude" claude < "$PROMPT_FILE"
 ```
 
 - Claude reviewer는 optional이다.

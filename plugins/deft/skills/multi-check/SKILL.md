@@ -237,7 +237,9 @@ SendMessage(to: "<방금 보고한 리뷰어 이름>", message: {type: "shutdown
 # TIMEOUT_PARTIAL 보고 → 아무것도 보내지 않는다 (shutdown 보류 — 최종 RESULT 재보고 대기)
 ```
 
-> **TIMEOUT_PARTIAL 대기 정책**: 리뷰어 페르소나가 background 완료를 **최대 20분**까지 이어받아 `RESULT` 로 재보고한다. Lead 는 그동안 자체 분석(§Lead Analysis)과 다른 리뷰어 취합을 계속하고, **20분이 지나도 재보고가 없으면** 그 엔진을 skip 으로 처리한 뒤 Phase 5 에서 정리한다. `TIMEOUT_PARTIAL` 본문의 부분 출력이 유의미하면 "부분 결과"로 명시해 취합에 포함한다.
+> 🚨 **완료 판정은 마커로만 (근거: R-19)** — 리뷰어가 background 를 이어받을 때 "출력 파일이 더 안 자란다"를 완료로 보면 **긴 추론 침묵과 구분되지 않아 미완성 출력이 최종 결과로 올라온다**. 확정 근거는 둘뿐이다: 출력 파일 **마지막 줄 `__DEFT_REVIEW_EXIT__:<rc>:<nonce>`**, 또는 **`deft-review status <job>`**(`RUNNING`/`EXIT <rc>`/`CANCELLED`/`DIED`). `<rc>` 가 0 이 아니면 결과가 아니라 실패이므로 `FAILED` 로 취급한다. Lead 가 직접 회수할 때도 같은 기준을 쓴다 — `TIMEOUT_PARTIAL` 보고에 job 경로가 동봉된다.
+
+> **TIMEOUT_PARTIAL 대기 정책**: 리뷰어 페르소나가 background 완료를 **최대 20분**까지 이어받아 `RESULT` 로 재보고한다. Lead 는 그동안 자체 분석(§Lead Analysis)과 다른 리뷰어 취합을 계속하고, **20분이 지나도 재보고가 없으면** 그 엔진을 skip 으로 처리한다 — 이때 리뷰어가 `deft-review cancel <job>` 로 background CLI 를 정리하며(고아 프로세스가 API 쿼터를 계속 태우는 것 방지 — R-19), 리뷰어가 이미 죽었으면 Lead 가 보고받은 job 경로로 직접 `deft-review cancel` 한다. 그 뒤 Phase 5 에서 정리한다. `TIMEOUT_PARTIAL` 본문의 부분 출력이 유의미하면 "부분 결과"로 명시해 취합에 포함한다.
 
 > 🚨 **`message` 는 반드시 구조화 객체(`{type:"shutdown_request"}`) — 평문 종료 금지**: "종료해 주세요" 같은 평문 문자열은 리뷰어가 *일반 메시지*로 받아 보고만 하고 프로세스가 안 내려간다(claude 리뷰어는 kill 도 금지라 구조화 shutdown_request 가 유일 종료 수단 — 실측). 안 죽었으면 kill 이 아니라 구조화 shutdown_request 를 다시 보낸다.
 
