@@ -21,7 +21,7 @@
       "name": "ticket-analysis",
       "source": "./plugins/ticket-analysis",
       "description": "이슈 티켓 작업의 선언~결과 보고 전체 — 티켓 컨텍스트 로드(본문·댓글·연결 이슈, ticket.md)·단계별 승인 절차·산출물 경로 라우팅 + 요건 정제 / Plan 작성 / 버그 원인 진단 방법론. 호스트 지침에는 트리거 문구만 남기는 단일 소스 설계.",
-      "version": "claude-0.2.0",
+      "version": "claude-0.2.1",
       "author": {
         "name": "bluehansl"
       }

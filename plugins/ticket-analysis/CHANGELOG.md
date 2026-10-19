@@ -1,5 +1,15 @@
 # Changelog — ticket-analysis
 
+## claude-0.2.1 / codex-0.2.1 (2026-10-20)
+
+### Removed
+- `ticket-workflow.md` §1 — **볼트 루트 3순위 폴백 제거**. 구 홈 별칭이 2026-10-20 03:01 KST 에 실제로 제거되면서(볼트 세션 수행) 그 경로를 경유하던 폴백이 죽은 코드가 됐다. 폴백은 `BIV_ROOT` → `$HOME/obsidian-vault/BIV` **2단**으로 줄였고, `../..` 단계 수를 설명하던 주석도 함께 삭제했다.
+- `artifact-routing.md` — "하위 호환 별칭" 설명을 제거하고 "볼트 규칙이 유일한 정본"으로 정리.
+
+### Verified
+- 전 스킬 문서(`plugins/*/skills/`, `plugins/codex/*/skills/`)에서 구 별칭 경로 **0건**. CHANGELOG 의 과거 이력 언급은 **의도적으로 보존**한다 — 이력 문서는 "그때 무엇이 사실이었나"를 남기므로 현재 기준으로 고치지 않는다.
+- 양 트리 `diff -rq` 무차이, frontmatter strict YAML OK.
+
 ## claude-0.2.0 / codex-0.2.0 (2026-10-20)
 
 > **프로젝트 선언·임포트 확장** — 티켓 키(`IT-\d+`)뿐 아니라 주제 프로젝트 슬러그·한글 제목으로도 작업을 선언·임포트한다. 해석·팩 생성은 **볼트 스크립트를 호출만** 하고 스킬에 로직을 중복 구현하지 않는다. 의뢰: 볼트 영속화 세션(요청서 `BIV/inbox/2026-10-19-요청-ticket-analysis-…`), v2 + 정정 2건 반영.

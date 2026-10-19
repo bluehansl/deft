@@ -15,13 +15,10 @@
 
     ```bash
     BIV="${BIV_ROOT:-$HOME/obsidian-vault/BIV}"
-    [ -d "$BIV" ] || BIV=$(cd "$(realpath ~/.ai/tickets)/../.." && pwd)   # 과도기 폴백(별칭 제거 예정)
     python3 -I "$BIV/_tools/index/resolve_project.py" "<질의>"
     ```
 
-    폴백 순서가 `BIV_ROOT` → 고정 경로 → `realpath ~/.ai/tickets` 인 이유: `~/.ai/tickets` 는 제거 예정 별칭이다. 지금은 동작하지만 제거 시점에 조용히 깨지므로 맨 뒤에 둔다.
-
-    ⚠️ 마지막 폴백의 `../..` 는 두 단계다 — `~/.ai/tickets` 가 `<BIV>/fassto/projects` 를 가리키므로 한 단계만 올라가면 **볼트 루트가 아니라 `<BIV>/fassto` 가 된다**(실측 2026-10-20 검증에서 잡힌 오류). 별칭 대상이 바뀌면 이 단계 수도 바뀐다.
+    볼트 루트는 `BIV_ROOT` 환경변수가 있으면 그 값, 없으면 `$HOME/obsidian-vault/BIV` 다. 종전의 3순위 폴백(구 홈 별칭 경유)은 **별칭이 제거된 2026-10-20 에 함께 삭제**했다.
 
 - 결과(`match`)별 분기:
 
