@@ -4,6 +4,31 @@
 
 형식은 [Keep a Changelog](https://keepachangelog.com/ko/1.1.0/) 를 따르며, 버전 체계는 [Semantic Versioning](https://semver.org/lang/ko/) 을 사용합니다 (`claude-X.Y.Z` / `codex-X.Y.Z` 접두).
 
+## [claude-2.55.0] - 2026-10-20
+
+> **산출물 경로 소유권을 ticket-analysis 로 이전 (볼트 별칭 제거 선결 조건)** — deft 두 스킬이 구 홈 별칭 경로로 티켓 산출물을 라우팅해 볼트 쪽 별칭 제거가 막혀 있었다. 경로 규칙을 `ticket-analysis` 스킬이 단독 소유하게 하고 deft 는 **위임 참조만** 한다. 의뢰: 볼트 영속화 세션 요청서 `BIV/inbox/2026-10-20-요청-deft-산출물-라우팅-볼트-경로.md`.
+
+### Changed
+- agent-teams `SKILL.md` §3-4-1 — 대외 완성물 경로를 **`ticket-analysis` `references/artifact-routing.md` 위임**으로 교체(현재 값 `$BIV/<소유>/projects/<work-id>/` 는 괄호 안내). 프로젝트 레코드(`<ID>.md`, 구 `ticket.md`)의 경로·파일명도 ticket-analysis 소유로 명시.
+- multi-round `SKILL.md` — 작업 모드(T-4)·Phase 5-A 2곳의 산출물 라우팅을 같은 위임으로 교체.
+- codex 포트 multi-round `SKILL.md` — 동일 1곳 교체(agent-teams 는 포트에 없어 해당 없음).
+
+### Why (설계 판단)
+- **deft 에 경로 리터럴을 남기지 않는다.** 이번 사건이 그 필요를 실증했다 — 경로 정본이 볼트로 옮겨졌을 때 ticket-analysis 만 고쳐지고 deft 에 옛 리터럴이 남아 별칭 제거가 막혔다. 규칙 소유자를 하나로 두면 다음 이전에 deft 를 건드릴 필요가 없다.
+- 다만 **완전 위임은 하지 않았다** — deft 는 독립 플러그인이라 ticket-analysis 미설치 환경에서 규칙이 비어버린다. 현재 값을 괄호로 함께 적어 참조가 끊겨도 Lead 가 경로를 알 수 있게 하고, "정본은 ticket-analysis, 어긋나면 그쪽이 맞다"를 명시했다.
+- 역사 서술에서도 **옛 경로 리터럴을 제거**했다 — 요청서의 검증 조건(`grep` 0건)이 "리터럴을 남기지 말라"는 요구의 기계적 표현이므로, 설명문에 남은 리터럴도 미래 점검자를 혼란시킨다.
+
+### Verified
+- 양 트리 `grep -rn 'ai/tickets' .../skills/` **0건** (요청서 검증 조건 충족).
+- 참조 대상 실재 확인 — `ticket-analysis/references/artifact-routing.md` 에 `$BIV/<소유>/projects/<ID>/` 2건·`BIV_ROOT` 폴백 1건.
+- 위임 문구 Claude 3곳·Codex 1곳 반영.
+- **미실행**: 티켓 work-id 로 agent-teams 를 돌려 완성물이 볼트 경로에 생기는지의 실동작 확인(요청서 검증 2번). 문서 변경이라 다음 실사용에서 자연 확인한다.
+
+## [codex-1.27.3] - 2026-10-20
+
+### Changed
+- multi-round `SKILL.md` — 산출물 라우팅 1곳을 `ticket-analysis` artifact-routing 위임으로 교체(Claude 측 `claude-2.55.0` 과 동일 규칙). 구 홈 별칭 경로 리터럴 제거.
+
 ## [claude-2.54.0] - 2026-10-19
 
 > **`claude plugin eval` 스위트 신설 — 트리거 정확도·오발동 방지 회귀 검증** — deft 스킬은 `description` 의 트리거 문구로 발동하므로, 그 문구를 고칠 때 기존 발동이 깨지거나 다른 스킬이 오발동할 수 있다. `deft-test` 스킬(정적·단위·E2E)과 상호 보완 — 이쪽은 **"스킬이 의도대로 발동하는가"** 만 본다.

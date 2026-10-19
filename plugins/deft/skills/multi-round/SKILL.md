@@ -906,7 +906,7 @@ Lead 의 라운드 동작:
   - 경로: `~/.claude/plugin-data/deft/agent-teams/<work-id>/work.md` (work-id 규약은 deft 공통 config.json — §작업 디렉토리 표준).
   - 있으면 이어쓰기, 없으면 생성(agent-teams SKILL §6-1 템플릿). mate 보고를 Lead 가 `## FRONTEND/BACKEND/...` 또는 작업 항목별로 취합.
 - 이로써 작업 모드 회의 결과가 agent-teams 작업노트와 **같은 키로 연속** — 이후 agent-teams 가 같은 work-id 로 이어받을 수 있다.
-- **산출물 라우팅**: mate 보고를 **파일 형태의 대외 완성물**(사용자 보고서·타팀 공유 문서·배포 SQL 등)로 낼 때는 agent-teams SKILL §3-4-1 라우팅을 따른다 — work-id 가 티켓(`IT-\d+`)이면 `~/.ai/tickets/<work-id>/`, 프로젝트·OSS 작업이면 해당 repo. work.md 에는 취합 내용과 그 경로 링크만 남긴다(plugin-data 에 완성물 금지).
+- **산출물 라우팅**: mate 보고를 **파일 형태의 대외 완성물**(사용자 보고서·타팀 공유 문서·배포 SQL 등)로 낼 때는 agent-teams SKILL §3-4-1 라우팅을 따른다 — 티켓·프로젝트면 `ticket-analysis` artifact-routing 의 경로 규칙(현재 `$BIV/<소유>/projects/<work-id>/`), 그 외 OSS·일반 작업은 해당 repo. work.md 에는 취합 내용과 그 경로 링크만 남긴다(plugin-data 에 완성물 금지).
 
 **(T-5) 진행·종료**
 
@@ -919,7 +919,7 @@ Lead 의 라운드 동작:
 
 회의록 원본은 `board.jsonl` 전체. 종합은 `$SESSION_DIR/summary.md` 로 저장 + 사용자 보고:
 
-> **산출물 라우팅 (agent-teams SKILL §3-4-1 과 동일 규칙)**: `board.jsonl`/`summary.md`/`transcript.md` 는 **회의 세션 기록(내부)** — SESSION_DIR 유지. 그러나 회의 결론을 **파일 형태의 대외 완성물**(사용자 보고서·타팀 공유 문서)로 낼 때는 plugin-data 가 아니라 — work-id 가 티켓(`IT-\d+`)이면 `~/.ai/tickets/<work-id>/`, 프로젝트·OSS 작업이면 해당 repo 에 저장하고, summary.md(연계 회의면 work.md)에 그 경로 링크를 남긴다.
+> **산출물 라우팅 (agent-teams SKILL §3-4-1 과 동일 규칙)**: `board.jsonl`/`summary.md`/`transcript.md` 는 **회의 세션 기록(내부)** — SESSION_DIR 유지. 그러나 회의 결론을 **파일 형태의 대외 완성물**(사용자 보고서·타팀 공유 문서)로 낼 때는 plugin-data 가 아니라 — 티켓·프로젝트면 `ticket-analysis` artifact-routing 의 경로 규칙(현재 `$BIV/<소유>/projects/<work-id>/`), 그 외 OSS·일반 작업이면 해당 repo 에 저장하고, summary.md(연계 회의면 work.md)에 그 경로 링크를 남긴다.
 
 ```markdown
 ## Multi-Round Results
