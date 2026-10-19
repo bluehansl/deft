@@ -4,6 +4,24 @@
 
 형식은 [Keep a Changelog](https://keepachangelog.com/ko/1.1.0/) 를 따르며, 버전 체계는 [Semantic Versioning](https://semver.org/lang/ko/) 을 사용합니다 (`claude-X.Y.Z` / `codex-X.Y.Z` 접두).
 
+## [claude-2.54.0] - 2026-10-19
+
+> **`claude plugin eval` 스위트 신설 — 트리거 정확도·오발동 방지 회귀 검증** — deft 스킬은 `description` 의 트리거 문구로 발동하므로, 그 문구를 고칠 때 기존 발동이 깨지거나 다른 스킬이 오발동할 수 있다. `deft-test` 스킬(정적·단위·E2E)과 상호 보완 — 이쪽은 **"스킬이 의도대로 발동하는가"** 만 본다.
+
+### Added
+- `plugins/deft/evals/` — 케이스 4개. `trigger-multi-check`("교차 검증해줘") / `trigger-multi-round`("회의 열어줘" → **회의 모드**, 작업 모드면 실패) / `trigger-agent-teams`("IT-… 코딩 작업 시작" → 역할 분담 + **승인 게이트**) / `no-fire-meeting-notes`("회의록 정리해줘" → **어떤 멀티에이전트 스킬도 발동 안 함**).
+- `evals/README.md` — 실행 명령·옵션 근거·채점 원칙·**Δ 읽는 법**. 🚨 `--no-publish` 필수(기본이 claude.ai 발행), `--judge-model sonnet`(하네스 권고 — 기본 haiku 는 rubric 뉘앙스를 놓침), `--allow-tools` **미지정이 의도된 안전장치**(Bash gated → 리뷰어 CLI·워커 spawn 안 일어나 사용량이 예측 가능).
+- `evals/.gitignore` — `results/` 제외(실행 산출물은 커밋하지 않는다).
+
+### Verified (실측)
+- **트리거 정확도**: `trigger-multi-check` 3/3 발동, `trigger-agent-teams` 3/3 발동 + **승인 게이트 3/3 준수**.
+- **오발동 방지**: `no-fire-meeting-notes` with 1.00 / without 1.00 / **Δ 0.00** — "회의" 라는 단어가 multi-round 강한 트리거와 표면이 겹치는데도 끌려가지 않았다. should-NOT-fire 케이스는 **Δ 0 이 정답**이다(플러그인 유무와 무관하게 같은 답).
+
+### Known limitation
+- **outcome grader 가 gated 환경에 부적합** — "복수 엔진 비교 결과" 같은 도구 실행 산출물을 요구해 Bash gated 환경에서 구조적으로 실패한다. 낮은 점수(0.33~0.50)는 deft 결함이 아니라 **채점 기준 설계 실수**다. 재설계는 `PENDING.md` 등재.
+- `trigger-multi-round` 1건은 비용 환산 상한에 걸려 **미실행**.
+- **하네스 실측 메모**(README·PENDING 에 보존): `regex` grader 는 **긍정 매칭만** 지원(`negate`/`absent`/`invert`/`expect` 전부 무효) / `tool_used` 는 `tool:` 필드 + `weight > 0` / `--ablation with-without` 가 기본값이라 런 2배 / 스키마 오류는 실행 전 로드 단계에서 걸러져 **검증 비용 0**.
+
 ## [claude-2.53.2] - 2026-09-15
 
 > **이어받기 재보고의 요약 손실 방지 (R-19 보강)** — `claude-2.53.1` 재검증(cancel 모순·제어 신호 누출 **수정 확인, 회귀 없음**)에서 새로 관측된 성향 1건 반영. 이 검증에서 "이어받기 → 마커 완료 → `RESULT` 재보고" 경로가 자연 완료(92초)로 **처음 실측**됐다.

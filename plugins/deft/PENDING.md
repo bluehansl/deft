@@ -12,6 +12,14 @@
 (없음 — 진행 중 항목은 완료 시 CHANGELOG 로 이관)
 ## 보류 / 대기
 
+- [ ] **multi-check eval 스위트 — outcome grader 를 gated 환경에 맞게 재설계** (2026-09-15 등재 · 우선순위 중)
+  - **현황**: `plugins/deft/evals/` 에 케이스 4개 작성·실행 완료. **트리거 정확도는 검증됨** — `trigger-multi-check`·`trigger-agent-teams` 가 각 3/3 발동, `trigger-agent-teams` 는 승인 게이트도 3/3 준수, `no-fire-meeting-notes`("회의록 정리해줘" → 어떤 멀티에이전트 스킬도 발동 안 함)는 with 1.00 / without 1.00 / **Δ 0.00** 으로 완벽.
+  - **문제**: outcome grader 가 "복수 엔진 비교 결과"·"구체적 영향 범위" 같은 **도구 실행 산출물**을 요구해, `--allow-tools` 미지정(Bash gated)인 eval 환경에서 **구조적으로 실패**한다. 점수 0.33~0.50 은 deft 결함이 아니라 **채점 기준 설계 실수**다.
+  - **처방**: gated 환경에서 생산 가능한 것만 채점한다 — 실제 비교 결과가 아니라 "어떤 엔진으로 무엇을 비교할지의 설계", "역할 분담과 게이트 선언" 수준으로 rubric 을 낮춘다. 하네스 내장 지침의 grader 계층(① verifiable ② binary ③ n-ary ④ llm)을 따라 가능한 부분은 regex 로 내린다.
+  - **미실행 1건**: `trigger-multi-round`("회의 열어줘" → 회의 모드 발동) 는 비용 환산 상한에 걸려 실행되지 않았다. grader 재설계 시 함께 돌린다.
+  - **실측 메모 (재작업 시 시간 절약)**: `regex` grader 는 **긍정 매칭만** 지원(`negate`/`absent`/`invert`/`should_not_match`/`expect` 전부 무효) → "없어야 한다"는 llm 에 맡겨야 한다. `tool_used` grader 는 `tool: Skill` 필드를 쓰고 `weight > 0` 필수. `--ablation with-without` 가 기본값이라 런 수가 2배. judge 는 하네스가 **sonnet 이상을 권고**(기본 haiku 는 rubric 뉘앙스를 놓침). 스키마 오류는 실행 전 로드 단계에서 걸러져 **검증 비용이 0**이다.
+
+
 - [ ] **multi-check Phase 5 ② 잔존 판정이 orca in-process 리뷰어에서 무의미** (2026-09-15 등재 · 우선순위 낮음)
   - **관측(E2E 검증)**: Phase 5 ② 의 `pgrep -f -- "--agent-id $R@$TEAM_NAME"` 는 orca `backendType=in-process` 리뷰어에서 **항상 0** 이다 — 별도 프로세스가 아니기 때문. "정상 종료"와 "판정 불가"를 구분하지 못한다.
   - **현재 대응**: `shutdown_approved` 수신으로 종료를 확인하면 충분하다(E2E 에서 그렇게 확인). 즉 실害는 없고, 가드가 조용히 무효인 상태다.
