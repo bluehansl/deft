@@ -1,11 +1,46 @@
 <!-- ticket.md 표준 스키마의 단일 소스 문서. 호스트 지침에서 스킬로 이전(2026-07-31, verbatim). -->
 
-# `ticket.md` 표준 구조
+# 프로젝트 레코드 표준 구조 (`<ID>.md`)
 
-`~/.ai/tickets/<TICKET_ID>/ticket.md` 의 표준 스키마. 단일 Claude·팀 작업 공통.
+볼트 `$BIV/<소유>/projects/<ID>/<ID>.md` 의 표준 스키마. 단일 Claude·팀 작업 공통.
+
+레코드 **파일명은 폴더 ID와 같다**(옵시디언 폴더 노트) — 예 `fassto/projects/IT-15507/IT-15507.md`.
+옵시디언 그래프·탐색기·검색이 파일명을 노드 이름으로 쓰기 때문이다(`ticket`·`project` 가 수십 개면 정보 노드가 되지 못한다).
+읽을 때는 **`<ID>.md` → `project.md` → `ticket.md`** 순으로 탐지한다(뒤 둘은 과거 트리·다른 기기용 호환 경로).
+
+## frontmatter (필수 머리)
+
+```yaml
+---
+type: project
+id: "IT-15507"                 # 폴더명. Jira 키 또는 [a-z0-9][a-z0-9-]{2,40}
+owner: fassto                  # fassto | personal — 폴더 <owner>/projects/<id>
+title: "[FMS] 파스토아이 촬영 시작 개선 — …"
+aliases: []                    # 사람이 부르는 다른 이름(한글 가능) — 해석기가 매칭에 쓴다
+jira: IT-15507                 # 없으면 키 자체를 생략 (주제 프로젝트)
+system: ["fsswms", "fassto-eye"]   # cwd 레포 기반 기본값 — ticket-workflow.md §2
+status: in-progress            # draft | in-progress | blocked | verifying | done | unknown
+status_text: "…"               # 상태 줄 원문(120자)
+epic: "[[fassto/projects/IT-14535/IT-14535]]"   # 상위 에픽 레코드가 볼트에 있을 때만. 없으면 키 생략
+touches: []                    # 시스템 노드 위키링크
+process: []                    # 도메인 프로세스 노드
+related: ["[[fassto/projects/IT-15444/IT-15444]]"]   # 연결 프로젝트(볼트 절대경로)
+mentions_screens: ["pac014"]   # 본문 2회 이상 언급
+mentions_tables: ["TB_OUT_PACK_ERR_LOG"]
+created: 2026-10-02T17:06:01+09:00
+updated: 2026-10-07T14:54:05+09:00
+---
+```
+
+**키 순서 (고정)**: `type, id, owner, title, aliases, jira, system, status, status_text, epic, touches, process, related, mentions_screens, mentions_tables, created, updated`
+— `epic` 은 `status_text` 다음, `touches` 앞. **순서를 바꾸지 않는다** — 그래프·Breadcrumbs 가 키를 읽고, 순서가 흔들리면 diff 가독성도 떨어진다.
+
+갱신 시에는 **frontmatter 만 고치고 본문은 보존**한다(`ticket-workflow.md` §4 규약).
+
+## 본문
 
 ```markdown
-# {TICKET_ID} - {제목}
+# {ID} - {제목}
 
 ## META
 - 티켓: {TICKET_ID}
