@@ -306,7 +306,7 @@ PY
   - 사이드카 디렉토리: {sid}/     ← SIDECAR_EXISTS=1일 때만
       - 안의 **모든 항목**을 옮깁니다 (subagents·tool-results·custom-title.json·workflows 등)
   - 볼트 후처리: {실행 예정(스크립트 있음) | 없음}
-      ← `"${BIV_ROOT:-$HOME/obsidian-vault/BIV}/_tools/bootstrap/post-session-relocate.sh"` 실행 가능 여부로 판정.
+      ← `"${BIV_ROOT:-$HOME/obsidian-vault/BIV}/_tools/bootstrap/post-session-relocate-v2.sh"` 실행 가능 여부로 판정.
         미리 보려면 `--apply` 없이 같은 인자로 호출하면 dry-run 이라 아무것도 바꾸지 않는다(출력에 "(dry-run)" 표기).
 
 정리 대상:
@@ -351,10 +351,21 @@ def rb(err):
         try:
             # 디렉토리·파일 모두 복구한다 — 종전 isdir 조건은 custom-title.json 같은 파일을
             # 되돌리지 못해 롤백이 반쪽이었다(실측 2026-10-20).
-            if os.path.exists(s): os.makedirs(ss,exist_ok=True); shutil.move(s,t)
+            if os.path.exists(s):
+                os.makedirs(ss,exist_ok=True)
+                # 복구 지점이 이미 차 있으면 옮기지 않는다. shutil.move 는 t 가 기존 디렉토리면
+                # 실패하지 않고 t 안으로 밀어넣어(t/basename) 예외 없이 엉뚱한 위치에 놓인다 —
+                # 그대로면 ROLLBACK=OK 가 거짓이 된다. 원위치는 비어 있어야 정상이다.
+                if os.path.exists(t): ok=False; continue
+                shutil.move(s,t)
+                if os.path.exists(s) or not os.path.exists(t): ok=False
         except: ok=False
     if mm and os.path.exists(tf):
-        try: shutil.move(tf,src)
+        try:
+            if os.path.exists(src): ok=False   # 같은 이유 — src 가 디렉토리면 그 안으로 들어간다
+            else:
+                shutil.move(tf,src)
+                if not os.path.isfile(src) or os.path.exists(tf): ok=False
         except: ok=False
     try: os.rmdir(st)
     except: pass
@@ -394,13 +405,16 @@ try:
     #   볼트 프로젝트 폴더 여부를 경로 비교로 판정하기 때문(스크립트 계약, 2026-10-20 확인).
     #   훅이 실패해도 **이동 결과는 OK 로 유지**한다(EDGES 15 로 경고만) — 이동은 이미 끝났고
     #   후처리는 볼트 편의 기능이므로 롤백 사유가 아니다.
+    #   **실구현인 -v2 를 직접 부른다.** 구 이름 post-session-relocate.sh 는 v2 로 exec 하는 호환
+    #   래퍼일 뿐이고 볼트 쪽이 유지를 보장하지 않는다(래퍼 주석에 "새 스킬은 v2 를 직접 부른다").
+    #   구 볼트 체크아웃에는 v2 가 없어 POSTHOOK=ABSENT 로 떨어지고 무변경이다 — 안전한 실패다.
     import subprocess
     biv=os.environ.get("BIV_ROOT") or os.path.join(os.path.expanduser("~"),"obsidian-vault","BIV")
-    hook=os.path.join(biv,"_tools","bootstrap","post-session-relocate.sh")
+    hook=os.path.join(biv,"_tools","bootstrap","post-session-relocate-v2.sh")
     treal=os.environ.get("TARGET_REAL","")
     if treal and os.access(hook,os.X_OK):
         try:
-            r=subprocess.run([hook,sid,treal,"--apply"],capture_output=True,text=True,timeout=120)
+            r=subprocess.run([hook,sid,treal,"--tool","claude","--apply"],capture_output=True,text=True,timeout=120)
             print("POSTHOOK=OK" if r.returncode==0 else "POSTHOOK=FAIL")
             print("POSTHOOK_OUT<<EOF"); print((r.stdout or "").rstrip()); print("EOF")
             if r.returncode!=0: print(f"POSTHOOK_ERR={(r.stderr or '').strip()[:200]}")
@@ -453,7 +467,7 @@ RESULT=FAIL → E14 표 문구로 대체 (ROLLBACK 상태 및 MANUAL_CHECK 내�
 | 11 | CROSS_FS=1 (컨펌) | ⚠️ source와 target이 다른 파일시스템에 있습니다. 이동이 atomic하게 보장되지 않으며 실패 시 데이터 분리 가능성이 있습니다. 계속 진행할까요? (y/N) |
 | 12 | DISK_FULL=1 | ⚠️ 대상 파일시스템 용량이 부족합니다. 필요: `<NEED>KB`, 가용: `<AVAIL>KB`. 중단합니다. |
 | 13 | LOCK_PIDS nonempty | ⚠️ source 파일이 다른 프로세스에 의해 열려있습니다(PID: `<pids>`). 세션이 활성 중일 수 있습니다. 중단합니다. |
-| 15 | POSTHOOK=FAIL | ⚠️ 볼트 후처리 실패 — **이동은 정상 완료**됐습니다. 수동 실행: `"${BIV_ROOT:-$HOME/obsidian-vault/BIV}/_tools/bootstrap/post-session-relocate.sh" "<sid>" "<새 cwd>" --apply` |
+| 15 | POSTHOOK=FAIL | ⚠️ 볼트 후처리 실패 — **이동은 정상 완료**됐습니다. 수동 실행: `"${BIV_ROOT:-$HOME/obsidian-vault/BIV}/_tools/bootstrap/post-session-relocate-v2.sh" "<sid>" "<새 cwd>" --tool claude --apply` |
 | 14 | P5 RESULT=FAIL | ⚠️ 이동 중 오류 발생. 자동 롤백 시도 결과: `<성공/실패>`. 실패 시 다음 경로를 수동으로 확인해주세요: source=`<...>`, target=`<...>` |
 
 ## HINTS

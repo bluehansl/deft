@@ -4,6 +4,20 @@
 
 형식은 [Keep a Changelog](https://keepachangelog.com/ko/1.1.0/) 를 따르며, 버전 체계는 [Semantic Versioning](https://semver.org/lang/ko/) 을 사용합니다 (`claude-X.Y.Z` / `codex-X.Y.Z` 접두).
 
+## [claude-2.56.1] - 2026-10-20
+
+> **session-relocate: 볼트 훅을 v2 로 직접 호출 + 롤백 검증 추가** — `claude-2.56.0` 후속 패치. 볼트(BIV) 쪽이 훅 실구현을 `post-session-relocate-v2.sh` 로 옮기고 구 이름을 호환 래퍼로 남긴 데 대한 대응이며, 2.56.0 이 이동 경로에만 두었던 검증을 복구 경로에도 맞췄다. **Claude 판만** — Codex 판은 claudex 세션이 `codex-1.28.0` 으로 별도 진행.
+
+### Changed
+- **볼트 후처리 훅을 `post-session-relocate-v2.sh` 로 직접 호출** (3곳: P3 DRYRUN 판정 문구 · P5 실호출 · EDGES 15 수동 실행 안내). 구 이름 `post-session-relocate.sh` 는 **454바이트 `exec` 래퍼**이고 래퍼 주석이 직접 "새 스킬은 v2 를 직접 부른다"고 명시한다(볼트 소유 세션 결정 "(ㄷ) 파일명 분리", 요청서 §구 훅 호환 결정). 래퍼 유지는 보장되지 않으므로 치워지면 **훅이 조용히 `POSTHOOK=ABSENT` 로 떨어져** 이동은 되지만 memory 링크·워크로그 `project:` 갱신이 누락된다. 반대로 **구 볼트 체크아웃에는 v2 가 없어 `ABSENT`(무변경)** 가 되는데 이는 의도된 안전한 실패다 — Codex 세션이 구 훅의 `--apply` 로 Claude memory 를 건드리는 경로가 구조적으로 사라진다.
+- **`--tool claude` 명시** — v2 의 `--tool` 기본값이 `claude` 라 **동작은 2.56.0 과 동일**하고, 값은 의도 기록과 Codex 판(`--tool codex`, memory 단계 생략) 과의 대칭을 위한 것이다. 실측: `--tool claude` dry-run 이 rc 0 으로 memory 단계를 수행하고 `claude --resume <sid>` 를 안내 · `--tool bogus` 는 rc 2 로 거부 · `BIV_ROOT` 를 없는 경로로 두면 `POSTHOOK=ABSENT`.
+
+### Fixed
+- **롤백이 복구 실패를 `ROLLBACK=OK` 로 오보하던 결함** — 복구는 `shutil.move` 의 **예외 부재만** 성공 근거로 삼았다. 그런데 `shutil.move(s,t)` 는 `t` 가 기존 디렉토리면 실패하지 않고 **`t/basename(s)` 안으로 밀어넣는다** — 예외가 없으니 `ok` 가 True 로 남고, 세션 jsonl 은 엉뚱한 하위 경로에 놓인 채 "원위치 복구 성공" 으로 보고된다. `RESULT=FAIL` 직후 도는 경로라 사용자는 그 보고를 읽고 손을 떼고, 세션은 `/resume` 목록에서 사라진다. 2.56.0 은 **이동 경로에만** 검증(`isfile(tf) and not exists(src)`)이 있어 비대칭이었다.
+  - **처방**: 복구 **전** 원위치 점유 확인(`exists(t)` 면 옮기지 않고 `ok=False`) + 복구 **후** 경로 확인(사이드카 `exists(s) or not exists(t)` · 메인 `not isfile(src) or exists(tf)`). 원위치는 비어 있어야 정상이므로 점유 자체가 이상 신호다 — 병합을 시도하지 않는다.
+  - **대조 실측** (`rb()` 를 SKILL.md 에서 추출해 격리 구동, 사본 아님): ① 정상 복구 = 양쪽 `OK` ② **src 자리가 디렉토리로 점유 = `HEAD` `OK`(오보) / 신규 `FAIL`** ③ **사이드카 복구 지점 점유 = `HEAD` `OK`(오보) / 신규 `FAIL`**. 결함이 추정이 아니라 재현되는 실재였음을 구버전 열이 증명한다.
+  - **교훈은 R-19 와 같은 형태다** — "예외가 없었다" 는 성공의 증거가 아니다. multi-check 가 파일 크기·mtime 을 완료 근거로 쓰지 못하게 한 것과 같은 이유로, 복구도 **결과 경로를 직접 확인**해야 한다.
+
 ## [claude-2.56.0] - 2026-10-20
 
 > **session-relocate: 사이드카 전체 이동(버그) + 볼트 후처리 훅(기능)** — 의뢰: 볼트 영속화 세션 요청서 `BIV/inbox/2026-10-20-요청-session-relocate-볼트-후처리-훅.md`. **Claude 판만 적용** — Codex 판은 사용자 지시로 claudex 세션에서 별도 의뢰(591줄로 Claude 판 433줄과 구조가 달라 단순 복사 불가).
