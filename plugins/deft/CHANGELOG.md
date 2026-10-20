@@ -4,6 +4,31 @@
 
 형식은 [Keep a Changelog](https://keepachangelog.com/ko/1.1.0/) 를 따르며, 버전 체계는 [Semantic Versioning](https://semver.org/lang/ko/) 을 사용합니다 (`claude-X.Y.Z` / `codex-X.Y.Z` 접두).
 
+## [claude-2.56.0] - 2026-10-20
+
+> **session-relocate: 사이드카 전체 이동(버그) + 볼트 후처리 훅(기능)** — 의뢰: 볼트 영속화 세션 요청서 `BIV/inbox/2026-10-20-요청-session-relocate-볼트-후처리-훅.md`. **Claude 판만 적용** — Codex 판은 사용자 지시로 claudex 세션에서 별도 의뢰(591줄로 Claude 판 433줄과 구조가 달라 단순 복사 불가).
+
+### Fixed
+- **P5 가 사이드카를 화이트리스트로만 옮겨 나머지가 옛 슬러그에 남던 버그** — `("subagents","tool-results")` 고정 목록 대신 `sorted(os.listdir(ss))` **전체 순회**(`.DS_Store` 만 skip). 실측 2026-10-20 전수 집계: `tool-results` 22 · `subagents` 10 **· `custom-title.json` 14 · `workflows` 1** — 뒤 두 종이 누락됐고, `custom-title.json`(`/rename` 세션 이름)이 안 따라가 **새 슬러그의 `/resume` 목록에서 이름이 사라졌다**(요청자 실이동에서 발견). 화이트리스트는 Claude Code 가 항목을 추가할 때마다 조용히 깨진다 — `workflows` 는 요청서도 몰랐던 누락이다.
+- **롤백이 반쪽이던 결함** — 복구 조건이 `os.path.isdir(s)` 라 **파일을 되돌리지 못했다**. `os.path.exists(s)` 로 교체. 종전·수정을 나란히 돌린 대조: 종전은 `custom-title.json` 이 target 에 남아 복구 실패, 수정은 src 복구·target 잔여 0. 순회가 `sorted()` 로 결정적이므로 `reversed(ms)` 역순 복구도 결정적이다.
+
+### Added
+- **볼트 후처리 훅 (선택적)** — P5 성공 직후 `"${BIV_ROOT:-$HOME/obsidian-vault/BIV}/_tools/bootstrap/post-session-relocate.sh" "<SESSION_ID>" "<TARGET_REAL>" --apply` 가 **실행 가능할 때만** 1회 호출하고 stdout 을 P6 뒤에 그대로 붙인다. 없으면 `POSTHOOK=ABSENT` 로 아무것도 하지 않는다(종전 동작).
+    - **훅 실패는 롤백 사유가 아니다** — 이동은 이미 끝났고 후처리는 볼트 편의 기능이므로 `RESULT=OK` 를 유지하고 EDGES 15 로 경고 1줄만 낸다. `timeout=120` 으로 묶었다.
+    - 둘째 인자는 **사용자가 입력한 실제 cwd**(`TARGET_REAL`, P2-0 이 `realpath` 통과시킨 값)다. 인코딩된 `~/.claude/projects/-Users-…` 디렉토리가 아니다 — 스크립트가 `cd && pwd -P` 로 정규화해 슬러그·볼트 프로젝트 여부를 **경로 비교로 판정**하기 때문(스크립트 계약, 의뢰 세션 확인 2026-10-20). 이 값이 이미 파이프라인에 있어 P5 env 에 추가만 했다.
+- P5 stdout 계약에 `POSTHOOK=OK|FAIL|ABSENT`·`POSTHOOK_OUT<<EOF…EOF`·`POSTHOOK_ERR` 추가.
+- DRYRUN 블록 — "안의 **모든 항목**을 옮깁니다" + "볼트 후처리: 실행 예정/없음" 한 줄(미리 보려면 `--apply` 없이 호출 = dry-run 무변경).
+- P6 결과 — 기타 항목 행 + `POSTHOOK=OK` 일 때 훅 stdout 그대로 붙임.
+- EDGES 15 — `POSTHOOK=FAIL` 시 "이동은 정상 완료" 명시 + 수동 실행 명령 안내.
+
+### Verified (실측 2026-10-20)
+- **사이드카 전체 이동**: 격리 환경에 실측 분포대로 4종(`subagents`·`tool-results`·`workflows`·`custom-title.json`) + `.DS_Store` 구성 → `SIDECAR_SUBS=custom-title.json,subagents,tool-results,workflows`, src 사이드카 제거, `.DS_Store` 만 제외.
+- **롤백**: 종전(`isdir`) vs 수정(`exists`) 대조로 결함과 수정을 함께 입증.
+- **훅 정상**: 실제 스크립트를 dry-run(`--apply` 없이 = 무변경, 의뢰 세션 확인)으로 호출 → `exit=0`, 출력 3줄("memory 링크 이미 있음 / 워크로그 없음 / resume: …")이 요청서 예시와 일치.
+- **훅 부재**: `BIV_ROOT=/nonexistent` → `POSTHOOK=ABSENT`, 호출 시도 없음.
+- **훅 실패**: `exit 3` 더미 스크립트 → `POSTHOOK=FAIL` + stdout·stderr 포착 + `RESULT=OK` 유지.
+- L1 frontmatter OK, Codex 판 0줄 변경(의도).
+
 ## [claude-2.55.0] - 2026-10-20
 
 > **산출물 경로 소유권을 ticket-analysis 로 이전 (볼트 별칭 제거 선결 조건)** — deft 두 스킬이 구 홈 별칭 경로로 티켓 산출물을 라우팅해 볼트 쪽 별칭 제거가 막혀 있었다. 경로 규칙을 `ticket-analysis` 스킬이 단독 소유하게 하고 deft 는 **위임 참조만** 한다. 의뢰: 볼트 영속화 세션 요청서 `BIV/inbox/2026-10-20-요청-deft-산출물-라우팅-볼트-경로.md`.

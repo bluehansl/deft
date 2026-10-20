@@ -304,8 +304,10 @@ PY
 이동 대상:
   - 메인 jsonl: {sid}.jsonl  (크기: {size})
   - 사이드카 디렉토리: {sid}/     ← SIDECAR_EXISTS=1일 때만
-      - subagents/ (N개)
-      - tool-results/ (M개)
+      - 안의 **모든 항목**을 옮깁니다 (subagents·tool-results·custom-title.json·workflows 등)
+  - 볼트 후처리: {실행 예정(스크립트 있음) | 없음}
+      ← `"${BIV_ROOT:-$HOME/obsidian-vault/BIV}/_tools/bootstrap/post-session-relocate.sh"` 실행 가능 여부로 판정.
+        미리 보려면 `--apply` 없이 같은 인자로 호출하면 dry-run 이라 아무것도 바꾸지 않는다(출력에 "(dry-run)" 표기).
 
 정리 대상:
   - {sid}/.DS_Store (있을 경우)
@@ -318,7 +320,7 @@ PY
 입력 소문자화 후 {`y`,`yes`} → P5 실행. 그 외 → `변경 없음. 작업을 중단했습니다.`
 
 ## P5 (python, 이동+롤백)
-env `SRC`, `SRC_PROJECT_DIR`, `TARGET_PROJ`, `SESSION_ID` 전달. 순서: makedirs(target_proj) → shutil.move(main) → 검증 → (sidecar 있으면) subagents/tool-results 순차 move → .DS_Store 제거 + sidecar_src rmdir. 실패 시: moved_subs 역순 복구 → main 복구 → 빈 target sidecar rmdir.
+env `SRC`, `SRC_PROJECT_DIR`, `TARGET_PROJ`, `SESSION_ID`, **`TARGET_REAL`**(P2-0 의 정규화된 실제 cwd — 볼트 후처리 훅의 둘째 인자) 전달. 순서: makedirs(target_proj) → shutil.move(main) → 검증 → (sidecar 있으면) **사이드카 안 모든 항목** 순차 move → .DS_Store 제거 + sidecar_src rmdir. 실패 시: moved 역순 복구(파일·디렉토리 모두) → main 복구 → 빈 target sidecar rmdir.
 stdout:
 ```
 RESULT=OK|FAIL
@@ -326,6 +328,9 @@ MAIN_MOVED=1                (OK일 때)
 SIDECAR_SUBS=csv|-          (OK일 때)
 SUBAGENTS_COUNT=<int>       (OK일 때)
 TOOL_RESULTS_COUNT=<int>    (OK일 때)
+POSTHOOK=OK|FAIL|ABSENT     (OK일 때 — 볼트 후처리 훅 결과)
+POSTHOOK_OUT<<EOF ... EOF   (POSTHOOK=OK|FAIL 일 때, 훅 stdout 그대로)
+POSTHOOK_ERR=<msg>          (POSTHOOK=FAIL일 때)
 ERROR=<msg>                 (FAIL일 때)
 ROLLBACK=OK|FAIL            (FAIL일 때)
 MANUAL_CHECK:               (ROLLBACK=FAIL일 때)
@@ -334,7 +339,7 @@ MANUAL_CHECK:               (ROLLBACK=FAIL일 때)
 ```
 
 ```bash
-SRC="..." SRC_PROJECT_DIR="..." TARGET_PROJ="..." SESSION_ID="..." python3 <<'PY'
+SRC="..." SRC_PROJECT_DIR="..." TARGET_PROJ="..." SESSION_ID="..." TARGET_REAL="..." python3 <<'PY'
 import os, shutil
 src=os.environ["SRC"]; spd=os.environ["SRC_PROJECT_DIR"]; tp=os.environ["TARGET_PROJ"]; sid=os.environ["SESSION_ID"]
 tf=os.path.join(tp,f"{sid}.jsonl"); ss=os.path.join(spd,sid); st=os.path.join(tp,sid)
@@ -344,7 +349,9 @@ def rb(err):
     for sub in reversed(ms):
         s=os.path.join(st,sub); t=os.path.join(ss,sub)
         try:
-            if os.path.isdir(s): os.makedirs(ss,exist_ok=True); shutil.move(s,t)
+            # 디렉토리·파일 모두 복구한다 — 종전 isdir 조건은 custom-title.json 같은 파일을
+            # 되돌리지 못해 롤백이 반쪽이었다(실측 2026-10-20).
+            if os.path.exists(s): os.makedirs(ss,exist_ok=True); shutil.move(s,t)
         except: ok=False
     if mm and os.path.exists(tf):
         try: shutil.move(tf,src)
@@ -361,9 +368,14 @@ try:
     mm=True
     if os.path.isdir(ss):
         os.makedirs(st,exist_ok=True)
-        for sub in ("subagents","tool-results"):
+        # 사이드카 안의 **모든 항목**(파일·디렉토리)을 옮긴다. 화이트리스트를 쓰지 않는 이유:
+        # Claude Code 가 항목을 추가하면 조용히 누락된다 — 실측 2026-10-20 기준 custom-title.json(14건)·
+        # workflows(1건)가 subagents/tool-results 화이트리스트에 걸리지 않아 옛 슬러그에 남았고,
+        # /rename 으로 지은 세션 이름이 새 슬러그의 /resume 목록에서 사라졌다.
+        for sub in sorted(os.listdir(ss)):
+            if sub == ".DS_Store": continue
             s=os.path.join(ss,sub); t=os.path.join(st,sub)
-            if os.path.isdir(s): shutil.move(s,t); ms.append(sub)
+            shutil.move(s,t); ms.append(sub)
         ds=os.path.join(ss,".DS_Store")
         if os.path.isfile(ds):
             try: os.remove(ds)
@@ -376,6 +388,26 @@ try:
     if os.path.isdir(sa): csu=sum(1 for _ in os.listdir(sa))
     if os.path.isdir(tr): ctr=sum(1 for _ in os.listdir(tr))
     print(f"SUBAGENTS_COUNT={csu}"); print(f"TOOL_RESULTS_COUNT={ctr}")
+    # 볼트 후처리 훅 (선택적) — 스크립트가 **실행 가능할 때만** 1회 호출한다.
+    #   둘째 인자는 **사용자가 입력한 실제 cwd**(TARGET_REAL)다. 인코딩된 ~/.claude/projects/-Users-…
+    #   디렉토리는 스크립트가 받지 않는다 — 내부에서 `cd && pwd -P` 정규화 후 슬러그를 만들고
+    #   볼트 프로젝트 폴더 여부를 경로 비교로 판정하기 때문(스크립트 계약, 2026-10-20 확인).
+    #   훅이 실패해도 **이동 결과는 OK 로 유지**한다(EDGES 15 로 경고만) — 이동은 이미 끝났고
+    #   후처리는 볼트 편의 기능이므로 롤백 사유가 아니다.
+    import subprocess
+    biv=os.environ.get("BIV_ROOT") or os.path.join(os.path.expanduser("~"),"obsidian-vault","BIV")
+    hook=os.path.join(biv,"_tools","bootstrap","post-session-relocate.sh")
+    treal=os.environ.get("TARGET_REAL","")
+    if treal and os.access(hook,os.X_OK):
+        try:
+            r=subprocess.run([hook,sid,treal,"--apply"],capture_output=True,text=True,timeout=120)
+            print("POSTHOOK=OK" if r.returncode==0 else "POSTHOOK=FAIL")
+            print("POSTHOOK_OUT<<EOF"); print((r.stdout or "").rstrip()); print("EOF")
+            if r.returncode!=0: print(f"POSTHOOK_ERR={(r.stderr or '').strip()[:200]}")
+        except Exception as he:
+            print("POSTHOOK=FAIL"); print(f"POSTHOOK_ERR={he}")
+    else:
+        print("POSTHOOK=ABSENT")
 except Exception as e:
     rb(str(e))
 PY
@@ -389,6 +421,9 @@ PY
   - {sid}.jsonl
   - {sid}/subagents/* ({SUBAGENTS_COUNT}개)       ← 있을 때만
   - {sid}/tool-results/* ({TOOL_RESULTS_COUNT}개) ← 있을 때만
+  - {sid}/ 기타 항목: {SIDECAR_SUBS 중 위 둘 외 — custom-title.json·workflows 등}  ← 있을 때만
+
+{POSTHOOK_OUT 내용을 그대로 붙인다}        ← POSTHOOK=OK 일 때만. POSTHOOK=ABSENT 면 아무것도 쓰지 않는다.
 
 최종 경로:
   {TARGET_PROJ}/{sid}.jsonl
@@ -418,6 +453,7 @@ RESULT=FAIL → E14 표 문구로 대체 (ROLLBACK 상태 및 MANUAL_CHECK 내�
 | 11 | CROSS_FS=1 (컨펌) | ⚠️ source와 target이 다른 파일시스템에 있습니다. 이동이 atomic하게 보장되지 않으며 실패 시 데이터 분리 가능성이 있습니다. 계속 진행할까요? (y/N) |
 | 12 | DISK_FULL=1 | ⚠️ 대상 파일시스템 용량이 부족합니다. 필요: `<NEED>KB`, 가용: `<AVAIL>KB`. 중단합니다. |
 | 13 | LOCK_PIDS nonempty | ⚠️ source 파일이 다른 프로세스에 의해 열려있습니다(PID: `<pids>`). 세션이 활성 중일 수 있습니다. 중단합니다. |
+| 15 | POSTHOOK=FAIL | ⚠️ 볼트 후처리 실패 — **이동은 정상 완료**됐습니다. 수동 실행: `"${BIV_ROOT:-$HOME/obsidian-vault/BIV}/_tools/bootstrap/post-session-relocate.sh" "<sid>" "<새 cwd>" --apply` |
 | 14 | P5 RESULT=FAIL | ⚠️ 이동 중 오류 발생. 자동 롤백 시도 결과: `<성공/실패>`. 실패 시 다음 경로를 수동으로 확인해주세요: source=`<...>`, target=`<...>` |
 
 ## HINTS
