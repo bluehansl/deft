@@ -4,6 +4,36 @@
 
 형식은 [Keep a Changelog](https://keepachangelog.com/ko/1.1.0/) 를 따르며, 버전 체계는 [Semantic Versioning](https://semver.org/lang/ko/) 을 사용합니다 (`claude-X.Y.Z` / `codex-X.Y.Z` 접두).
 
+## [claude-2.58.0] - 2026-10-26 / [codex-1.29.0] - 2026-10-26
+
+> **session-relocate 양판 볼트 후처리 일원화 + Codex 복구를 대상 필드 조건부로** — 의뢰: `BIV/inbox/2026-10-26-요청-deft-ticket-analysis-스킬-영속화-구조-리빌딩.md`(요구 F, 인자 계약 13:22). Codex판에는 볼트 연계가 **0건**이었어서 추가가 아니라 신설이다.
+
+### Added
+- **Codex판 볼트 후처리 훅 연계 신설** — P2 가 `POSTHOOK_AVAILABLE` 을 판정해 이동 확인문에 "볼트 후처리: 실행 예정/없음"을 표시하고, P5 가 이동 성공 **직후 1회** `post-session-relocate-v2.sh <sid> <새 cwd> --tool codex [--from <옛 cwd>] --apply` 를 호출하며, P6 가 stdout 을 **요약하지 않고 그대로** 붙인다. `POSTHOOK=ABSENT` 면 아무것도 쓰지 않고, `FAIL` 이면 경고 한 줄만 덧붙이고 **이동 결과는 바꾸지 않는다**(훅 실패는 롤백 사유가 아니다 — 2026-10-20 계약).
+  - `--tool codex` 는 **필수**다. Codex 의 memory 는 `codex_home/memories` **전역**이고 소스가 루트 심링크를 거부하므로 Claude 식 슬러그별 memory 링크가 구조적으로 불가능하다 — 훅이 그 단계를 건너뛰고 resume 안내를 `claudex resume` 으로 낸다.
+  - **구 이름(`post-session-relocate.sh`)으로 폴백하지 않는다.** 구 훅은 뒤 옵션을 무시해 `--tool codex` 가 먹지 않고 **Claude memory 를 건드릴 수 있었다** — 그래서 파일명을 분리했다. 구 볼트 체크아웃에는 v2 가 없어 `ABSENT`(무변경)로 떨어지는데 이게 의도된 안전한 실패다.
+  - 인자는 **리스트로** 넘긴다(셸 문자열로 만들면 zsh 의 공백 옵션 비분리에 걸린다).
+- **`--from <옛 cwd>` 명시 전달 — 양판**(볼트 훅 계약 2026-10-26, 선택 인자). 훅에 `_index/raw-state/<sid>.json` 폴백이 있지만 **훅이 한 번도 안 돈 세션엔 그 파일이 없다** — 명시 전달이 더 넓게 동작한다.
+  - Codex: P2 가 이미 출력하는 `SRC_CWD`(갱신 전 `threads.cwd`)를 P5 에 넘긴다.
+  - Claude: **이동한 jsonl 안의 `cwd` 필드**에서 읽는다 — 이 스킬은 파일만 옮기고 jsonl 내부를 고치지 않으므로 그 값이 옛 cwd 그대로다. 슬러그에서 역산하면 경로의 `-` 와 `/` 를 구분할 수 없어 틀린다.
+
+### Fixed
+- **Codex판 복구가 전체 DB 복사라 다른 세션 변경까지 되돌리던 결함** — 종전 복구 절차는 `cp "<DB_BACKUP>" "<STATE_DB>"` 였다. 같은 `state_*.sqlite` 에 모든 세션이 들어 있으므로 **백업 이후 다른 세션이 바꾼 값(제목 변경·보관 처리 등)이 전부 사라진다.**
+  - 처방: P5 가 바꾼 필드의 **변경 전/후 값과 JSONL 해시를 `RESTORE_METADATA` 에 기록**하고(실행별 OS 임시 디렉터리), 복구는 **대상 row 의 대상 필드만** 되돌린다. 현재 값이 기록의 "후" 값과 다르면 그 사이 변경이 있었다는 뜻이므로 **무변경으로 중단**한다(덮으면 그 변경이 사라진다). `DB_BACKUP` 은 진단용으로만 남기고 실행 중인 DB 위에 복사하지 않는다.
+  - **대조 실측** (복구 heredoc 을 SKILL.md 에서 추출해 격리 구동, 사본 아님): ① 정상 복구 `RESTORE=OK`·DB·JSONL 둘 다 원복 ② **같은 DB 의 다른 세션 제목 변경 보존**(전체 `cp` 로는 소실되는 값) ③ 대상 세션 `cwd` 가 그 사이 또 바뀌면 `RESTORE=ABORT`·무변경 ④ JSONL 백업 변조 시 중단·현재 파일 보존 ⑤ 현재 JSONL 에 후속 기록이 있으면 중단. **5/5 통과.**
+- **`os.replace` 실패 시 `ROLLBACK=FAIL` 로 끝나던 구간** — DB 는 이미 커밋됐고 JSONL 은 옛 값인 어긋난 상태였고, 사용자가 전체 DB 를 복사해야 했다. 이제 **대상 필드만 자동으로 조건부 복구**하고 `RESTORE_METADATA` 경로를 함께 출력한다. 후속 변경이 감지되면 새 값을 보존하고 `ROLLBACK=FAIL` 로 보고한다.
+- **`claude-2.57.0` 의 작업 모드 규칙과 모순되던 예문 1건**(요청자 독립 검증 지적) — Claude판 `multi-round/SKILL.md` 의 엔진 강점 예문이 "작업 모드에서 구현=claude, 검증=claudex 기본 추천"으로 남아 있어 같은 파일의 T-1 새 규칙(작업 모드 mate 기본 Claude)과 충돌했다. **회의 모드 전용**으로 범위를 좁히고 T-1 상호 참조를 달았다. Codex판은 2.57.0 에서 이미 고쳤다.
+
+### Changed
+- Codex판 복구 절차 문서를 전면 교체 — 전체 `cp` 2줄에서 조건부 복원 heredoc 으로. **외부 스크립트 파일을 만들지 않았다**: 이 스킬은 전 단계가 인라인 heredoc 이고, 별 파일을 두면 플러그인 캐시 경로 해석(버전 글롭)이 또 하나의 실패 지점이 된다(경로를 잘못 찾으면 조용히 복구되지 않는다). 참고 인계안은 `scripts/restore-session.py` 설계였으나 **알고리즘만 흡수**했다.
+
+### Verified
+- heredoc Python 블록 **전수 재컴파일** — Claude 3개(79·69·104줄) · Codex 4개(155·105·242·48줄) 전부 통과.
+- 실제 v2 훅 dry-run(`--apply` 없음 = 무변경): `--version` → `2` · `--tool codex --from` → memory 생략·`claudex resume` 안내 · `--tool claude --from` → memory 병합 시도·원문 머리 갱신 예정 · `--from` 생략 → 폴백 경로 정상, 전부 rc 0.
+- 복구 로직 격리 시험 5/5(위 대조 표).
+- JSON 4건 파싱, 버전 `claude-2.58.0`/`codex-1.29.0`·marketplace 동기(`.agents` 쪽은 `version` 필드 없어 미변경).
+- **미검증(한계 명시)**: **실제 세션 이동은 하지 않았다**(Claude·claudex 각 1회는 요청자가 순서 5 완료 뒤 수행). 격리 시험과 dry-run 은 실이동을 대체하지 않는다. 또 DB·JSONL 두 자원을 **하나의 원자적 트랜잭션으로 묶지 않았다** — 프로세스 강제 종료·전원 단절 사이 구간까지 해결했다고 주장하지 않으며, 복구는 대상 세션이 종료된 상태를 전제한다.
+
 ## [claude-2.57.0] - 2026-10-26 / [codex-1.28.0] - 2026-10-26
 
 > **스킬을 기록 계층 규약에 연결 + 보조 세션을 프로젝트에 묶기 + 결론 내보내기** — 의뢰: `BIV/inbox/2026-10-26-요청-deft-ticket-analysis-스킬-영속화-구조-리빌딩.md`(요구 A 포인터·B·C·E, §5-1 정합). 양 트리 동시 반영. `ticket-analysis` `claude-0.3.0`/`codex-0.3.0`(`vault-layout.md` 신설)이 선결이다.

@@ -340,7 +340,7 @@ MANUAL_CHECK:               (ROLLBACK=FAIL일 때)
 
 ```bash
 SRC="..." SRC_PROJECT_DIR="..." TARGET_PROJ="..." SESSION_ID="..." TARGET_REAL="..." python3 <<'PY'
-import os, shutil
+import json, os, shutil
 src=os.environ["SRC"]; spd=os.environ["SRC_PROJECT_DIR"]; tp=os.environ["TARGET_PROJ"]; sid=os.environ["SESSION_ID"]
 tf=os.path.join(tp,f"{sid}.jsonl"); ss=os.path.join(spd,sid); st=os.path.join(tp,sid)
 mm=False; ms=[]
@@ -408,13 +408,33 @@ try:
     #   **실구현인 -v2 를 직접 부른다.** 구 이름 post-session-relocate.sh 는 v2 로 exec 하는 호환
     #   래퍼일 뿐이고 볼트 쪽이 유지를 보장하지 않는다(래퍼 주석에 "새 스킬은 v2 를 직접 부른다").
     #   구 볼트 체크아웃에는 v2 가 없어 POSTHOOK=ABSENT 로 떨어지고 무변경이다 — 안전한 실패다.
+    #   `--from <옛 cwd>` 는 선택 인자다(볼트 훅 계약 2026-10-26). 넘기면 훅이 옛 슬러그의
+    #   memory·인덱스 키를 찾아 옮기고, 생략하면 훅이 `_index/raw-state/<sid>.json` 에서 찾는다.
     import subprocess
     biv=os.environ.get("BIV_ROOT") or os.path.join(os.path.expanduser("~"),"obsidian-vault","BIV")
     hook=os.path.join(biv,"_tools","bootstrap","post-session-relocate-v2.sh")
     treal=os.environ.get("TARGET_REAL","")
+    # 옛 실제 cwd 를 --from 으로 넘긴다. 이동한 jsonl 안의 cwd 필드가 **옛 cwd 그대로**다
+    #   (이 스킬은 파일만 옮기고 jsonl 내부를 고치지 않는다) — 슬러그에서 역산하면
+    #   경로의 '-' 와 '/' 를 구분할 수 없어 틀린다. 훅에는 raw-state 폴백이 있지만
+    #   훅이 한 번도 안 돈 세션엔 그 파일이 없으므로 명시 전달이 더 넓게 동작한다.
+    sreal=""
+    try:
+        with open(tf,encoding="utf-8",errors="ignore") as fh:
+            for _ in range(200):
+                ln=fh.readline()
+                if not ln: break
+                try: o=json.loads(ln)
+                except Exception: continue
+                c=o.get("cwd")
+                if isinstance(c,str) and c: sreal=c; break
+    except Exception: pass
     if treal and os.access(hook,os.X_OK):
         try:
-            r=subprocess.run([hook,sid,treal,"--tool","claude","--apply"],capture_output=True,text=True,timeout=120)
+            argv=[hook,sid,treal,"--tool","claude"]
+            if sreal and sreal!=treal: argv+=["--from",sreal]
+            argv.append("--apply")
+            r=subprocess.run(argv,capture_output=True,text=True,timeout=120)
             print("POSTHOOK=OK" if r.returncode==0 else "POSTHOOK=FAIL")
             print("POSTHOOK_OUT<<EOF"); print((r.stdout or "").rstrip()); print("EOF")
             if r.returncode!=0: print(f"POSTHOOK_ERR={(r.stderr or '').strip()[:200]}")
@@ -467,7 +487,7 @@ RESULT=FAIL → E14 표 문구로 대체 (ROLLBACK 상태 및 MANUAL_CHECK 내�
 | 11 | CROSS_FS=1 (컨펌) | ⚠️ source와 target이 다른 파일시스템에 있습니다. 이동이 atomic하게 보장되지 않으며 실패 시 데이터 분리 가능성이 있습니다. 계속 진행할까요? (y/N) |
 | 12 | DISK_FULL=1 | ⚠️ 대상 파일시스템 용량이 부족합니다. 필요: `<NEED>KB`, 가용: `<AVAIL>KB`. 중단합니다. |
 | 13 | LOCK_PIDS nonempty | ⚠️ source 파일이 다른 프로세스에 의해 열려있습니다(PID: `<pids>`). 세션이 활성 중일 수 있습니다. 중단합니다. |
-| 15 | POSTHOOK=FAIL | ⚠️ 볼트 후처리 실패 — **이동은 정상 완료**됐습니다. 수동 실행: `"${BIV_ROOT:-$HOME/obsidian-vault/BIV}/_tools/bootstrap/post-session-relocate-v2.sh" "<sid>" "<새 cwd>" --tool claude --apply` |
+| 15 | POSTHOOK=FAIL | ⚠️ 볼트 후처리 실패 — **이동은 정상 완료**됐습니다. 수동 실행: `"${BIV_ROOT:-$HOME/obsidian-vault/BIV}/_tools/bootstrap/post-session-relocate-v2.sh" "<sid>" "<새 cwd>" --tool claude --from "<옛 cwd>" --apply` (`--from` 은 생략 가능 — 훅이 볼트 인덱스에서 찾는다) |
 | 14 | P5 RESULT=FAIL | ⚠️ 이동 중 오류 발생. 자동 롤백 시도 결과: `<성공/실패>`. 실패 시 다음 경로를 수동으로 확인해주세요: source=`<...>`, target=`<...>` |
 
 ## HINTS

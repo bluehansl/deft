@@ -267,6 +267,7 @@ PY
 - 대상 경로가 git repo가 아니면 git 메타데이터는 기존 값을 유지한다고 확정 출력 내부 상태에 반영한다.
 - `~/.codex/state_*.sqlite` 중 해당 `threads.id` row를 가진 DB를 찾아야 한다. 없으면 Codex `/resume` 표시 성공을 보장할 수 없으므로 중단한다.
 - `rollout_path` 또는 파일 스캔으로 세션 JSONL 파일을 찾아야 한다.
+- 볼트 후처리 훅 `"${BIV_ROOT:-$HOME/obsidian-vault/BIV}/_tools/bootstrap/post-session-relocate-v2.sh"` 의 **실행 가능 여부**를 판정해 `POSTHOOK_AVAILABLE` 로 출력한다(이동 전 안내용). 없어도 중단하지 않는다 — 볼트 후처리는 선택 단계다.
 - `git_sha`/`commit_hash`는 세션 당시의 기준 커밋으로 남겨 둔다. 과거 성공 이력도 sha는 갱신하지 않았다.
 
 ```bash
@@ -373,6 +374,9 @@ out("GIT_METADATA_POLICY", ", ".join(git_policy))
 out("OLD_GIT_BRANCH", thread.get("git_branch") or "")
 out("OLD_GIT_ORIGIN", thread.get("git_origin_url") or "")
 out("OLD_GIT_SHA", thread.get("git_sha") or "")
+biv = os.environ.get("BIV_ROOT") or os.path.join(HOME, "obsidian-vault", "BIV")
+hook = os.path.join(biv, "_tools", "bootstrap", "post-session-relocate-v2.sh")
+out("POSTHOOK_AVAILABLE", "1" if os.access(hook, os.X_OK) else "0")
 PY
 ```
 
@@ -384,6 +388,7 @@ P2 결과가 `RESULT=OK`일 때만 아래 형식으로 출력하고 사용자 �
 이동 대상이 확정되었습니다.
 - session id: {sid}
 - target: {TARGET_REAL}
+- 볼트 후처리: {POSTHOOK_AVAILABLE=1 이면 "실행 예정(스크립트 있음)" / 0 이면 "없음"}
 
 진행할까요? (Y/N)
 ```
@@ -397,11 +402,12 @@ SESSION_ID="<sid>" \
 STATE_DB="<state db>" \
 SESSION_FILE="<jsonl>" \
 TARGET_REAL="<target>" \
+SRC_CWD="<P2 의 SRC_CWD — 훅 --from 용>" \
 HAS_TARGET_GIT="<0|1>" \
 TARGET_GIT_BRANCH="<branch>" \
 TARGET_GIT_ORIGIN="<origin>" \
 python3 <<'PY'
-import json, os, shutil, sqlite3, tempfile, time
+import hashlib, json, os, shutil, sqlite3, subprocess, tempfile, time
 
 SID = os.environ["SESSION_ID"]
 DB = os.environ["STATE_DB"]
@@ -432,6 +438,18 @@ def fail(error, rollback="OK"):
 def connect_db(path):
     return sqlite3.connect(path, timeout=5)
 
+def sha256(path):
+    h = hashlib.sha256()
+    with open(path, "rb") as fh:
+        for chunk in iter(lambda: fh.read(1 << 16), b""):
+            h.update(chunk)
+    return h.hexdigest()
+
+# 바꾼 필드의 변경 전/후 값을 남긴다. 전체 DB 복사로 되돌리면 **같은 DB 안의 다른 세션이
+#   그 사이에 바꾼 값까지 되돌아간다**(제목·보관 상태 등 — 실측 재현). 복구는 이 기록으로
+#   대상 row 의 대상 필드만, 현재 값이 "후" 값과 같을 때에만 되돌린다.
+restore = {"session_id": SID, "db": DB, "jsonl": JSONL, "fields": {}}
+
 def update_thread_with_retry():
     last_error = None
     for attempt in range(3):
@@ -439,6 +457,10 @@ def update_thread_with_retry():
         try:
             con = connect_db(DB)
             cols = {r[1] for r in con.execute("pragma table_info(threads)").fetchall()}
+            # 변경 전 값을 먼저 읽어 복구 기록에 남긴다(같은 트랜잭션 안).
+            keys = [k for k in ("cwd", "updated_at", "updated_at_ms", "git_branch", "git_origin_url") if k in cols]
+            prev = con.execute(f"select {', '.join(keys)} from threads where id=?", (SID,)).fetchone()
+            before = dict(zip(keys, prev)) if prev else {}
             sets = ["cwd=?", "updated_at=strftime('%s','now')"]
             params = [TARGET]
             if "updated_at_ms" in cols:
@@ -452,7 +474,11 @@ def update_thread_with_retry():
             if cur.rowcount != 1:
                 con.rollback()
                 return 0, f"threads update rowcount={cur.rowcount}"
+            after = dict(zip(keys, con.execute(f"select {', '.join(keys)} from threads where id=?", (SID,)).fetchone()))
             con.commit()
+            for k in keys:
+                if before.get(k) != after.get(k):
+                    restore["fields"][k] = {"before": before.get(k), "after": after.get(k)}
             return cur.rowcount, ""
         except sqlite3.OperationalError as exc:
             last_error = str(exc)
@@ -538,6 +564,9 @@ if update_error:
     fail(update_error, "OK")
     raise SystemExit(0)
 
+restore["jsonl_sha256_before"] = sha256(json_bak)
+meta_path = os.path.join(backup_dir, f"restore-{SID}-{TS}.json")
+
 try:
     os.replace(tmp_path, JSONL)
 except Exception as exc:
@@ -546,15 +575,80 @@ except Exception as exc:
             os.unlink(tmp_path)
     except Exception:
         pass
-    fail(f"jsonl replace failed after sqlite update: {exc}", "FAIL")
+    # DB 는 이미 커밋됐고 JSONL 은 옛 값이다 — 두 자원이 어긋난 상태다.
+    #   종전에는 ROLLBACK=FAIL 로 끝나 사용자가 전체 DB 를 복사해야 했고, 그러면 같은 DB 의
+    #   다른 세션 변경까지 되돌아갔다. 이제 **대상 row 의 대상 필드만** 조건부로 되돌린다.
+    rb = "OK"
+    try:
+        con = connect_db(DB)
+        try:
+            for k, v in restore["fields"].items():
+                cur = con.execute(f"select {k} from threads where id=?", (SID,)).fetchone()
+                if cur is None:
+                    rb = "FAIL"; break
+                if cur[0] != v["after"]:
+                    # 그 사이 누군가(대상 세션 자신 포함) 이 필드를 또 바꿨다.
+                    #   새 값을 보존하고 복구를 포기한다 — 덮으면 그 변경이 사라진다.
+                    rb = "FAIL"; break
+                con.execute(f"update threads set {k}=? where id=?", (v["before"], SID))
+            else:
+                con.commit()
+            if rb == "FAIL":
+                con.rollback()
+        finally:
+            con.close()
+    except Exception:
+        rb = "FAIL"
+    with open(meta_path, "w", encoding="utf-8") as fh:
+        json.dump(restore, fh, ensure_ascii=False, indent=2)
+    print("RESULT=FAIL")
+    print(f"ERROR=jsonl replace failed after sqlite update: {exc}")
+    print(f"ROLLBACK={rb}")
+    print(f"JSON_BACKUP={json_bak}")
+    print(f"DB_BACKUP={db_bak}")
+    print(f"RESTORE_METADATA={meta_path}")
     raise SystemExit(0)
+
+restore["jsonl_sha256_after"] = sha256(JSONL)
+with open(meta_path, "w", encoding="utf-8") as fh:
+    json.dump(restore, fh, ensure_ascii=False, indent=2)
 
 print("RESULT=OK")
 print(f"JSON_BACKUP={json_bak}")
 print(f"DB_BACKUP={db_bak}")
+print(f"RESTORE_METADATA={meta_path}")
 print(f"JSON_CHANGED_LINES={changed_lines}")
 print(f"THREAD_ROWS_UPDATED={rows_updated}")
 print("SESSION_INDEX_TOUCHED=0")
+
+# 볼트 후처리 훅 — 이동 성공 직후 **1회**. 실패해도 이동 결과는 OK 로 둔다(이동은 이미 끝났고
+#   후처리는 영속 저장소 쪽 편의 기능이므로 롤백 사유가 아니다 — 계약 2026-10-20).
+#   **실구현인 -v2 를 직접 부른다.** 구 이름은 호환 래퍼일 뿐이고 유지가 보장되지 않으며,
+#   구 볼트 체크아웃에는 v2 가 없어 ABSENT(무변경)로 떨어진다 — 안전한 실패다. 구 이름으로
+#   폴백하지 않는다: 구 훅은 뒤 옵션을 무시해 `--tool codex` 가 먹지 않고 Claude memory 를
+#   건드릴 수 있었다(그래서 파일명을 분리했다).
+#   `--tool codex` 는 필수다 — 훅이 memory 단계를 건너뛰고 resume 안내를 claudex 로 낸다.
+#   Codex 의 memory 는 `codex_home/memories` 전역이고 소스가 루트 심링크를 거부하므로
+#   Claude 식 슬러그별 memory 링크는 구조적으로 불가능하다.
+#   인자는 **리스트로** 넘긴다 — 셸 문자열로 만들면 zsh 의 공백 옵션 비분리에 걸린다.
+biv = os.environ.get("BIV_ROOT") or os.path.join(os.path.expanduser("~"), "obsidian-vault", "BIV")
+hook = os.path.join(biv, "_tools", "bootstrap", "post-session-relocate-v2.sh")
+sreal = os.environ.get("SRC_CWD", "")
+if os.access(hook, os.X_OK):
+    try:
+        argv = [hook, SID, TARGET, "--tool", "codex"]
+        if sreal and sreal != TARGET:
+            argv += ["--from", sreal]
+        argv.append("--apply")
+        r = subprocess.run(argv, capture_output=True, text=True, timeout=120)
+        print("POSTHOOK=OK" if r.returncode == 0 else "POSTHOOK=FAIL")
+        print("POSTHOOK_OUT<<EOF"); print((r.stdout or "").rstrip()); print("EOF")
+        if r.returncode != 0:
+            print(f"POSTHOOK_ERR={(r.stderr or '').strip()[:200]}")
+    except Exception as he:
+        print("POSTHOOK=FAIL"); print(f"POSTHOOK_ERR={he}")
+else:
+    print("POSTHOOK=ABSENT")
 PY
 ```
 
@@ -564,7 +658,20 @@ PY
 
 ```markdown
 세션 경로를 변경이 완료되었습니다.
+
+{POSTHOOK_OUT 내용을 그대로 붙인다}        ← POSTHOOK=OK 일 때만. ABSENT 면 아무것도 쓰지 않는다.
 ```
+
+- `POSTHOOK=OK`: 훅 stdout 을 **요약하지 않고 그대로** 붙인다(memory 병합·인덱스 재키·원문 cwd 갱신·resume 명령이 그 안에 있다).
+- `POSTHOOK=ABSENT`: 아무것도 쓰지 않는다. 볼트가 없거나 구 체크아웃이라는 뜻이고 **이동은 정상**이다.
+- `POSTHOOK=FAIL`: 아래 한 줄만 덧붙인다 — **이동 결과는 변경하지 않는다**(훅 실패는 롤백 사유가 아니다).
+
+```markdown
+⚠️ 볼트 후처리 실패 — **이동은 정상 완료**됐습니다. 수동 실행:
+"${BIV_ROOT:-$HOME/obsidian-vault/BIV}/_tools/bootstrap/post-session-relocate-v2.sh" "<sid>" "<새 cwd>" --tool codex --from "<옛 cwd>" --apply
+```
+
+- 훅이 Orca 터미널·폴더 컨텍스트 재지정은 **안내 한 줄만** 낸다(CLI 로 재지정이 불가능하다 — 요청자 실측 2026-10-19). 그 줄도 그대로 붙인다.
 
 실패 시:
 
@@ -581,11 +688,67 @@ PY
 
 ## 복구 절차
 
-적용 후 문제가 있으면 P5 stdout의 `JSON_BACKUP`, `DB_BACKUP` 경로를 사용한다. 백업은 OS 임시 디렉터리에 저장되며 장기간 보존을 전제로 하지 않는다.
+적용 후 문제가 있으면 P5 stdout의 `RESTORE_METADATA` 기록으로 **이 작업이 바꾼 것만** 되돌린다. 백업·기록은 OS 임시 디렉터리에 저장되며 장기간 보존을 전제로 하지 않는다.
+
+> 🚨 **전체 DB 를 덮어쓰지 않는다.** `cp "<DB_BACKUP>" "<STATE_DB>"` 는 같은 DB 안의 **다른 세션이 그 사이에 바꾼 값까지 되돌린다**(제목 변경·보관 처리 등 — 실측 재현). `DB_BACKUP` 은 진단용으로만 남기고, 복원은 아래 절차로 대상 row 의 대상 필드만 조건부로 한다. 실행 중인 DB 위에 복사하지도 않는다.
+>
+> 복구는 **대상 세션이 종료된 상태**를 전제한다. 그 세션이 돌고 있으면 복원 중에 다시 쓸 수 있다.
 
 ```bash
-cp "<JSON_BACKUP>" "<SESSION_FILE>"
-cp "<DB_BACKUP>" "<STATE_DB>"
+RESTORE_METADATA="<P5 의 RESTORE_METADATA>" JSON_BACKUP="<P5 의 JSON_BACKUP>" python3 <<'PY'
+import hashlib, json, os, sqlite3, shutil, sys
+
+META = json.load(open(os.environ["RESTORE_METADATA"], encoding="utf-8"))
+JBAK = os.environ.get("JSON_BACKUP", "")
+SID, DB, JSONL = META["session_id"], META["db"], META["jsonl"]
+
+def sha256(p):
+    h = hashlib.sha256()
+    with open(p, "rb") as fh:
+        for c in iter(lambda: fh.read(1 << 16), b""):
+            h.update(c)
+    return h.hexdigest()
+
+# 1) 충돌 검사 — 현재 값이 "후" 값과 다르면 그 사이 누군가 또 바꿨다. 덮으면 그 변경이 사라지므로 중단한다.
+con = sqlite3.connect(DB, timeout=5)
+try:
+    for k, v in META["fields"].items():
+        row = con.execute(f"select {k} from threads where id=?", (SID,)).fetchone()
+        if row is None:
+            print(f"RESTORE=ABORT\nREASON=threads row not found: {SID}"); sys.exit(0)
+        if row[0] != v["after"]:
+            print(f"RESTORE=ABORT\nREASON=conflict on {k}: 현재 값이 이 작업의 결과와 다릅니다 — 그 사이 변경이 있었습니다. 무변경으로 중단합니다."); sys.exit(0)
+    # JSONL 도 같은 기준으로 본다. 백업이 변조됐거나 현재 파일이 그 뒤 또 바뀌었으면 손대지 않는다.
+    do_jsonl = False
+    if JBAK and os.path.isfile(JBAK) and META.get("jsonl_sha256_before"):
+        if sha256(JBAK) != META["jsonl_sha256_before"]:
+            print("RESTORE=ABORT\nREASON=JSON_BACKUP 해시가 기록과 다릅니다(변조·손상)."); sys.exit(0)
+        if META.get("jsonl_sha256_after") and os.path.isfile(JSONL) and sha256(JSONL) != META["jsonl_sha256_after"]:
+            print("RESTORE=ABORT\nREASON=현재 JSONL 이 이 작업의 결과와 다릅니다 — 그 뒤 세션이 더 기록했습니다. DB 만 되돌리려면 --db-only 로 다시 실행하세요."); sys.exit(0)
+        do_jsonl = True
+
+    # 2) DB 를 트랜잭션으로 되돌린다.
+    try:
+        for k, v in META["fields"].items():
+            con.execute(f"update threads set {k}=? where id=?", (v["before"], SID))
+        if do_jsonl:
+            # 3) JSONL 교체 실패 시 DB 를 보상 복구(커밋 전이라 rollback 으로 충분).
+            shutil.copy2(JBAK, JSONL)
+        con.commit()
+    except Exception as exc:
+        con.rollback()
+        print(f"RESTORE=FAIL\nREASON={exc}"); sys.exit(0)
+finally:
+    con.close()
+
+print("RESTORE=OK")
+print(f"FIELDS={','.join(META['fields'])}")
+print(f"JSONL_RESTORED={'1' if do_jsonl else '0'}")
+PY
 ```
 
-`session_index.jsonl`은 이 스킬의 변경 대상이 아니므로 복구 대상에 포함하지 않는다.
+- `RESTORE=OK` 는 **이 코드 경로에서 복구가 끝났다**는 뜻이다. 모든 현실 실패를 검증했다는 뜻이 아니다.
+- 기록·백업이 없어진 뒤(임시 디렉터리 정리 등)의 자동 복구는 **지원하지 않는다**.
+- 두 자원(DB·JSONL)을 하나의 원자적 트랜잭션으로 묶은 것은 아니다 — 프로세스 강제 종료·전원 단절 사이 구간까지 해결했다고 주장하지 않는다.
+- `session_index.jsonl`·`history.jsonl`·`shell_snapshots/`는 이 스킬의 변경 대상이 아니므로 복구 대상에도 포함하지 않는다. 볼트 훅도 이들을 건드리지 않는다(계약).
+- 볼트 쪽 후처리(memory·인덱스·원문 `cwd:`)의 복구는 **훅 소유자 영역**이다 — 이 절차는 Codex 상태만 되돌린다.
