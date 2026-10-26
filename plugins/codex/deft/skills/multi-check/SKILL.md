@@ -322,6 +322,21 @@ deft-review --job-dir "$OUT_DIR/job-claude" claude < "$PROMPT_FILE"
 - reviewer 또는 Lead가 추가 확인이 필요하다고 본 항목
 ```
 
+
+## 판정 내보내기 (영속 저장소가 있으면 필수)
+
+회의·비교가 **합의·판정에 도달했다면 그 결론은 대외 완성물이다** — 다음 세션·다른 기기·다른 도구가 다시 찾아야 하는 정보이고, 세션 디렉터리는 도구 내부 상태 영역이라 거기 두면 그 목적을 못 한다.
+
+| 작업 성격 | 내보낼 자리 |
+|---|---|
+| 티켓·프로젝트 작업 | `$BIV/<소유>/projects/<ID>/` — 레코드 `<ID>.md` 에 그 경로 링크를 남긴다 |
+| 프로젝트가 없는 설계·도구 판정 | `$BIV/<소유>/knowledge/decisions/` 에 **고유 이름**으로 (`YYYY-MM-DD-<주제>.md`) |
+| 영속 저장소가 없는 환경 | 해당 작업 repo. 저장소 부재는 오류가 아니다 |
+
+- `BIV="${BIV_ROOT:-$HOME/obsidian-vault/BIV}"`. 자리·이름 규약의 정본은 `ticket-analysis` `references/vault-layout.md`(기록 계층)와 `artifact-routing.md`(산출물)다. deft 는 "결론은 대외 완성물"이라는 **판정만** 소유한다.
+- **기각·보류한 선택지도 함께 남긴다** — 결론만 남기면 다음 세션이 같은 선택지를 다시 검토한다. 종료 시 `/session-save`(claudex `$session-save`)를 1회 불러 워크로그 `## 하지 않기로 한 것` 절에 이유와 함께 적는다.
+- 원본 로그(board·transcript·리뷰어 출력 파일)는 **내보내지 않는다**(내부 기록). 내보내는 것은 결론·판정이다.
+
 ## 종료 정책
 
 - reviewer는 결과 반환 후 즉시 종료한다.

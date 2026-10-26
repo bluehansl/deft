@@ -332,7 +332,9 @@ echo "메시지 버스: $([ "$HAVE_BUS" -eq 1 ] && echo "YES ($BUS_BIN)" || echo
 | claude | 구현·파일 수정·도구 활용, 신호/보고 프로토콜 준수 |
 | claudex/codex | 코드 리뷰·아키텍처 비평·리팩토링 관점 — 이종 교차 검증 가치가 큼 |
 
-예: 작업 모드에서 "구현 mate + 검증 mate" 분담이면 구현=claude, 검증=claudex 배정이 기본 추천.
+예: **회의 모드**에서 "구현 관점 + 검증 관점" 분담이면 구현=claude, 검증=claudex 배정이 기본 추천.
+
+> 🔑 **작업 모드는 위 휴리스틱을 쓰지 않는다 — mate 기본이 Claude 다**(사용자 결정 2026-10-26). 작업 모드는 일을 나눠 **실행**하는 것이라 이종일 이유가 없고, claudex 세션은 idle 에서 크로스세션 메시지로 깨어나지 않아 지시가 엇갈린 사례가 있다. claudex·codex 는 **사용자가 명시할 때만** 섞는다. 이종 AI 를 섞는 것이 목적인 **회의 모드와 multi-check 만 예외**다. (정본: 사용자 전역 지침의 보조 세션 배정 규칙.)
 
 > 워커 2명 이상부터 버스의 진가 — 수신자 아닌 워커도 보드를 보며 자발 발언 가능 (회의실 메타포).
 
@@ -602,7 +604,7 @@ Lead 의 라운드 동작:
 
 회의록 원본은 `board.jsonl` 전체. 종합은 `$SESSION_DIR/summary.md` 로 저장 + 사용자 보고:
 
-> **산출물 라우팅 — 독자(audience) 기준**: `board.jsonl`/`summary.md`/`transcript.md` 는 **회의 세션 기록(내부)** — SESSION_DIR 유지. 그러나 회의 결론을 **파일 형태의 대외 완성물**(사용자 보고서·타팀 공유 문서)로 낼 때는 plugin-data 가 아니라 — 티켓·프로젝트면 `ticket-analysis` artifact-routing 의 경로 규칙(현재 `$BIV/<소유>/projects/<work-id>/`), 그 외 OSS·일반 작업이면 해당 repo 에 저장하고, summary.md 에 그 경로 링크를 남긴다. (판별 질문: "팀 바깥 독자가 읽는 완성물인가?") 사용자 환경의 상위 지침(전역/프로젝트 AGENTS.md·CLAUDE.md)이 별도 산출물 경로를 규정하면 **그것이 우선**한다 — 본 규칙은 기본값이다.
+> **산출물 라우팅 — 독자(audience) 기준**: `board.jsonl`/`summary.md`/`transcript.md` 는 **회의 세션 기록(내부)** — SESSION_DIR 유지. 그러나 회의 결론을 **파일 형태의 대외 완성물**(사용자 보고서·타팀 공유 문서)로 낼 때는 plugin-data 가 아니라 — 티켓·프로젝트면 `ticket-analysis` artifact-routing 의 경로 규칙(현재 `$BIV/<소유>/projects/<work-id>/`), 그 외 OSS·일반 작업이면 해당 repo 에 저장하고, summary.md 에 그 경로 링크를 남긴다. 기록 계층 전체 규약은 `ticket-analysis` `references/vault-layout.md`. (판별 질문: "팀 바깥 독자가 읽는 완성물인가?") 사용자 환경의 상위 지침(전역/프로젝트 AGENTS.md·CLAUDE.md)이 별도 산출물 경로를 규정하면 **그것이 우선**한다 — 본 규칙은 기본값이다.
 
 ```markdown
 ## Multi-Round Results
@@ -642,6 +644,21 @@ Lead 의 라운드 동작:
 - 🟠 **orca 모드**: 위 cmux/tmux 정리 명령 대신 **추적한 `W*_HANDLE` 로만** `orca terminal close --terminal "$W_HANDLE"` (실측 — ptyKilled 포함). rebalancing 복원 단계는 없음(resize 미지원).
 - 버스 MCP 서버 프로세스는 각 워커 TUI 의 자식 — pane 종료 시 함께 정리됨. 잔존 확인: `pgrep -f "multi-round-bus mcp"`
 - 3-C 경로의 conversation 은 별도 종료 명령 없음 (다음 사용 시 새 conversationId)
+
+
+## 결론 내보내기 (영속 저장소가 있으면 필수)
+
+회의·비교가 **합의·판정에 도달했다면 그 결론은 대외 완성물이다** — 다음 세션·다른 기기·다른 도구가 다시 찾아야 하는 정보이고, 세션 디렉터리는 도구 내부 상태 영역이라 거기 두면 그 목적을 못 한다.
+
+| 작업 성격 | 내보낼 자리 |
+|---|---|
+| 티켓·프로젝트 작업 | `$BIV/<소유>/projects/<ID>/` — 레코드 `<ID>.md` 에 그 경로 링크를 남긴다 |
+| 프로젝트가 없는 설계·도구 판정 | `$BIV/<소유>/knowledge/decisions/` 에 **고유 이름**으로 (`YYYY-MM-DD-<주제>.md`) |
+| 영속 저장소가 없는 환경 | 해당 작업 repo. 저장소 부재는 오류가 아니다 |
+
+- `BIV="${BIV_ROOT:-$HOME/obsidian-vault/BIV}"`. 자리·이름 규약의 정본은 `ticket-analysis` `references/vault-layout.md`(기록 계층)와 `artifact-routing.md`(산출물)다. deft 는 "결론은 대외 완성물"이라는 **판정만** 소유한다.
+- **기각·보류한 선택지도 함께 남긴다** — 결론만 남기면 다음 세션이 같은 선택지를 다시 검토한다. 종료 시 `/session-save`(claudex `$session-save`)를 1회 불러 워크로그 `## 하지 않기로 한 것` 절에 이유와 함께 적는다.
+- 원본 로그(board·transcript·리뷰어 출력 파일)는 **내보내지 않는다**(내부 기록). 내보내는 것은 결론·판정이다.
 
 ## 보안 가드 요약
 
@@ -692,6 +709,7 @@ Lead 의 라운드 동작:
 - 통신: 버스 MCP 도구만 사용. '[bus] 메시지 확인' 입력 수신 시 즉시 check_messages → 수신자 본인이면 작업 후 post_message 응답 / 아니면 검토만 (자발 발언은 기여할 내용 있을 때 1회)
 - **도구 호출 표면**: check_messages/post_message 가 top-level 도구로 보이면 직접 호출. **top-level 에 없으면(code_mode_only 모델 — gpt-5.6 계열) 반드시 exec 안에서 `await tools.mcp__bus__check_messages({})` / `await tools.mcp__bus__post_message({to,type,reply_to,content})` 로 호출**. 🚨 도구 호출 없이 "ACK: 확인했습니다" 텍스트만 출력하고 턴 종료 금지 — 확인도 응답도 아니다.
 - **발언 time-box (속도 — 실측 검증)**: 핵심 권장 + 근거 1~3줄로 **간결히**. 회의는 의견·설계 토론이므로 **과도한 web search(수십 회)·장문 분석 금지** — 아는 지식으로 신속히 응답해 라운드 지연을 막는다. (심층 사실확인이 핵심이면 multi-check/deep-research 가 적합)
+- **맥락 복원(프로젝트 작업일 때만, 시작 전 1회)**: `$biv-import <ID> --light` — Codex 호스트는 스킬을 `$이름` 으로 부른다. 이 호출이 **이 워커 세션의 대화 원문을 그 프로젝트에 묶는다**(규약: `ticket-analysis` `references/vault-layout.md` §2). 프로젝트가 없으면 `$biv-import --self --light`. Claude 워커에게 줄 때는 `/biv-import` 로 바꿔 넣는다 — **표기가 틀리면 에러가 아니라 침묵**이다(평문으로 읽고 아무것도 안 한다).
 - 응답 마지막 줄에 'DONE:' 센티넬 (버스 메시지 본문 안에)
 - 회의 모드: {consult|dialogue|collaborate|debate}
 - 신호 프로토콜 사용 (ACK/STATUS/BLOCKED/DONE + 모드별 확장)

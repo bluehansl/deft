@@ -311,7 +311,8 @@ work-id를 **어떤 규칙으로 만들지**는 특정 값(예: 티켓번호)을
 | **팀 내부** (통신·연속성·오케스트레이션) | `work.md`, `<role>.md`, `team.md`, `orchestration.log`, `.spawn-*`, 통신 임시물·검증 스크립트 | `~/.claude/plugin-data/deft/agent-teams/<work-id>/` |
 | **대외 완성물** (사용자 보고·타팀 공유) | 릴리즈 노트, 핸드오프 문서, 배포 절차서, QA 컨텍스트, 분석/권고 보고서 | **work-id 가 티켓·프로젝트면 `ticket-analysis` 스킬 `references/artifact-routing.md` 의 경로 규칙을 따른다**(현재: `$BIV/<소유>/projects/<work-id>/`, `BIV="${BIV_ROOT:-$HOME/obsidian-vault/BIV}"`) / 그 외 OSS·일반 작업이면 해당 프로젝트 repo (plugin-data 금지) |
 
-- 프로젝트 레코드(`<ID>.md`, 구 `ticket.md`)의 경로·파일명은 **`ticket-analysis` 스킬이 소유**한다 — deft 는 경로를 자체 정의하지 않고 그 규칙을 따른다.
+- 프로젝트 레코드(`<ID>.md`)의 경로·파일명은 **`ticket-analysis` 스킬이 소유**한다 — deft 는 경로를 자체 정의하지 않고 그 규칙을 따른다.
+- **기록 계층 전체**(세션 원문·요약 워크로그·결정·지식·세션↔프로젝트 묶기·work-id↔ID 변환)의 규약은 `ticket-analysis` 스킬 `references/vault-layout.md` 가 소유한다 — deft 는 그 문서를 가리키고 자체 정의하지 않는다.
     - Why: 2026-10-20 에 경로 정본이 구 홈 별칭에서 볼트로 옮겨졌을 때 ticket-analysis 만 고쳐지고 deft 에 옛 경로 리터럴이 남아 **별칭 제거가 막혔다**. 규칙 소유자를 하나로 두면 다음 이전에 deft 를 건드릴 필요가 없다.
     - 괄호의 현재 값은 참조가 끊긴 환경(ticket-analysis 미설치)을 위한 안내일 뿐이고, **정본은 ticket-analysis 쪽**이다. 둘이 어긋나면 ticket-analysis 가 맞다.
 - **대외 완성물을 배출하면 work.md `## META`(또는 해당 섹션)에 그 경로 링크를 남긴다** — work.md 가 SSOT 로 "완성물이 어디 있는지"를 항상 가리키게(경로 수색 제거).
@@ -394,6 +395,14 @@ Agent(
   - 2순위(캐시 전용 설치): `$(ls -d ~/.claude/plugins/cache/bluehansl/deft/*/skills/agent-teams/agents 2>/dev/null | sort -V | tail -1)/<role>.md`
   - skill 경로는 Read 전용 — **데이터는 절대 거기 쓰지 말 것**.
 - 작업 특화 override: <work-id>/team.md 의 `## 팀원 기본 프롬프트 골격`에 본인 역할 항목 있으면 우선
+
+[맥락 복원 — 작업 시작 전 1회]
+- work-id 가 티켓·프로젝트면 가장 먼저 `/biv-import <ID> --light` 를 1회 호출한다.
+  ⚠️ 이 호출이 **이 팀원 세션의 대화 원문을 그 프로젝트에 묶는다** — 빠뜨리면 원문이 남아도
+     나중에 프로젝트 맥락으로 되찾을 수 없다(규약: `ticket-analysis` `references/vault-layout.md` §2).
+- work-id → `<ID>` 변환은 같은 문서 §3(이슈 키 추출 → `resolve_project.py` → 없으면 프로젝트 없음).
+  해석이 모호(`ambiguous`·`id: null`)하면 **추측하지 말고 Lead 에 물어본다.**
+- 프로젝트가 없는 작업이면 `/biv-import --self --light`.
 
 [필수 컨텍스트 — 작업 시작 전 Read]
 1. 본 SKILL.md (§4 작업 흐름·§5 통신·§6 파일 구조)

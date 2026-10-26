@@ -4,6 +4,38 @@
 
 형식은 [Keep a Changelog](https://keepachangelog.com/ko/1.1.0/) 를 따르며, 버전 체계는 [Semantic Versioning](https://semver.org/lang/ko/) 을 사용합니다 (`claude-X.Y.Z` / `codex-X.Y.Z` 접두).
 
+## [claude-2.57.0] - 2026-10-26 / [codex-1.28.0] - 2026-10-26
+
+> **스킬을 기록 계층 규약에 연결 + 보조 세션을 프로젝트에 묶기 + 결론 내보내기** — 의뢰: `BIV/inbox/2026-10-26-요청-deft-ticket-analysis-스킬-영속화-구조-리빌딩.md`(요구 A 포인터·B·C·E, §5-1 정합). 양 트리 동시 반영. `ticket-analysis` `claude-0.3.0`/`codex-0.3.0`(`vault-layout.md` 신설)이 선결이다.
+
+### Added
+- **기록 계층 포인터** — agent-teams §3-4-1, multi-round(Claude T-4·5-A / Codex 5-A)가 `ticket-analysis` `references/vault-layout.md` 를 가리킨다. **deft 는 기록 자리를 자체 정의하지 않는다** — `claude-2.55.0` 이 경로 소유자를 ticket-analysis 하나로 모은 이유와 같다(소유자가 둘이면 다음 구조 변경 때 한쪽이 남아 이전이 막힌다). 요청 원안은 `plugins/deft/references/vault-layout.md` 신설이었는데 그 근거를 제시해 **대안 A′(ticket-analysis 소유 + deft 는 포인터)로 확정**됐다.
+- **보조 세션을 프로젝트에 묶는 킥오프 1줄**(요구 B) — 워커·mate·리뷰어를 띄울 때 지시문에 맥락 복원 호출을 넣는다. **도구별로 표기가 다르다**: Claude `/biv-import <ID> --light`, claudex/codex **`$biv-import <ID> --light`**(Codex 호스트는 스킬을 `$이름` 으로 호출 — 요청자 실측). 프로젝트가 없으면 `--self`.
+  - 적용: agent-teams §4-3 task instruction(`[맥락 복원]` 절 신설) · multi-round Claude Phase 3-A 첫 워커 주석·T-2 작업 지시 · multi-round Codex `worker prompt 표준 inject` · multi-check 페르소나 주입 앞(**Claude 리뷰어 한정**).
+  - **CLI 리뷰어(claudex/codex/gemini)에는 넣지 않는다** — 1-shot 이고 스킬 호출 표면이 없다. 넣어도 평문으로 읽힌다.
+  - ⚠️ **틀린 표기는 에러가 아니라 침묵이다** — 워커가 그 줄을 평문으로 읽고 아무것도 하지 않으므로, 원문이 프로젝트에 안 묶인 것을 나중에 복원이 비어 있을 때 알게 된다. 그래서 도구별 표기를 문서에 명시했다.
+- **work-id ↔ 프로젝트 ID 변환 참조**(요구 C) — agent-teams task instruction 이 `vault-layout.md` §3(이슈 키 추출 → `resolve_project.py` → 없으면 프로젝트 없음)을 가리킨다. 해석이 모호(`ambiguous`·`id: null`)하면 **추측하지 않고 Lead 에 묻는다**(해석기는 동점을 실제로 돌려준다).
+- **결론 내보내기 단계**(요구 E) — multi-round(Claude §5-A-1 / Codex `## 결론 내보내기`)·multi-check(Claude `Phase 4-E` / Codex `## 판정 내보내기`) **신설**. multi-check 에는 결과를 영속 저장소로 내보내는 단계가 아예 없었다.
+  - 판정: **회의·비교의 결론은 대외 완성물이다** — 다음 세션·다른 기기·다른 도구가 다시 찾아야 하는 정보이고, 세션 디렉터리(plugin-data)는 도구 내부 상태를 지키는 영역이라 거기 두면 그 목적을 못 한다.
+  - 자리: 티켓·프로젝트면 `$BIV/<소유>/projects/<ID>/`, 프로젝트가 없는 설계·도구 판정이면 `$BIV/<소유>/knowledge/decisions/` 에 고유 이름, 영속 저장소가 없으면 작업 repo(부재는 오류가 아니다). 경로 규약의 정본은 ticket-analysis 이고 **deft 는 "결론은 대외 완성물"이라는 판정만 소유**한다.
+  - **기각·보류한 선택지도 함께 남긴다** — 결론만 남기면 다음 세션이 같은 선택지를 다시 검토한다. 종료 시 `/session-save`(claudex `$session-save`)로 워크로그 `## 하지 않기로 한 것` 절에 이유와 함께 적는다.
+  - `board.jsonl`·`transcript.md`·리뷰어 출력 파일은 **내보내지 않는다**(내부 기록). 내보내는 것은 결론·판정이다.
+
+### Changed
+- **작업 모드의 mate 기본을 Claude 로**(사용자 결정 2026-10-26 — 전역 지침 §5-1 정합). multi-round Claude T-1, Codex 엔진 배정 휴리스틱 양쪽.
+  - 종전: 작업 모드도 `mix` 가 기본이고 Codex판은 "구현 mate + 검증 mate 분담이면 구현=claude, 검증=claudex 가 기본 추천"이었다.
+  - 현행: 작업 모드는 첫 워커·추가 워커 모두 Claude(`Agent` tool → `deft-claude-native-spawn`)이고 **claudex·codex 는 사용자가 명시할 때만** 섞는다. 그 휴리스틱은 **회의 모드 전용**으로 범위를 좁혔다.
+  - Why: 작업 모드는 일을 나눠 **실행**하는 것이라 이종일 이유가 없다. 이종 AI 를 섞는 것이 목적인 **회의 모드와 multi-check 만 예외**다. claudex 세션이 idle 에서 크로스세션 메시지로 깨어나지 않아 지시가 엇갈린 사례가 근거다.
+- agent-teams §3-4-1 의 "구 `ticket.md`" 호환 언급 제거 — 레코드 이름은 `<ID>.md` 하나다(`ticket-analysis 0.3.0` 과 동기).
+- Codex multi-round 의 새 `## 결론 내보내기` 절은 **워크플로 뒤·보안 가드 앞**에 둔다(처음 파일 끝 `참가자 페르소나` 뒤에 붙었던 것을 옮겼다).
+
+### Verified
+- 양 트리 전 스킬에서 구 레코드 이름(`ticket.md`·`project.md`)·`~/.ai/tickets` **0건**(CHANGELOG 이력은 보존).
+- `vault-layout.md` 참조가 agent-teams 1곳·multi-round 3곳(Claude 2·Codex 1)에 들어갔고, 네 곳 모두 "deft 는 자체 정의하지 않는다"를 함께 적었다.
+- 킥오프 맥락 복원이 도구별 표기로 5곳(agent-teams 1·multi-round Claude 2·Codex 1·multi-check 1).
+- JSON 4건 파싱, 버전 `claude-2.57.0`/`codex-1.28.0`·marketplace 동기(`.agents` 쪽은 `version` 필드 없어 미변경).
+- **미검증(한계 명시)**: 실제 팀·회의·비교를 돌려 킥오프·내보내기가 동작하는지는 **측정하지 않았다**. 문서 규약 변경이고 실행 검증은 요청서 §절차·검증의 실세션 시험(요청자 담당)에서 한다. 과거 시험 결과로 대체하지 않는다.
+
 ## [claude-2.56.1] - 2026-10-20
 
 > **session-relocate: 볼트 훅을 v2 로 직접 호출 + 롤백 검증 추가** — `claude-2.56.0` 후속 패치. 볼트(BIV) 쪽이 훅 실구현을 `post-session-relocate-v2.sh` 로 옮기고 구 이름을 호환 래퍼로 남긴 데 대한 대응이며, 2.56.0 이 이동 경로에만 두었던 검증을 복구 경로에도 맞췄다. **Claude 판만** — Codex 판은 claudex 세션이 `codex-1.28.0` 으로 별도 진행.

@@ -114,6 +114,8 @@ Important: The Claude CLI agent and Lead (Claude) are the same model but run in 
 
 multi-check 리뷰어(Codex/Claude/Gemini)는 **서로 대화하지 않고 각자 결과만 보고**한다 → 팀(상호대화)이 아니라 **fan-out 서브에이전트** 패턴이다. 과거의 `TeamCreate` 호출은 폐지됐고 불필요하다. 현행 Claude Code는 첫 `Agent` spawn 시 팀(`session-<id>`)이 암묵 생성되며, 리뷰어는 그 안에서 1-shot 으로 동작 후 보고한다. **세션마다 팀이 자동 분리**되므로 과거의 동명-팀 충돌 문제도 없다.
 
+**맥락 복원 (프로젝트 작업일 때만)**: spawn prompt 에 "시작 전 `/biv-import <ID> --light` 를 1회 호출"을 넣는다 — 이 호출이 그 리뷰어 세션의 대화 원문을 프로젝트에 묶는다(규약: `ticket-analysis` `references/vault-layout.md` §2). 리뷰어를 **CLI(claudex/codex/gemini)로 띄우는 경로**에는 넣지 않는다 — 그 세션은 1-shot 이고 스킬 호출 표면이 없다. 프로젝트가 없으면 생략한다.
+
 **페르소나 주입 (보존 필수 — SSOT)**: 각 리뷰어의 실행 규약(CLI 선택·명령·플래그·SendMessage 보고)은 본 skill 패키지의 `agents/<reviewer>.md` 가 단일 진실 소스다. **Lead 는 spawn 전에 해당 파일을 Read 해 그 전문을 spawn prompt 에 인라인**한다 — 리뷰어가 plugin cache 경로를 직접 찾을 필요 없이 페르소나가 그대로 주입된다.
 
 ```bash
@@ -266,6 +268,21 @@ SendMessage(to: "<방금 보고한 리뷰어 이름>", message: {type: "shutdown
 ### Final Conclusion
 - Synthesized recommendation
 ```
+
+### Phase 4-E: 판정 내보내기 (영속 저장소가 있으면 필수)
+
+
+회의·비교가 **합의·판정에 도달했다면 그 결론은 대외 완성물이다** — 다음 세션·다른 기기·다른 도구가 다시 찾아야 하는 정보이고, 세션 디렉터리는 도구 내부 상태 영역이라 거기 두면 그 목적을 못 한다.
+
+| 작업 성격 | 내보낼 자리 |
+|---|---|
+| 티켓·프로젝트 작업 | `$BIV/<소유>/projects/<ID>/` — 레코드 `<ID>.md` 에 그 경로 링크를 남긴다 |
+| 프로젝트가 없는 설계·도구 판정 | `$BIV/<소유>/knowledge/decisions/` 에 **고유 이름**으로 (`YYYY-MM-DD-<주제>.md`) |
+| 영속 저장소가 없는 환경 | 해당 작업 repo. 저장소 부재는 오류가 아니다 |
+
+- `BIV="${BIV_ROOT:-$HOME/obsidian-vault/BIV}"`. 자리·이름 규약의 정본은 `ticket-analysis` `references/vault-layout.md`(기록 계층)와 `artifact-routing.md`(산출물)다. deft 는 "결론은 대외 완성물"이라는 **판정만** 소유한다.
+- **기각·보류한 선택지도 함께 남긴다** — 결론만 남기면 다음 세션이 같은 선택지를 다시 검토한다. 종료 시 `/session-save`(claudex `$session-save`)를 1회 불러 워크로그 `## 하지 않기로 한 것` 절에 이유와 함께 적는다.
+- 원본 로그(board·transcript·리뷰어 출력 파일)는 **내보내지 않는다**(내부 기록). 내보내는 것은 결론·판정이다.
 
 ### Phase 5: Cleanup
 

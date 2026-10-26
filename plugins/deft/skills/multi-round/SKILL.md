@@ -295,6 +295,8 @@ nohup cmux-rebalance-guard "$DEFT_BASE_WORKSPACE" 90 0.1 50 5 "$GUARD_FLAG" "$EX
 ```
 Agent(name:"<회의-역할-이름>", subagent_type:"claude", model:"fable",
       description:"<한 줄>", prompt:"<페르소나 + 회의 참가 + SendMessage 보고 규칙>")
+# prompt 에 **맥락 복원 1줄**을 포함한다 — 프로젝트 작업이면 "시작 전 /biv-import <ID> --light 를 1회
+#   호출" (규약: ticket-analysis references/vault-layout.md §2). 이 호출이 워커 원문을 프로젝트에 묶는다.
 # 반환된 "<name>@session-<id>" 의 session-<id> 가 곧 team-id.
 # ⚠️ subagent_type 은 반드시 "claude"(범용) — claude-code-guide·Explore 등 제한 타입은
 #    SendMessage 도구가 비활성이라 Lead 에 보고 불가 → 조용한 데드락(실측 사고). 회의 워커는 항상 "claude".
@@ -886,7 +888,8 @@ Lead 의 라운드 동작:
 
 **(T-1) 워커 spawn — 회의와 같은 하네스, 버스 OFF**
 
-- 첫 claude 워커 `Agent` tool spawn(팀 생성 겸 참가) → claudex 워커 `deft-claudex-native-spawn`(헬퍼 down. 🟠 orca 모드도 헬퍼 그대로 — 자동 분기, `DEFT_BASE_WORKSPACE` 만 불요. §용례 1 🟠). **§NTP 불변 하네스 H1~H4 그대로**(anchor/placeholder 금지).
+- 🔑 **작업 모드의 mate 기본은 Claude 다**(사용자 결정 2026-10-26). 첫 워커도 추가 워커도 Claude 로 띄우고(`Agent` tool → `deft-claude-native-spawn`), **claudex·codex 는 사용자가 명시할 때만** 섞는다. 이종 AI 를 섞는 것이 목적인 **회의 모드와 multi-check 만 예외**다 — 작업 모드는 일을 나눠 실행하는 것이라 이종일 이유가 없고, claudex 세션은 idle 에서 크로스세션 메시지로 깨어나지 않아 지시가 엇갈린 사례가 있다. (정본: 사용자 전역 지침의 보조 세션 배정 규칙.)
+- 첫 claude 워커 `Agent` tool spawn(팀 생성 겸 참가) → 추가 claude 워커 `deft-claude-native-spawn`. 사용자가 claudex 를 명시했으면 `deft-claudex-native-spawn`(헬퍼 down. 🟠 orca 모드도 헬퍼 그대로 — 자동 분기, `DEFT_BASE_WORKSPACE` 만 불요. §용례 1 🟠). **§NTP 불변 하네스 H1~H4 그대로**(anchor/placeholder 금지).
 - ⚠️ 회의와 유일한 차이: 헬퍼에 **`DEFT_BUS_DIR` 를 설정하지 않는다**(board 버스 미주입 = 순수 NTP — cmux/orca 동일). claude 워커는 Agent tool 이라 어차피 버스 없음.
 - spawn 시작 시 `cmux-rebalance-guard` 발사(§용례 1 과 동일 — done-flag + expected-panes 방식: `GUARD_FLAG="$SESSION_DIR/.spawn-done"; rm -f "$GUARD_FLAG"; EXP_PANES=$((WORKER_COUNT + 1)); nohup cmux-rebalance-guard "$DEFT_BASE_WORKSPACE" 90 0.1 50 5 "$GUARD_FLAG" "$EXP_PANES" &`). **모든 mate spawn 후 `touch "$GUARD_FLAG"`** 로 guard 종료. (mate 2명+ 면 EXP_PANES≥3 → 첫 워커 단계부터 60:40 정렬.) 🟠 orca 모드는 guard 발사·touch 전부 skip(resize CLI 미지원).
 
@@ -894,6 +897,7 @@ Lead 의 라운드 동작:
 
 - Lead 가 각 mate 에게 `SendMessage(to:"<mate>", message:"<작업 지시 + 산출 형식 + 보고 규칙>")` 로 **개별 작업 지시**. board 가 없으므로 각자 자기 작업만 본다(회의처럼 전원 공개 아님).
 - 작업 지시에 포함: 담당 범위 / 산출물 형식 / **결과는 반드시 통신 도구로 Lead 에 보고**(출력 ≠ 전달 — §보고 채널 원칙. claudex=`send_message(target:"team-lead", message:…)`, claude=`SendMessage(to:"team-lead", …)`) / mate 간 협의가 필요하면 상대 mate 이름으로 직접 보고.
+- **맥락 복원 1줄을 반드시 넣는다** — 프로젝트 작업이면 mate 가 시작 전 `/biv-import <ID> --light`(claudex mate 는 **`$biv-import <ID> --light`**)를 1회 호출하게 한다. 이 호출이 그 mate 세션의 원문을 프로젝트에 묶는다. 도구별 표기가 다르고 **틀린 표기는 에러가 아니라 침묵**(워커가 평문으로 읽고 아무것도 안 한다)이므로 어느 도구를 띄웠는지에 맞춰 넣는다. 프로젝트가 없으면 `--self`. 규약·변환 규칙은 `ticket-analysis` `references/vault-layout.md` §2·§3.
 
 **(T-3) mate↔mate N:N 직접 협의**
 
@@ -906,7 +910,7 @@ Lead 의 라운드 동작:
   - 경로: `~/.claude/plugin-data/deft/agent-teams/<work-id>/work.md` (work-id 규약은 deft 공통 config.json — §작업 디렉토리 표준).
   - 있으면 이어쓰기, 없으면 생성(agent-teams SKILL §6-1 템플릿). mate 보고를 Lead 가 `## FRONTEND/BACKEND/...` 또는 작업 항목별로 취합.
 - 이로써 작업 모드 회의 결과가 agent-teams 작업노트와 **같은 키로 연속** — 이후 agent-teams 가 같은 work-id 로 이어받을 수 있다.
-- **산출물 라우팅**: mate 보고를 **파일 형태의 대외 완성물**(사용자 보고서·타팀 공유 문서·배포 SQL 등)로 낼 때는 agent-teams SKILL §3-4-1 라우팅을 따른다 — 티켓·프로젝트면 `ticket-analysis` artifact-routing 의 경로 규칙(현재 `$BIV/<소유>/projects/<work-id>/`), 그 외 OSS·일반 작업은 해당 repo. work.md 에는 취합 내용과 그 경로 링크만 남긴다(plugin-data 에 완성물 금지).
+- **산출물 라우팅**: mate 보고를 **파일 형태의 대외 완성물**(사용자 보고서·타팀 공유 문서·배포 SQL 등)로 낼 때는 agent-teams SKILL §3-4-1 라우팅을 따른다 — 티켓·프로젝트면 `ticket-analysis` artifact-routing 의 경로 규칙(현재 `$BIV/<소유>/projects/<work-id>/`), 그 외 OSS·일반 작업은 해당 repo. work.md 에는 취합 내용과 그 경로 링크만 남긴다(plugin-data 에 완성물 금지). 기록 계층 전체 규약은 `ticket-analysis` `references/vault-layout.md`.
 
 **(T-5) 진행·종료**
 
@@ -920,6 +924,20 @@ Lead 의 라운드 동작:
 회의록 원본은 `board.jsonl` 전체. 종합은 `$SESSION_DIR/summary.md` 로 저장 + 사용자 보고:
 
 > **산출물 라우팅 (agent-teams SKILL §3-4-1 과 동일 규칙)**: `board.jsonl`/`summary.md`/`transcript.md` 는 **회의 세션 기록(내부)** — SESSION_DIR 유지. 그러나 회의 결론을 **파일 형태의 대외 완성물**(사용자 보고서·타팀 공유 문서)로 낼 때는 plugin-data 가 아니라 — 티켓·프로젝트면 `ticket-analysis` artifact-routing 의 경로 규칙(현재 `$BIV/<소유>/projects/<work-id>/`), 그 외 OSS·일반 작업이면 해당 repo 에 저장하고, summary.md(연계 회의면 work.md)에 그 경로 링크를 남긴다.
+
+#### 5-A-1. 결론 내보내기 (영속 저장소가 있으면 필수)
+
+회의가 **합의·판정에 도달했다면 그 결론은 대외 완성물이다** — 다음 세션·다른 기기·다른 도구가 다시 찾아야 하는 정보이고, `SESSION_DIR` 은 plugin update 로부터 도구 상태를 지키는 영역이라 거기 두면 그 목적을 못 한다.
+
+| 작업 성격 | 내보낼 자리 |
+|---|---|
+| 티켓·프로젝트 회의 | `$BIV/<소유>/projects/<ID>/` — 레코드 `<ID>.md` 에 그 경로 링크를 남긴다 |
+| 프로젝트가 없는 설계·도구 판정 | `$BIV/<소유>/knowledge/decisions/` 에 **고유 이름**으로 (`YYYY-MM-DD-<주제>.md`) |
+| 영속 저장소가 없는 환경 | 해당 작업 repo. 저장소 부재는 오류가 아니다 |
+
+- 자리·이름 규약의 정본은 `ticket-analysis` `references/vault-layout.md`(기록 계층)와 `artifact-routing.md`(산출물)다. deft 는 "회의 결론은 대외 완성물"이라는 **판정만** 소유한다.
+- **기각·보류한 선택지도 함께 남긴다** — 결론만 남기면 다음 세션이 같은 선택지를 다시 검토한다. 리드는 종료 시 `/session-save`(claudex `$session-save`)를 1회 불러 워크로그 `## 하지 않기로 한 것` 절에 이유와 함께 적는다.
+- `board.jsonl`·`transcript.md` 는 **내보내지 않는다**(회의 내부 기록). 내보내는 것은 결론·결정이다.
 
 ```markdown
 ## Multi-Round Results
