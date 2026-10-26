@@ -47,8 +47,8 @@ python3 -I "$BIV/_tools/index/import_pack.py" "<ID>" --budget 3000
 ```
 
 - 팩 구성: 기준 프로젝트 1줄 → frontmatter → 작업 목표·범위 → 상태 → 미해결 결정 → 진행 기록 최근 5 → 산출물 최근 10 → 최근 세션 워크로그의 미해결·다음 단계 → related → 공동 변경 후보. 첫 줄의 `경로 <소유>/projects/<ID>/` 가 **산출물 라우팅 기준**이다.
-- 팩이 비거나 스크립트가 없으면 폴백: 레코드를 직접 읽는다 — **`<ID>/<ID>.md` → `<ID>/project.md` → `<ID>/ticket.md`** 순 탐지.
-    - 레코드 파일명은 **폴더 ID와 같다**(옵시디언 폴더 노트). 뒤 두 이름은 과거 트리·다른 기기용 호환 경로다 — 실측 2026-10-20 기준 볼트의 레코드 39개가 전부 `<ID>.md` 이고 `project.md` 는 0개, 잔존 `ticket.md` 4건은 `backup/`·`analysis/*/before/` 스냅샷으로 레코드가 아니다.
+- 팩이 비거나 스크립트가 없으면 폴백: 레코드를 직접 읽는다 — **`<ID>/<ID>.md`**.
+    - 레코드 파일명은 **폴더 ID와 같다**(옵시디언 폴더 노트) — 그래서 탐지할 이름이 하나다. 볼트가 git 단일 저장소라 기기별 파일명 차이도 없다.
 - 레코드가 있으면 `완료 항목` 이후의 `다음 작업`부터 이어서 진행한다. 단, 이어서 진행하는 작업이 체크리스트의 단계를 넘어가는 경우 사용자 컨펌을 받는다.
 - 레코드가 없으면 **새 프로젝트 생성을 제안**한다 — `<소유>/projects/<ID>/<ID>.md` (회사 티켓은 `fassto/`, 개인 주제는 `personal/`). ID 는 Jira 키 또는 ASCII 슬러그(`[a-z0-9][a-z0-9-]{2,40}`), 한글 제목은 `title`·`aliases` 에 둔다. `owner` 필수, 주제 프로젝트는 `jira` 생략. 스키마는 `ticket-md-schema.md`.
     - 생성 직후 **인덱스를 1회 재생성**한다: `python3 -I "$BIV/_tools/index/build_projects_index.py" --quiet`
@@ -95,7 +95,7 @@ python3 -I "$BIV/_tools/index/import_pack.py" "<ID>" --budget 3000
 
 - 도구와 무관한 공통 규칙:
     - 본 §4 단계 게이트(요건분석/영향도/Plan/체크리스트 단계)는 **도구와 무관하게 강제**한다.
-    - `ticket.md`는 **Lead 단독 writer** (표준 구조는 `ticket-md-schema.md`). 팀원은 본인 작업노트만 write.
+    - 레코드 `<ID>.md` 는 **Lead 단독 writer** (표준 구조는 `ticket-md-schema.md`). 팀원은 본인 작업노트만 write.
     - 팀 운영 세부(페르소나·통신·연속성·팀원 이름 규칙)는 `deft:agent-teams` 스킬이 소유한다.
 
 ## 4. 단계별 작업 절차 및 승인 규칙

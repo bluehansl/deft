@@ -7,9 +7,10 @@
 | 문서 | 역할 |
 |---|---|
 | `SKILL.md` | 트리거·소유권·라우팅·공통 원칙 |
-| `references/ticket-workflow.md` | 티켓 선언·기준 티켓, 컨텍스트 로드(이슈 트래커 본문·댓글·연결 이슈 분석, ticket.md), 도구 선택, 단계별 승인 절차(7단계), 체크리스트 문법 |
+| `references/ticket-workflow.md` | 티켓 선언·기준 티켓, 컨텍스트 로드(이슈 트래커 본문·댓글·연결 이슈 분석, 레코드 `<ID>.md`), 도구 선택, 단계별 승인 절차(7단계), 체크리스트 문법 |
 | `references/artifact-routing.md` | 산출물 저장 경로 라우팅(audience 기준), 브라우저 리뷰 문서·Export 규칙, 제출 감시 |
-| `references/ticket-md-schema.md` | `ticket.md` 표준 스키마 |
+| `references/vault-layout.md` | 기록 계층 — 레코드·결정·지식·세션 원문·워크로그 자리, 세션↔프로젝트 묶기, work-id↔ID 변환 |
+| `references/ticket-md-schema.md` | 프로젝트 레코드 `<ID>.md` 표준 스키마 |
 | `references/requirement-refinement.md` | 요건 정제 — 조사 먼저·질문은 한 번에 하나·접근안 2~3개 비교·self-review 4종 |
 | `references/plan-writing.md` | Plan 작성 — zero-context 독자 가정·No-Placeholder·태스크 간 Interfaces 계약 |
 | `references/defect-analysis.md` | 버그 원인 진단 — 근본 원인 규명 전 수정 금지(Iron Law)·3-Phase 진단 |

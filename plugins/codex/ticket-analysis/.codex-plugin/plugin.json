@@ -1,7 +1,7 @@
 {
   "name": "ticket-analysis",
-  "version": "codex-0.2.1",
-  "description": "이슈 티켓 작업의 선언부터 결과 보고까지 — 티켓 컨텍스트 로드(이슈 트래커 본문·댓글·연결 이슈, ticket.md), 단계별 승인 절차, 산출물 경로 라우팅, 요건 정제 / Plan 작성 / 버그 원인 진단 방법론(obra/superpowers MIT 선별 이식)을 하나의 스킬로 제공. 호스트 지침에는 트리거 문구만 남기는 단일 소스 설계.",
+  "version": "codex-0.3.0",
+  "description": "이슈 티켓 작업의 선언부터 결과 보고까지 — 티켓 컨텍스트 로드(이슈 트래커 본문·댓글·연결 이슈, 레코드 `<ID>.md`), 단계별 승인 절차, 산출물 경로 라우팅, 요건 정제 / Plan 작성 / 버그 원인 진단 방법론(obra/superpowers MIT 선별 이식)을 하나의 스킬로 제공. 호스트 지침에는 트리거 문구만 남기는 단일 소스 설계.",
   "author": {
     "name": "bluehansl",
     "email": "bluehansl@naver.com"
@@ -21,7 +21,7 @@
   "interface": {
     "displayName": "ticket-analysis",
     "shortDescription": "이슈 티켓 분석·운영 워크플로 스킬.",
-    "longDescription": "ticket-analysis 는 이슈 티켓 작업의 선언~결과 보고 전체를 소유하는 스킬이다: 티켓 컨텍스트 로드(트래커 본문·댓글·연결 이슈 분석, ticket.md), 단계별 승인 절차(7단계), 체크리스트 문법, 산출물 경로 라우팅, 그리고 요건 정제·Plan 작성·버그 원인 진단 방법론을 제공한다.",
+    "longDescription": "ticket-analysis 는 이슈 티켓 작업의 선언~결과 보고 전체를 소유하는 스킬이다: 티켓 컨텍스트 로드(트래커 본문·댓글·연결 이슈 분석, 레코드 `<ID>.md`), 단계별 승인 절차(7단계), 체크리스트 문법, 산출물 경로 라우팅, 그리고 요건 정제·Plan 작성·버그 원인 진단 방법론을 제공한다.",
     "developerName": "bluehansl",
     "category": "Developer Tools",
     "capabilities": [
