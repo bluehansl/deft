@@ -82,11 +82,17 @@ P1-2 stdout에서 sid/rename/first/last/ts를 꺼내 아래 **마크다운 3컬�
 
 **카드가 여러 개일 때**: 카드마다 **별도 테이블**로 출력하고, 테이블 사이에 빈 줄 1개 삽입. 단일 대형 테이블로 합치지 않는다. 카드 전·후 추가 설명·주석 금지.
 
-## P1-1 (bash, 무출력 NONCE literal 주입)
-Claude가 매 호출 새 literal(영숫자 16자 정도) 생성 → `:` no-op에 박아 실행. shell 확장(`$(date)`,`$RANDOM`) 금지. stdout/stderr 비움.
+## P1-1 (bash, 무출력 NONCE literal 주입) — **`CLAUDE_CODE_SESSION_ID` 가 있으면 건너뛴다**
+
+자기 세션 id 는 셸 환경변수 `CLAUDE_CODE_SESSION_ID` 로 **직접 알 수 있다**(실측 2026-10-26: 값이 `<sid>.jsonl` 파일명과 같고 `--resume`·compact 후에도 유지). 그 값이 있으면 이 단계는 **실행하지 않는다** — 마커를 뿌릴 이유가 없다.
+
+없을 때만(구 CLI·특수 기동) 아래 폴백을 쓴다. 매 호출 새 literal(영숫자 16자 정도) 생성 → `:` no-op에 박아 실행. shell 확장(`$(date)`,`$RANDOM`) 금지. stdout/stderr 비움.
+
 ```bash
 : "SESSION_RELOCATE_MARKER_<claude_literal_per_call>"
 ```
+
+> **왜 바꿨나**: 마커 방식은 "내가 방금 쓴 문자열이 **대화 파일에 flush 되기를 기다렸다가** 그 파일을 통독해 나를 찾는" 구조다. 환경변수는 그 경주와 파일 읽기를 통째로 없앤다. `/session-save`·`/biv-import` 가 같은 처방으로 바뀐 것과 같은 사상이며, 양판이 각자 자기 변수를 쓴다(Codex 판은 `CODEX_THREAD_ID`).
 
 ## P1-2 (python, 단일 호출: self 판별 + 상위 5개 파싱)
 env `NONCE`에 P1-1 literal 전달. PROJECT_DIR = `~/.claude/projects/<pwd치환>`.
@@ -97,7 +103,7 @@ extract_text: content가 str→그대로; list→type=="text" 블록 join, 단 t
 tr (truncate, 이름/시작 대화/끝 대화 공통): 개행→공백, `>FDL자` 시 `FDL-1자 + …`, 빈값 `—`. 상수 `FDL=30` 하나로 세 필드 일괄 제어.
 KST: UTC+9, `YYYY년 MM월 DD일 HH:mm:ss`, 실패 `—`.
 속도: 첫 user/customTitle은 head 스트리밍; 마지막 user는 파일 끝에서 256KB chunk 역seek → 첫 매치 즉시 break.
-자기 세션 확정: mtime 최신 5개 안에서 NONCE literal in file → 일치 파일의 basename-".jsonl"이 SELF_SESSION. 실패 시 "".
+자기 세션 확정: **`CLAUDE_CODE_SESSION_ID` 가 1차**(파일 읽기 0회). 없으면 폴백으로 mtime 최신 5개 안에서 NONCE literal in file → 일치 파일의 basename-".jsonl"이 SELF_SESSION. 둘 다 실패 시 "".
 카드 대상: 전체 jsonl을 mtime desc 정렬 → SELF_SESSION 제외 후 상위 5개.
 stdout 포맷(Claude가 parse):
 ```
@@ -148,8 +154,12 @@ def kst(ts):
     except: return "—"
     return dt.astimezone(timezone(timedelta(hours=9))).strftime("%Y년 %m월 %d일 %H:%M:%S")
 af=sorted(glob.glob(os.path.join(PROJECT_DIR,"*.jsonl")), key=os.path.getmtime, reverse=True)
-self_id=""
-if NONCE:
+# 1차: 세션 고유 환경변수. 파일을 한 글자도 읽지 않고 자기 id 를 안다.
+#   값이 <sid>.jsonl 파일명과 같고 --resume·compact 후에도 유지된다(실측 2026-10-26).
+self_id=(os.environ.get("CLAUDE_CODE_SESSION_ID") or "").strip()
+# 2차(폴백): env 가 없을 때만 P1-1 마커를 찾는다. 최근 5개만 보고, 마커가 아직
+#   flush 되지 않았을 수 있다는 한계가 그대로 있다 — 그래서 1차가 기본이다.
+if not self_id and NONCE:
     for f in af[:5]:
         try:
             with open(f,"r",encoding="utf-8",errors="ignore") as fh:

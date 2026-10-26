@@ -79,17 +79,25 @@ where id='<session-id>';
 
 카드 뒤에는 `세션 no를 선택해주세요.`만 출력한다. 세션 번호를 받으면 `이동할 target 절대경로를 입력하세요:`만 출력한다. target 경로 입력 후에는 검증 안내 문장을 출력하지 말고 P2를 실행한다.
 
-## P1-1. 현재 세션 마커 주입
+## P1-1. 현재 세션 마커 주입 — **`CODEX_THREAD_ID` 가 있으면 건너뛴다**
 
-매 호출마다 새 literal을 만들어 no-op 명령을 실행한다. shell 확장을 쓰지 않는다.
+자기 세션 id 는 셸 환경변수 `CODEX_THREAD_ID` 로 직접 알 수 있다(codex 가 세션마다 주입. rollout 파일명의 id·`threads.id` 와 같은 값). **그 값이 있으면 이 단계를 실행하지 않는다.**
+
+없을 때만 아래 폴백을 쓴다. 매 호출마다 새 literal을 만들어 no-op 명령을 실행한다. shell 확장을 쓰지 않는다.
 
 ```bash
 : "SESSION_RELOCATE_MARKER_<literal>"
 ```
 
+> **왜 바꿨나**: 마커 방식은 최근 rollout 파일 **최대 50개를 `fh.read()` 로 통독**하고(실측 29MB 짜리 rollout 이 존재한다), 마커가 아직 flush 되지 않았을 수 있어 **5회 재시도 + sleep** 한다. 그래도 못 찾으면 `SELF_SESSION_UNKNOWN=1` 로 **P2 가 중단**된다. 환경변수는 이 비용·경주·실패 경로를 전부 없앤다. `/session-save`·`/biv-import` 가 같은 처방으로 바뀐 것과 같은 사상이다.
+>
+> 실측(claudex `0.159.2`, 2026-10-26): 도구 호출의 heredoc Python 에서 `os.environ.get("CODEX_THREAD_ID")` 가 값을 **실제로 반환**하고, 그 값이 rollout 파일명·`session_meta.id`·`threads.id` 와 모두 같다. `CODEX_SESSION_ID` 도 같은 값이다.
+>
+> ⚠️ 그래도 **폴백은 남긴다** — 구 CLI 의 변수 부재·`resume` 이후 유지 여부는 검증 범위 밖이다. 환경변수가 비면 `os.environ.get` 이 비어 자동으로 폴백이 돌고 그건 종전 동작 그대로라 손해가 없다. 즉 이 변경은 전파 여부와 무관하게 안전하고, 전파되는 환경에서만 빨라진다.
+
 ## P1-2. self 판별 및 최근 세션 조회
 
-아래 Python은 현재 세션에 주입한 marker를 최근 세션 파일에서 찾아 `SELF_SESSION`을 판별하고, SQLite `threads` 테이블 기준으로 현재 cwd의 최근 세션 5개를 출력한다. SQLite가 없거나 row를 찾지 못하면 파일 스캔으로 fallback한다. marker가 아직 JSONL에 flush되지 않았을 수 있으므로 짧게 재시도한다.
+아래 Python은 **`CODEX_THREAD_ID`(1차) 또는 주입한 marker(폴백)** 로 `SELF_SESSION`을 판별하고, SQLite `threads` 테이블 기준으로 현재 cwd의 최근 세션 5개를 출력한다. SQLite가 없거나 row를 찾지 못하면 파일 스캔으로 fallback한다. marker가 아직 JSONL에 flush되지 않았을 수 있으므로 짧게 재시도한다.
 
 **카드 3줄의 출처 (2026-10-26 결함 수정)**: 이름은 `threads.name`(사용자가 붙인 세션 이름), 시작·끝 대화는 **rollout JSONL 에서 직접** 읽는다.
 
@@ -187,6 +195,13 @@ def session_id_from_path(p):
     return ""
 
 def find_self():
+    # 1차: 세션 고유 환경변수. 파일을 읽지 않고 자기 id 를 안다.
+    #   codex 가 세션마다 셸에 주입하며 rollout 파일명의 id·threads.id 와 같은 값이다.
+    env_sid = (os.environ.get("CODEX_THREAD_ID") or "").strip()
+    if env_sid:
+        return env_sid, "0"
+    # 2차(폴백): env 가 없거나 자식 프로세스로 전파되지 않는 환경. 최근 50개를 통독하고
+    #   flush 를 기다리는 종전 방식 그대로다 — 느리지만 동작은 한다.
     if not NONCE:
         return "", "1"
     for attempt in range(5):

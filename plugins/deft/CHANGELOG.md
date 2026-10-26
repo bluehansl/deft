@@ -4,6 +4,24 @@
 
 형식은 [Keep a Changelog](https://keepachangelog.com/ko/1.1.0/) 를 따르며, 버전 체계는 [Semantic Versioning](https://semver.org/lang/ko/) 을 사용합니다 (`claude-X.Y.Z` / `codex-X.Y.Z` 접두).
 
+## [claude-2.60.0] - 2026-10-26 / [codex-1.30.0] - 2026-10-26
+
+> **session-relocate 양판: 자기 세션 판별을 세션 고유 환경변수 1차로** — `/session-save`·`/biv-import` 가 같은 처방으로 바뀐 것과 같은 사상(사용자 지적 2026-10-26). 기존 NONCE 마커 스캔은 **폴백으로 남긴다**.
+
+### Changed
+- **자기 세션 id 를 환경변수에서 직접 읽는다** — Claude 는 `CLAUDE_CODE_SESSION_ID`, Codex 는 `CODEX_THREAD_ID`. 있으면 **P1-1 마커 주입 자체를 건너뛴다**(불필요한 셸 호출 1회 제거).
+  - **종전 방식의 문제**: 마커 스캔은 "내가 방금 쓴 문자열이 **대화 파일에 flush 되기를 기다렸다가** 그 파일을 통독해 나를 찾는" 구조다. Claude 판은 최근 5개, **Codex 판은 최근 50개를 `fh.read()` 로 통독**하고(실측 rollout 중 **29MB** 짜리가 존재한다) 마커가 안 보이면 **5회 재시도 + sleep** 한다. 그래도 못 찾으면 `SELF_SESSION_UNKNOWN=1` 로 **P2 가 중단**된다 — 기능이 멈춘다.
+  - **처방 후**: 파일 읽기 **0회**, flush 경주 없음, 정상 세션에서 `SELF_SESSION_UNKNOWN` 이 구조적으로 발생하지 않는다.
+- **폴백을 없애지 않았다** — 볼트 스킬은 "엉뚱한 세션에 **쓰는**" 위험이라 폴더 포인터 폴백을 제거했지만, session-relocate 의 자기 판별은 **읽기·자기 제외**가 목적이라 폴백이 있으면 env 가 없는 환경(구 CLI·특수 기동·자식 프로세스 미전파)에서도 동작한다. 성격이 다르다.
+  - ⚠️ **전파 여부와 무관하게 안전하다**: 환경변수가 자식 프로세스에 내려오지 않으면 `os.environ.get` 이 비어 자동으로 폴백이 돌고, 그건 종전 동작 그대로다. 전파되는 환경에서만 빨라진다.
+
+### Verified
+- **Claude 판은 실측으로 전 경로 확인**(P1-2 블록을 SKILL.md 에서 추출해 격리 구동, 사본 아님): ① env 있음·NONCE 없음 → env 로 식별 ② **env 없음·NONCE 있음 → 폴백이 종전대로 동작**(1차를 넣으면서 폴백을 죽이지 않았다는 증거 — 이 결함은 env 없는 환경에서만 드러나 개발 세션에서는 영원히 숨는다) ③ 둘 다 있음 → env 우선 ④ 둘 다 없음 → 빈 값(종전과 같은 실패 거동, `P2` 의 `sid == SELF_SESSION → E1` 계약 보존). 자기 세션이 카드 목록에서 제외되는 것도 확인. **4/4 통과.**
+- Codex 판은 **분기만 확인**(가짜 UUID 주입 → `SELF_SESSION_UNKNOWN=0`, env 없으면 폴백 경로로 `1`). heredoc Python 양판 전수 재컴파일 통과(Claude 3·Codex 4).
+- **Codex 판 환경변수도 claudex 세션에서 실측 확인**(의뢰 → `DEFT-FIX_CLAUDEX` 세션 보고, 정본 `BIV/inbox/2026-10-26-응답-session-relocate-CODEX_THREAD_ID-실측-01a17834.md`). Claudex `0.159.2` 기준: ① `CODEX_THREAD_ID` 가 정규 UUID 로 존재(`CODEX_SESSION_ID` 도 동일 값) ② **도구 호출의 heredoc Python 에서 `os.environ.get("CODEX_THREAD_ID")` 가 그 값을 실제로 반환** — 이 설계의 전제인 자식 프로세스 전파가 성립한다 ③ rollout 파일명·첫 줄 `session_meta.id`·`state_5.sqlite` 의 `threads.id` 가 **모두 같은 값**.
+- **미검증(한계 명시)**: ① **`resume` 이후 값이 유지되는지는 측정하지 못했다** — 측정 Python 의 부모가 공용 `app-server` 데몬이라 그 인자만으로 TUI 의 resume 여부를 알 수 없고, 실행 중인 세션을 다시 열지 않았다. ② 구 CLI 의 변수 부재·잘못된 형식 경로도 별도 검증 범위다. **그래서 NONCE 폴백을 제거하지 않는다** — 이번 측정에 폴백 제거를 뒷받침하는 근거는 없다(보고 세션의 판단과 일치).
+- 측정에서 `BIV/_index/raw-state/<sid>.json` 은 **파일 자체가 없어 대조하지 못했다**. 이는 불일치가 아니며, **저장소 파일 부재를 정상 환경변수의 무효 근거로 삼지 않는다**.
+
 ## [codex-1.29.1] - 2026-10-26
 
 > **session-relocate(Codex): 세션 목록의 이름·시작 대화·끝 대화가 전부 같은 문장으로 나오던 결함** — 사용자 화면 제보 2026-10-26. Claude 판은 해당 없음(이미 `rename`/`first`/`last` 를 각각 다른 소스에서 읽고 시스템 주입을 마스킹한다) — **Codex 판만 수정**.
