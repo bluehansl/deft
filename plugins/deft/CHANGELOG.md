@@ -4,6 +4,22 @@
 
 형식은 [Keep a Changelog](https://keepachangelog.com/ko/1.1.0/) 를 따르며, 버전 체계는 [Semantic Versioning](https://semver.org/lang/ko/) 을 사용합니다 (`claude-X.Y.Z` / `codex-X.Y.Z` 접두).
 
+## [codex-1.29.1] - 2026-10-26
+
+> **session-relocate(Codex): 세션 목록의 이름·시작 대화·끝 대화가 전부 같은 문장으로 나오던 결함** — 사용자 화면 제보 2026-10-26. Claude 판은 해당 없음(이미 `rename`/`first`/`last` 를 각각 다른 소스에서 읽고 시스템 주입을 마스킹한다) — **Codex 판만 수정**.
+
+### Fixed
+- **카드 3줄이 한 문장의 복사본이던 결함** — 종전엔 `threads` 의 `title`·`first_user_message`·`preview` 세 컬럼을 그대로 썼다. 그런데 **Codex 는 이 셋을 모두 같은 값(첫 사용자 메시지)으로 채운다**(실측 2026-10-26: 406행 전수에서 셋이 동일). 스킬은 성실히 출력했지만 **소스가 같아** 정보가 0이었다.
+  - **이름** → `threads.name`(사용자가 붙인 세션 이름. 실측 34행 보유 — `음성전사준비`·`SQLD_CERTI` 처럼 `title` 과 전혀 다르다). `name` 이 없으면 **비운다** — `title` 로 내려가면 이름과 시작 대화가 같아져 이 결함이 되살아난다.
+  - **시작·끝 대화** → **rollout JSONL 에서 직접** 읽는다. `rollout_path` 가 없거나 파일이 지워진 옛 세션은 `title` 로 **시작 대화만** 채우고 끝 대화는 비운다(모르는 것을 아는 척하지 않는다 — 실측: DB row 는 남고 파일이 지워진 세션이 실재한다).
+- **rollout 의 `role:"user"` 에 섞인 시스템 주입을 마스킹** — `# AGENTS.md instructions…`·`<environment_context>`·`<skill>` 등이 사용자 발화로 들어온다. 거르지 않으면 "시작 대화"가 지침 본문이 된다. `MM` 접두 목록으로 걸러낸다(Claude 판의 같은 처방과 대응 — 양판 설계 일치).
+- **공개 레포에 올라가 있던 사용자 환경 문자열 제거**(범위 밖 발견 — 커밋 전 금지 문자열 검사에서 잡힘, 사용자 승인 2026-10-26). §근거 절의 실측 SQL 예시에 **홈 경로·회사 레포명·회사 내부 GitLab 호스트·티켓 번호·실제 세션 UUID** 가 그대로 있었다(최초 포팅부터 잔존). 값을 `<새 cwd 절대경로>`·`<대상 경로의 origin url>` 처럼 일반화했다 — 실측 기록의 의미(「`threads.cwd` 갱신이 성공 조건」)는 그대로다. 레포 전수 재검사 0건.
+- **큰 rollout 을 통독하지 않는다** — 첫 발화는 앞에서, 마지막은 **끝 1MB 블록**에서 찾는다(실측 29MB 세션이 있다).
+
+### Verified
+- 수정한 P1-2 블록을 **SKILL.md 에서 추출해 실제 `state_5.sqlite`·rollout 으로 격리 구동**(사본 아님): 카드 5장 중 **4장에서 세 줄이 서로 다르고**, 1장은 사용자가 한 번만 말한 세션이라 시작=끝이 사실이다. 제보 화면의 두 카드가 `음성전사준비 / 음성 파일을 전사하는… / $session-save`, `SQLD_CERTI / SQLD자격증을… / —` 로 바뀐다.
+- heredoc Python 4블록 전수 재컴파일 통과.
+
 ## [claude-2.59.0] - 2026-10-26
 
 > **agent-teams: work.md 양방향 포인터 + 종료 전 결정 내보내기(D′)** — 의뢰: `BIV/inbox/2026-10-26-요청-deft-ticket-analysis-스킬-영속화-구조-리빌딩.md`(요구 D). **Claude 판만** — Codex 판에는 agent-teams 가 없다(네이티브 `multi_agent_v2` 를 쓴다).

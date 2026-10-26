@@ -25,11 +25,11 @@ Codex 세션 파일을 물리적으로 옮기지 않는다. Codex의 `/resume` �
 
 ```sql
 update threads
-set cwd='/Users/jeongsaehanseul/git/fss-notice',
-    git_branch='feature/IT-14397',
-    git_origin_url='https://gitlab.fssuniverse.com/fasstonotice/fss-notice.git',
+set cwd='<새 cwd 절대경로>',
+    git_branch='<대상 경로의 현재 브랜치>',
+    git_origin_url='<대상 경로의 origin url>',
     updated_at=strftime('%s','now')
-where id='019d1e68-75ae-7e33-8322-84c82c01529a';
+where id='<session-id>';
 ```
 
 따라서 Codex 포팅의 성공 조건은 `threads.cwd` 갱신이다. JSONL 갱신은 세션 내부 메타데이터 정합성을 맞추기 위한 보조 작업이다.
@@ -71,9 +71,9 @@ where id='019d1e68-75ae-7e33-8322-84c82c01529a';
 | no | 항목 | 값 |
 |:---:|---|---|
 | N | session-id | {sid} |
-|  | 이름 | {title} |
+|  | 이름 | {name} |
 |  | 시작 대화 | {first} |
-|  | 끝 대화 | {preview} |
+|  | 끝 대화 | {last} |
 |  | 최종 업데이트 | {updated_at_kst} |
 ```
 
@@ -91,6 +91,12 @@ where id='019d1e68-75ae-7e33-8322-84c82c01529a';
 
 아래 Python은 현재 세션에 주입한 marker를 최근 세션 파일에서 찾아 `SELF_SESSION`을 판별하고, SQLite `threads` 테이블 기준으로 현재 cwd의 최근 세션 5개를 출력한다. SQLite가 없거나 row를 찾지 못하면 파일 스캔으로 fallback한다. marker가 아직 JSONL에 flush되지 않았을 수 있으므로 짧게 재시도한다.
 
+**카드 3줄의 출처 (2026-10-26 결함 수정)**: 이름은 `threads.name`(사용자가 붙인 세션 이름), 시작·끝 대화는 **rollout JSONL 에서 직접** 읽는다.
+
+- ⚠️ `threads` 의 `title`·`first_user_message`·`preview` **세 컬럼은 Codex 가 모두 같은 값(첫 사용자 메시지)으로 채운다**(실측 2026-10-26: 406행 전수에서 셋이 동일). 그래서 이 셋을 쓰면 카드 3줄이 **전부 같은 문장**이 되어 정보가 없다. `name` 은 다르다 — 사용자가 붙인 이름이 들어 있다(34행 보유).
+- ⚠️ rollout 의 `role: "user"` 에는 **시스템 주입이 섞인다** — `# AGENTS.md instructions…`·`<environment_context>`·`<skill>` 등. 거르지 않으면 "시작 대화"가 지침 본문이 된다. `MM` 접두 목록으로 마스킹한다(Claude 판의 같은 처방과 대응).
+- 큰 rollout(실측 29MB)을 통독하지 않는다 — 첫 메시지는 앞에서, 마지막은 **끝 1MB 블록**에서 찾는다.
+
 ```bash
 NONCE="<P1-1 literal>" python3 <<'PY'
 import glob, json, os, re, sqlite3, time
@@ -102,6 +108,11 @@ NONCE = os.environ.get("NONCE", "")
 CUR = os.getcwd()
 KST = timezone(timedelta(hours=9))
 FDL = 50
+# rollout 의 role:user 에 섞여 들어오는 시스템 주입. 이 접두로 시작하면 사용자 발화가 아니다.
+MM = ("# AGENTS.md", "# CLAUDE.md", "<environment_context", "<user_instructions", "<skill",
+      "<system-reminder", "<command-name", "<command-message", "<command-args",
+      "<local-command-stdout", "<bash-input", "<bash-stdout", "<bash-stderr", "<file-hook",
+      "<cross-session-message", "<task-notification", "SESSION_RELOCATE_MARKER")
 
 def tr(s):
     s = (s or "").replace("\n", " ").replace("\r", " ").strip()
@@ -117,6 +128,54 @@ def kst_from_epoch(v):
         return datetime.fromtimestamp(n, tz=timezone.utc).astimezone(KST).strftime("%Y년 %m월 %d일 %H:%M:%S")
     except Exception:
         return "—"
+
+def user_text(obj):
+    """rollout 한 줄에서 **사용자 발화**만 뽑는다. 시스템 주입은 ""를 돌려준다."""
+    payload = obj.get("payload") or {}
+    text = ""
+    if obj.get("type") == "response_item" and payload.get("type") == "message" and payload.get("role") == "user":
+        parts = []
+        for item in payload.get("content") or []:
+            if isinstance(item, dict):
+                parts.append(item.get("text") or item.get("input_text") or "")
+        text = " ".join(p for p in parts if p).strip()
+    elif obj.get("type") == "event_msg" and payload.get("type") == "user_message":
+        text = (payload.get("message") or "").strip()
+    if not text or any(text.startswith(m) for m in MM):
+        return ""
+    return text
+
+def first_last_user(path):
+    """첫·마지막 사용자 발화. 통독하지 않는다 — 앞에서 첫 건, 끝 1MB 에서 마지막 건."""
+    first = last = ""
+    try:
+        with open(path, "rb") as fh:
+            size = fh.seek(0, 2)
+            fh.seek(0)
+            for _ in range(20000):
+                line = fh.readline()
+                if not line:
+                    break
+                try:
+                    msg = user_text(json.loads(line))
+                except Exception:
+                    continue
+                if msg:
+                    first = msg
+                    break
+            fh.seek(max(0, size - 1024 * 1024))
+            if size > 1024 * 1024:
+                fh.readline()          # 잘린 첫 줄 버림
+            for line in fh:
+                try:
+                    msg = user_text(json.loads(line))
+                except Exception:
+                    continue
+                if msg:
+                    last = msg
+    except Exception:
+        return "", ""
+    return first, last or first
 
 def all_session_files():
     return glob.glob(os.path.join(CODEX, "sessions", "*", "*", "*", "rollout-*.jsonl"))
@@ -162,7 +221,7 @@ def read_sqlite(self_id):
             con.row_factory = sqlite3.Row
             cur = con.execute(
                 """
-                select id, title, first_user_message, preview, updated_at_ms, updated_at, rollout_path
+                select id, name, title, updated_at_ms, updated_at, rollout_path
                 from threads
                 where cwd=? and archived=0 and id != ?
                 order by coalesce(updated_at_ms, updated_at * 1000) desc, id desc
@@ -179,46 +238,33 @@ def read_sqlite(self_id):
     return [], "jsonl_fallback"
 
 def parse_jsonl(path):
-    title = first = preview = ""
+    """SQLite 를 못 쓸 때의 fallback. cwd 가 다르면 None(대상 아님)."""
     updated = os.path.getmtime(path)
     try:
         with open(path, "r", encoding="utf-8", errors="ignore") as fh:
-            for line in fh:
+            for _ in range(500):
+                line = fh.readline()
+                if not line:
+                    break
                 try:
                     obj = json.loads(line)
                 except Exception:
                     continue
                 if obj.get("type") == "session_meta":
-                    payload = obj.get("payload") or {}
-                    if payload.get("cwd") != CUR:
+                    if (obj.get("payload") or {}).get("cwd") != CUR:
                         return None
-                if obj.get("type") == "response_item":
-                    payload = obj.get("payload") or {}
-                    if payload.get("type") == "message" and payload.get("role") == "user":
-                        texts = []
-                        for item in payload.get("content") or []:
-                            if isinstance(item, dict):
-                                texts.append(item.get("text") or item.get("input_text") or "")
-                        msg = "\n".join(t for t in texts if t).strip()
-                        if msg:
-                            first = first or msg
-                            preview = msg
-                if obj.get("type") == "event_msg":
-                    payload = obj.get("payload") or {}
-                    if payload.get("type") == "user_message":
-                        msg = (payload.get("message") or "").strip()
-                        if msg:
-                            first = first or msg
-                            preview = msg
+                    break
     except Exception:
         return None
+    first, last = first_last_user(path)
     return {
         "id": session_id_from_path(path),
-        "title": title,
-        "first_user_message": first,
-        "preview": preview,
+        "name": "",            # 세션 이름은 SQLite 전용 — fallback 에서는 비운다
+        "title": "",
         "updated_at": int(updated),
         "rollout_path": path,
+        "first": first,
+        "last": last,
     }
 
 self_id, self_unknown = find_self()
@@ -241,13 +287,33 @@ print(f"LIST_SOURCE={list_source}")
 print(f"SESSION_COUNT={len(rows)}")
 for row in rows:
     updated = row.get("updated_at_ms") or row.get("updated_at")
+    path = row.get("rollout_path") or ""
+    if path.startswith("~"):
+        path = os.path.expanduser(path)
+    if path and not os.path.isabs(path):
+        path = os.path.join(CODEX, path)
+    # sqlite 경로면 여기서 rollout 을 읽어 첫·끝을 채운다(fallback 은 이미 들어 있다).
+    first = row.get("first")
+    last = row.get("last")
+    if first is None and os.path.isfile(path):
+        first, last = first_last_user(path)
+    # rollout 이 지워진 옛 세션은 DB row 만 남는다(실측 — threads 에 있으나 파일 없음).
+    #   그때는 title 로 **시작 대화만** 채운다. title 은 첫 사용자 메시지의 복사본이라
+    #   시작 대화의 폴백으로는 정확하다. 끝 대화는 알 수 없으므로 비운다 — 모르는 것을
+    #   아는 척하지 않는다.
+    if not first:
+        first = (row.get("title") or "").strip()
+        last = last or ""
+    # 이름은 **사용자가 붙인 name 만** 쓴다. 없으면 비운다 — title 로 내려가면 이름과
+    #   시작 대화가 같은 문장이 되어 이 결함이 되살아난다.
+    name = (row.get("name") or "").strip()
     print("---CARD---")
     print(f"sid={row.get('id') or ''}")
-    print(f"title={tr(row.get('title'))}")
-    print(f"first={tr(row.get('first_user_message'))}")
-    print(f"preview={tr(row.get('preview'))}")
+    print(f"name={tr(name)}")
+    print(f"first={tr(first)}")
+    print(f"last={tr(last)}")
     print(f"ts={kst_from_epoch(updated)}")
-    print(f"rollout_path={row.get('rollout_path') or ''}")
+    print(f"rollout_path={path}")
 PY
 ```
 

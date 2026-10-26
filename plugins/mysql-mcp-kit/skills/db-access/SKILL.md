@@ -2,7 +2,7 @@
 name: db-access
 description: "MySQL(Aurora/MariaDB) DB 접속·조회 전용 지침. DB 조회·SQL 실행·데이터 확인·mysql MCP 사용 시 반드시 먼저 확인. 환경별 접속 방식과 쓰기(write=true 환경) 승인 규칙 등 강한 제약을 소유한다."
 metadata:
-  version: 0.1.0
+  version: claude-0.1.1
   category: "database"
 ---
 
@@ -50,3 +50,11 @@ DB 접근은 **mysql MCP**(benborla `@benborla29/mcp-server-mysql`, 버전 핀)�
 
 - **감사 로그**(Claude Code, 훅 설치 시): PostToolUse 훅 → `~/.ai/db-audit/YYYY-MM.jsonl` (SQL·메타만 기록, 조회 결과 rows 미기록).
 - **구성·설치·재현·롤백**: 이 스킬 디렉토리의 `README.md`(setup 런북) 참조.
+
+## 6. 영속 저장소(볼트)와의 관계 — 연계 없음
+
+이 스킬은 **접속·조회 지침**이고 보조 세션을 띄우지 않으며 파일 산출물을 만들지 않는다. 그래서 기록 계층 연계(`vault-layout.md` 포인터·킥오프 맥락 복원·결론 내보내기)가 **해당하지 않는다** — `set/restore-statusline` 과 같은 범주다.
+
+- 감사 로그 `~/.ai/db-audit/` 는 **도구 데이터 영역**이다(사용자 전역 지침의 기록 자리 규칙). 영속 저장소로 옮기지 않는다.
+- 조회 결과로 **분석 보고서·배포 SQL 같은 산출물을 쓸 때**는 `ticket-analysis` 의 `references/artifact-routing.md` 가 적용된다 — 그 규칙은 "스킬 사용 여부와 무관하게 강제"라 이 스킬이 따로 가리킬 필요가 없다.
+- 2026-10-26 스킬 영속화 리빌딩 범위에서 이 플러그인이 빠졌던 것은 **누락이지만 결함은 아니다**(전수 점검으로 확인). 다음 점검에서 또 "빠진 것"으로 보이지 않도록 이 절을 남긴다.

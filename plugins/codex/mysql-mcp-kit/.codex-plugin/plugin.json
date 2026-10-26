@@ -1,6 +1,6 @@
 {
   "name": "mysql-mcp-kit",
-  "version": "codex-0.1.0",
+  "version": "codex-0.1.1",
   "description": "MySQL/MariaDB MCP setup kit for safe, credential-file based database access with read-only defaults, write gating, audit helpers, and a db-access skill.",
   "author": {
     "name": "bluehansl",
